@@ -59,14 +59,14 @@ export class GrafanaReporter {
       });
     }
 
-    if (event.type === 'show-state' as string) {
+    if (event.type === 'show-state') {
       this.push({
         name: 'apron_show_state_change',
         value: 1,
         timestamp: Date.now(),
         labels: {
           show_id: event.showId,
-          state: (event as Record<string, unknown>)['state'] as string,
+          state: event.state,
         },
       });
     }

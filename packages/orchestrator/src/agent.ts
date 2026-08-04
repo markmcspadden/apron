@@ -21,7 +21,7 @@ export abstract class BaseAgent {
   }
 
   protected emit(
-    event: Omit<AgentEvent, 'id' | 'timestamp' | 'showId' | 'agent'>,
+    event: { type: string; message: string } & Record<string, unknown>,
   ): void {
     const full = {
       ...event,
