@@ -18,7 +18,7 @@ reaches past the curtain.*
 [![Commercial license available](https://img.shields.io/badge/commercial-available-green.svg)](COMMERCIAL.md)
 
 > Built for [Agentic Cinema: The Blockbuster Hackathon](https://agentic-cinema.devpost.com/).
-> Partner track: **`<PARTNER>`** — *see [Partner &amp; Google Cloud usage](#partner--google-cloud-usage).*
+> Partner tracks: **Grafana** + **Clickhouse** — *see [Partner &amp; Google Cloud usage](#partner--google-cloud-usage).*
 
 ---
 
@@ -68,14 +68,15 @@ credentials, and no live game feed required to see the full scenario.
 ```bash
 git clone https://github.com/<org>/apron.git
 cd apron
-pnpm install                # TODO: confirm package manager
-cp .env.example .env        # fixture mode needs no real keys
+pnpm install
 pnpm demo                   # replays the ALCS Gm 4 twelve-inning night
 ```
 
-Then open <http://localhost:3000> for the watch board. Use the seat switch in
-the header to move between the **TMC desk** and the **production seat** and watch
-the same incident change shape depending on who is allowed to see what.
+Then open <http://localhost:3000/board> for the watch board. The scenario
+auto-plays when a client connects. Use the seat switch in the header to move
+between the **TMC desk** and the **production seat** and watch the same incident
+change shape depending on who is allowed to see what. The marketing site is at
+<http://localhost:3000/>.
 
 ### Running against live services
 
@@ -182,19 +183,20 @@ call times; it is not a surveillance layer on freelancers.
 
 ## Partner & Google Cloud usage
 
-Both are imported and called at runtime, not just named here.
+All three are imported and called at runtime, not just named here.
 
 | | Where | What it does |
 |---|---|---|
-| **Google Cloud** — Gemini via Agent Builder | [`integrations/google-cloud/`](integrations/google-cloud) | Reasoning for every agent; option generation and ranking in `FIXER`; rule interpretation in `STEWARD` |
-| **`<PARTNER>`** | [`integrations/<partner>/`](integrations) | *TODO: one line on the exact call path* |
+| **Google Cloud** — Gemini via Vertex AI | [`integrations/google-cloud/`](integrations/google-cloud) | Reasoning for every agent; option generation and ranking in `FIXER`; rule interpretation in `STEWARD`. Stubs responses in fixture mode. |
+| **Grafana** | [`integrations/grafana/`](integrations/grafana) | Pushes Prometheus-format metrics per agent event: `apron_agent_event`, `apron_crew_at_risk`, `apron_call_times_exposed`, `apron_show_state_change`, `apron_agent_process_duration_ms`. Includes a dashboard definition in `dashboard.ts`. |
+| **Clickhouse** | [`integrations/clickhouse/`](integrations/clickhouse) | Append-only audit log. Every agent event is written to an `audit_log` table with MergeTree engine and 90-day TTL. Schema auto-creates on startup. |
 
 Entry points:
 
-- `packages/orchestrator/src/runtime.ts` — where agents are constructed and the
-  Google Cloud client is bound
-- `integrations/<partner>/src/client.ts` — the partner client
-- Trace any demo run with `pnpm demo --trace` to see both called live
+- `packages/server/src/server.ts` — where agents are registered and integrations are bound
+- `packages/orchestrator/src/runtime.ts` — where agents are constructed and the credential broker is bound
+- `integrations/grafana/src/reporter.ts` — metrics buffer and push
+- `integrations/clickhouse/src/store.ts` — audit log buffer, flush, and query
 
 ---
 
@@ -219,7 +221,8 @@ here. All eight agents are here. The board is here.
 
 ```
 packages/
-  orchestrator/       agent runtime, message bus, scheduler
+  types/              shared TypeScript types and interfaces
+  orchestrator/       agent runtime, message bus, scenario playback
   credentials/        scoped credential broker  ← enforces the capability matrix
   provenance/         envelope schema + validators
   agents/
@@ -229,13 +232,16 @@ packages/
   rules/
     engine/           the interpreter
     packs/sample-local/   illustrative only — see NOTICE
+  server/             HTTP + WebSocket server (no Express — native node:http)
   board/              the watch board UI (TMC desk + production seat)
 fixtures/
-  alcs-gm4/           synthetic twelve-inning night
+  alcs-gm4/           synthetic twelve-inning night (16 steps, 14 crew, 6 shows)
 integrations/
-  google-cloud/       required, real
-  <partner>/          required, real
+  google-cloud/       Gemini via Vertex AI (stubs in fixture mode)
+  grafana/            Prometheus metrics push + dashboard definition
+  clickhouse/         append-only audit log with MergeTree schema
   tmc/mock/           runs the demo without a live TMC
+site/                 marketing site (static HTML)
 docs/
   architecture.md  agent-separation.md  provenance.md  runtime.md
 ```
