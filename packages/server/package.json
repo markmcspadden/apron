@@ -1,0 +1,26 @@
+{
+  "name": "@apron/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "main": "src/index.ts",
+  "dependencies": {
+    "@apron/types": "workspace:*",
+    "@apron/orchestrator": "workspace:*",
+    "@apron/provenance": "workspace:*",
+    "@apron/credentials": "workspace:*",
+    "@apron/agent-spotter": "workspace:*",
+    "@apron/agent-traffic": "workspace:*",
+    "@apron/agent-advance": "workspace:*",
+    "@apron/agent-wrangler": "workspace:*",
+    "@apron/agent-steward": "workspace:*",
+    "@apron/agent-fixer": "workspace:*",
+    "@apron/agent-runner": "workspace:*",
+    "@apron/agent-customs": "workspace:*",
+    "@apron/integration-grafana": "workspace:*",
+    "@apron/integration-clickhouse": "workspace:*",
+    "@apron/integration-google-cloud": "workspace:*",
+    "ws": "^8.18.0"
+  }
+}

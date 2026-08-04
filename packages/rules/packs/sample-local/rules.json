@@ -1,0 +1,22 @@
+{
+  "id": "sample-local",
+  "name": "Sample Local Rule Pack",
+  "agreement": "NABET-CWA Art. 8.3",
+  "local": "Sample Local 123",
+  "turnaround": {
+    "minimumHours": 8,
+    "measureFrom": "wrap",
+    "measureTo": "call",
+    "travelCountsAs": "work"
+  },
+  "rest": {
+    "minimumHours": 8,
+    "penaltyType": "grievance",
+    "penaltyRate": 1.5
+  },
+  "travelTime": {
+    "countsAsWork": true,
+    "maxDriveHours": 4,
+    "requiresRest": true
+  }
+}

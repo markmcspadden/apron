@@ -1,0 +1,838 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>APRON — crew integrity board</title>
+<style>
+:root{
+  --bg:#0B0B0C; --panel:#141416; --panel-2:#1B1B1E; --line:#2A2A2E; --line-2:#3A3A40;
+  --ink:#F2F1EE; --ink-2:#A9A69E; --ink-3:#6E6B65;
+  --clear:#25B04B; --clear-bg:#0E2A16;
+  --watch:#E8A81C; --watch-bg:#2E2308;
+  --risk:#EE7A3C; --risk-bg:#31190A;
+  --down:#E0403C; --down-bg:#33100F;
+  --live:#5DA9E9;
+  --f:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --m:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f);font-size:14px;
+  line-height:1.45;-webkit-font-smoothing:antialiased}
+.mono{font-family:var(--m);font-variant-numeric:tabular-nums}
+
+/* ---------- top bar ---------- */
+.top{position:sticky;top:0;z-index:80;background:#0B0B0Cf2;backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--line)}
+.top-in{max-width:1400px;margin:0 auto;padding:11px 20px;display:flex;align-items:center;gap:20px}
+.logo{display:flex;align-items:baseline;gap:9px;white-space:nowrap}
+.logo b{font-size:16px;font-weight:750;letter-spacing:.13em}
+.logo span{font-size:10.5px;letter-spacing:.16em;color:var(--ink-3);text-transform:uppercase}
+.desk{font-size:11px;color:var(--ink-2);border-left:1px solid var(--line-2);padding-left:18px}
+.desk b{color:var(--ink);font-weight:600}
+.top-right{margin-left:auto;display:flex;align-items:center;gap:18px}
+.clock{font-family:var(--m);font-size:15px;font-weight:600;letter-spacing:.03em}
+.clock small{font-size:10px;color:var(--ink-3);margin-left:6px;letter-spacing:.1em}
+.crew-chip{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--ink-2);
+  background:var(--panel);border:1px solid var(--line);border-radius:99px;padding:5px 12px}
+.pulse{width:6px;height:6px;border-radius:99px;background:var(--clear);
+  box-shadow:0 0 0 0 rgba(37,176,75,.6);animation:p 2.4s infinite}
+@keyframes p{0%{box-shadow:0 0 0 0 rgba(37,176,75,.55)}70%{box-shadow:0 0 0 7px rgba(37,176,75,0)}100%{box-shadow:0 0 0 0 rgba(37,176,75,0)}}
+
+/* ---------- shell ---------- */
+.shell{max-width:1400px;margin:0 auto;padding:22px 20px 80px}
+
+/* ---------- status strip ---------- */
+.strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:1px;
+  background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:24px}
+.cell{background:var(--panel);padding:15px 17px}
+.cell .k{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);
+  margin-bottom:7px;white-space:nowrap}
+.cell .v{font-size:27px;font-weight:700;letter-spacing:-.02em;line-height:1;font-family:var(--m)}
+.cell .s{font-size:11px;color:var(--ink-2);margin-top:5px}
+.v.clear{color:var(--clear)} .v.watch{color:var(--watch)}
+.v.risk{color:var(--risk)} .v.down{color:var(--down)}
+
+.sec-h{display:flex;align-items:baseline;gap:12px;margin:0 0 13px}
+.sec-h h2{margin:0;font-size:12px;letter-spacing:.15em;text-transform:uppercase;
+  color:var(--ink-2);font-weight:640}
+.sec-h .n{font-family:var(--m);font-size:11px;color:var(--ink-3)}
+
+/* ---------- board ---------- */
+.board{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
+.show{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:0;
+  cursor:pointer;transition:border-color .15s,transform .12s;overflow:hidden;text-align:left;
+  font:inherit;color:inherit;display:block;width:100%}
+.show:hover{border-color:var(--line-2);transform:translateY(-1px)}
+.show.sel{border-color:var(--line-2)}
+.show-top{padding:14px 16px 12px;border-bottom:1px solid var(--line)}
+.show-net{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.net{font-family:var(--m);font-size:9.5px;letter-spacing:.1em;padding:3px 7px;border-radius:4px;
+  background:var(--panel-2);color:var(--ink-2);border:1px solid var(--line-2)}
+.state{margin-left:auto;font-family:var(--m);font-size:9.5px;letter-spacing:.1em;padding:3px 8px;
+  border-radius:4px;font-weight:700}
+.state.clear{background:var(--clear-bg);color:var(--clear)}
+.state.watch{background:var(--watch-bg);color:var(--watch)}
+.state.risk{background:var(--risk-bg);color:var(--risk)}
+.state.down{background:var(--down-bg);color:var(--down)}
+.show h3{margin:0 0 3px;font-size:15.5px;font-weight:650;letter-spacing:-.01em}
+.show .venue{font-size:12px;color:var(--ink-3)}
+.show-body{padding:12px 16px 14px;display:flex;gap:18px;align-items:flex-end}
+.gs{flex:1}
+.gs .lab{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin-bottom:4px}
+.gs .val{font-family:var(--m);font-size:13px;font-weight:600}
+.gs .val.live{color:var(--live)}
+.gs .val.live::before{content:"● ";font-size:8px;vertical-align:2px}
+.crewn{text-align:right}
+.crewn .big{font-family:var(--m);font-size:22px;font-weight:700;line-height:1}
+.crewn .lab{font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);margin-top:4px}
+.alert{padding:10px 16px;background:var(--down-bg);border-top:1px solid #4A1A18;
+  font-size:12px;color:#F09B98;display:flex;gap:8px;align-items:flex-start}
+.alert.watchy{background:var(--watch-bg);border-top-color:#4A3A10;color:#EBC96A}
+.alert b{color:#fff;font-weight:640}
+
+/* ---------- detail ---------- */
+.detail{margin-top:26px;border:1px solid var(--line-2);border-radius:12px;overflow:hidden;
+  background:var(--panel);display:none}
+.detail.open{display:block}
+.det-head{padding:17px 20px;background:linear-gradient(180deg,#1C1C20,#141416);
+  border-bottom:1px solid var(--line);display:flex;align-items:flex-start;gap:20px;flex-wrap:wrap}
+.det-head h3{margin:0 0 4px;font-size:20px;font-weight:700;letter-spacing:-.015em}
+.det-head .sub{font-size:12.5px;color:var(--ink-2)}
+.det-actions{margin-left:auto;display:flex;gap:9px;align-items:center}
+.btn{font:inherit;font-size:12px;font-weight:600;padding:8px 15px;border-radius:7px;cursor:pointer;
+  border:1px solid var(--line-2);background:var(--panel-2);color:var(--ink);transition:.14s}
+.btn:hover{border-color:var(--ink-3)}
+.btn.pri{background:#2A6FB5;border-color:#2A6FB5;color:#fff}
+.btn.pri:hover{background:#3480CC}
+.btn:disabled{opacity:.4;cursor:default}
+
+/* chain */
+.chain{padding:20px;border-bottom:1px solid var(--line);background:var(--panel-2)}
+.chain-h{display:flex;align-items:baseline;gap:10px;margin-bottom:16px}
+.chain-h .t{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-2);font-weight:640}
+.chain-h .d{font-size:11.5px;color:var(--ink-3)}
+.rail{display:flex;align-items:stretch;gap:0;position:relative}
+.node{flex:1;position:relative;padding:0 4px}
+.node .bar{height:3px;background:var(--line-2);border-radius:2px;margin-bottom:11px;position:relative}
+.node.done .bar{background:var(--ink-3)}
+.node.now .bar{background:var(--live)}
+.node.shift .bar{background:var(--watch)}
+.node.bad .bar{background:var(--down)}
+.node .dot{position:absolute;left:0;top:-3px;width:9px;height:9px;border-radius:99px;
+  background:var(--line-2);border:2px solid var(--panel-2)}
+.node.done .dot{background:var(--ink-3)} .node.now .dot{background:var(--live)}
+.node.shift .dot{background:var(--watch)}
+.node.bad .dot{background:var(--down)}
+.node .lb{font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);margin-bottom:3px}
+.node .tm{font-family:var(--m);font-size:14px;font-weight:600}
+.node.shift .tm{color:var(--watch)}
+.node.bad .tm{color:var(--down)}
+.node.now .tm{color:var(--live)}
+.node .df{font-family:var(--m);font-size:10.5px;color:var(--watch);margin-top:2px}
+.node.bad .df{color:var(--down)}
+
+/* roster */
+.roster-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead th{text-align:left;padding:10px 14px;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--ink-3);font-weight:640;border-bottom:1px solid var(--line);white-space:nowrap;
+  background:var(--panel-2);position:sticky;top:0}
+tbody td{padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:middle}
+tbody tr:hover{background:#1A1A1D}
+tbody tr.t1{box-shadow:inset 3px 0 0 #3E6E96}
+tbody tr.t2{box-shadow:inset 3px 0 0 var(--line-2)}
+.pos{font-family:var(--m);font-size:11px;font-weight:700;letter-spacing:.06em;
+  background:var(--panel-2);border:1px solid var(--line-2);padding:3px 7px;border-radius:4px;
+  display:inline-block;min-width:52px;text-align:center}
+.pos.key{background:#12212E;border-color:#25405A;color:#9CC6EA}
+.nm{font-weight:600}
+.sub2{font-size:11px;color:var(--ink-3);margin-top:1px}
+.tier{font-family:var(--m);font-size:9.5px;letter-spacing:.08em;padding:2px 6px;border-radius:3px}
+.tier.T1{background:#0F1E2B;color:#7FB6E4;border:1px solid #21384A}
+.tier.T2{background:var(--panel-2);color:var(--ink-3);border:1px solid var(--line-2)}
+.slack{font-family:var(--m);font-size:14px;font-weight:700}
+.slack.ok{color:var(--clear)} .slack.warn{color:var(--watch)}
+.slack.bad{color:var(--down)}
+.st{font-family:var(--m);font-size:10px;letter-spacing:.08em;padding:3px 8px;border-radius:4px;font-weight:700}
+.st.CLEAR{background:var(--clear-bg);color:var(--clear)}
+.st.WATCH{background:var(--watch-bg);color:var(--watch)}
+.st.RISK{background:var(--risk-bg);color:var(--risk)}
+.st.BROKEN{background:var(--down-bg);color:var(--down)}
+.st.SOLVED{background:var(--clear-bg);color:var(--clear)}
+
+/* agent feed */
+.feed{border-bottom:1px solid var(--line);background:var(--panel-2);padding:16px 20px 20px}
+.feed-h{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-2);
+  font-weight:640;margin-bottom:13px;display:flex;align-items:center;gap:10px}
+.crewbar{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:15px}
+.ag{display:flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--line);
+  border-radius:6px;padding:5px 10px;font-family:var(--m);font-size:10px;letter-spacing:.07em;color:var(--ink-2)}
+.ag i{width:5px;height:5px;border-radius:99px;background:var(--ink-3);display:block}
+.ag.on{border-color:var(--clear);color:var(--ink)} .ag.on i{background:var(--clear);
+  animation:p 2s infinite}
+.ag.hot{border-color:var(--down);color:#F0A79F} .ag.hot i{background:var(--down)}
+.ag.off{border-style:dashed;border-color:var(--line);color:var(--ink-3);background:transparent}
+.ag.off i{background:transparent;border:1px solid var(--ink-3);width:5px;height:5px;box-sizing:border-box}
+.ag em{font-style:normal;font-size:8.5px;letter-spacing:.09em;color:var(--ink-3);
+  border:1px solid var(--line);border-radius:3px;padding:1px 4px;margin-left:3px}
+.crewnote{flex-basis:100%;font-size:11px;color:var(--ink-3);margin-top:2px;line-height:1.5}
+.crewnote b{color:var(--ink-2);font-weight:600}
+.log{display:flex;flex-direction:column;gap:0;max-height:280px;overflow-y:auto}
+.ev{display:grid;grid-template-columns:60px 84px 1fr;gap:12px;padding:9px 0;
+  border-bottom:1px solid var(--line);font-size:12.5px;opacity:0;transform:translateY(6px);
+  transition:opacity .35s,transform .35s}
+.ev.in{opacity:1;transform:none}
+.ev .ts{font-family:var(--m);font-size:11px;color:var(--ink-3)}
+.ev .who{font-family:var(--m);font-size:10px;letter-spacing:.09em;font-weight:700;padding-top:1px}
+.ev .who.SPOTTER{color:#5DA9E9} .ev .who.TRAFFIC{color:#E8A81C}
+.ev .who.STEWARD{color:#C58BE8} .ev .who.FIXER{color:#EE7A3C}
+.ev .who.RUNNER{color:#25B04B} .ev .who.ADVANCE{color:#46C2A8}
+.ev .who.WRANGLER{color:#E58AA6} .ev .who.CUSTOMS{color:#8A94A6}
+.prov{font-size:10px;margin-top:3px;display:flex;align-items:center;gap:4px;color:var(--ink-3);
+  font-family:var(--m);letter-spacing:.01em}
+.prov .pi{font-size:9px;font-weight:700}
+.prov.confirmed{color:#6FCB89} .prov.confirmed .pi{color:var(--clear)}
+.prov.sheet{color:var(--ink-3)}
+.prov.inferred{color:#E0B45A} .prov.inferred .pi{color:var(--watch)}
+.prov.none{color:#5C5A55}
+.prov.external{color:#8FB4DE} .prov.external .pi{color:#5DA9E9}
+.redact{color:var(--ink-3);font-style:italic}
+.brk{font-family:var(--m);font-size:8.5px;letter-spacing:.07em;background:#0E2A16;color:#3FBE62;
+  border:1px solid #1C5C2E;padding:1px 5px;border-radius:3px;margin-left:6px}
+.nobrk{font-family:var(--m);font-size:8.5px;letter-spacing:.07em;background:#232326;color:#7E7B74;
+  border:1px solid var(--line-2);padding:1px 5px;border-radius:3px;margin-left:6px}
+.ev .msg{color:var(--ink-2);line-height:1.5}
+.ev .msg b{color:var(--ink);font-weight:600}
+.ev .msg .hl{color:var(--down);font-weight:600}
+
+/* ---------- seat switch ---------- */
+.seatsw{display:flex;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;
+  padding:2px;gap:2px}
+.seatsw button{font:inherit;font-size:11px;font-weight:640;letter-spacing:.05em;padding:6px 12px;
+  border-radius:6px;border:none;background:transparent;color:var(--ink-3);cursor:pointer;
+  font-family:var(--m);white-space:nowrap}
+.seatsw button.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 0 rgba(0,0,0,.4)}
+
+/* ---------- production seat ---------- */
+.prod-head{display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;
+  padding:20px 22px;background:var(--panel);border:1px solid var(--line);border-radius:12px;margin-bottom:16px}
+.prod-net{font-family:var(--m);font-size:10px;letter-spacing:.14em;color:var(--ink-3);margin-bottom:7px}
+.prod-head h2{margin:0 0 4px;font-size:22px;font-weight:700;letter-spacing:-.02em}
+.prod-sub{font-size:13px;color:var(--ink-2)}
+.prov-by{margin-left:auto;text-align:right;font-size:11.5px;color:var(--ink-3);line-height:1.5}
+.prov-by b{color:var(--ink-2);font-weight:620}
+
+.pstate{padding:15px 20px;border-radius:11px;margin-bottom:16px;display:flex;align-items:center;
+  gap:14px;font-size:15px;border:1px solid}
+.pstate.calm{background:var(--clear-bg);border-color:#1C5C2E;color:#8FE0A6}
+.pstate.hot{background:var(--down-bg);border-color:#4A1A18;color:#F09B98}
+.pstate b{color:#fff;font-weight:660}
+.pstate .pi{font-size:20px;line-height:1}
+
+@media(max-width:980px){.twocol{grid-template-columns:1fr}}
+.pcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.pcard-h{padding:13px 18px;border-bottom:1px solid var(--line);background:var(--panel-2);
+  font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-2);font-weight:640;
+  display:flex;align-items:center;gap:10px}
+.pcard-h .cnt{margin-left:auto;font-family:var(--m);font-size:11px;color:var(--ink-3);letter-spacing:0}
+
+.sleep-foot.go{color:#8FE0A6}.sleep-foot.go b{color:#fff}
+
+@media(max-width:900px){
+  .rail{flex-direction:column;gap:12px}
+  .node{padding:0}
+  .node .bar{width:3px;height:22px;margin:0 0 6px}
+  .det-actions{margin-left:0;width:100%}
+  .top-in{flex-wrap:wrap;gap:12px}
+  .desk{border-left:none;padding-left:0}
+}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="top-in">
+    <div class="logo"><b>APRON</b><span>Crew Integrity</span></div>
+    <div class="desk">Sports &amp; Entertainment Desk · <b>CTM Entertainment</b></div>
+    <div class="top-right">
+      <div class="seatsw">
+        <button id="sw-tmc" class="on">TMC DESK</button>
+        <button id="sw-prod">PRODUCTION SEAT</button>
+      </div>
+      <div class="crew-chip"><span class="pulse"></span>7 of 8 agents on shift</div>
+      <div class="clock" id="clock">22:41:07 <small>ET</small></div>
+      <button class="btn" id="btn-reset">Reset</button>
+      <button class="btn pri" id="btn-play">Run the night</button>
+    </div>
+  </div>
+</div>
+
+<div class="shell">
+
+<div id="seat-tmc">
+
+  <div class="strip">
+    <div class="cell"><div class="k">Shows on the board</div><div class="v" id="m-shows">6</div><div class="s">Sun 18 Oct · 4 live</div></div>
+    <div class="cell"><div class="k">Positions covered</div><div class="v mono" id="m-pos">147</div><div class="s">Across 6 productions</div></div>
+    <div class="cell"><div class="k">Crew in motion</div><div class="v mono" id="m-motion">89</div><div class="s">Departing tonight</div></div>
+    <div class="cell"><div class="k">Clear</div><div class="v clear mono" id="m-clear">147</div><div class="s">No action needed</div></div>
+    <div class="cell"><div class="k">At risk</div><div class="v mono" id="m-risk">0</div><div class="s">Watching</div></div>
+    <div class="cell"><div class="k">Call times exposed</div><div class="v mono" id="m-exposed">0</div><div class="s">Next show jeopardy</div></div>
+  </div>
+
+  <div class="sec-h">
+    <h2>The Board</h2>
+    <span class="n" id="boardnote">Sunday 18 October · all productions nominal</span>
+  </div>
+
+  <div class="board" id="board"></div>
+
+  <div class="detail" id="detail">
+    <div class="det-head">
+      <div>
+        <h3 id="d-title">—</h3>
+        <div class="sub" id="d-sub">—</div>
+      </div>
+      <div class="det-actions">
+        <button class="btn" id="btn-alt" disabled>Generate options</button>
+        <button class="btn pri" id="btn-runner" disabled>Hand to desk</button>
+      </div>
+    </div>
+
+    <div class="chain">
+      <div class="chain-h">
+        <span class="t">Wrap-to-gate chain</span>
+        <span class="d" id="chain-note">Projected from live game state · Progressive Field, gate 4 load-out</span>
+      </div>
+      <div class="rail" id="rail"></div>
+    </div>
+
+    <div class="feed">
+      <div class="feed-h">Agent crew</div>
+      <div class="crewbar" id="crewbar"></div>
+      <div class="log" id="log"></div>
+    </div>
+
+    <div class="roster-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Position</th>
+            <th>Crew</th>
+            <th>Tier</th>
+            <th>Next call</th>
+            <th>Routing</th>
+            <th class="mono">Slack</th>
+            <th>State</th>
+          </tr>
+        </thead>
+        <tbody id="roster"></tbody>
+      </table>
+    </div>
+
+    <div class="opts" id="opts"></div>
+
+    <div class="handoff" id="handoff">
+      <div class="handoff-h">Desk instruction · composed by RUNNER</div>
+      <div class="msg-box" id="msg"></div>
+      <div class="note">PNRs grouped by carrier and handed to the named agent, not dropped in a queue.</div>
+      <div class="done-bar" id="donebar">
+        <span class="tick">✓</span>
+        <span class="txt"><b>Show closed.</b> 22 of 22 crew hold a confirmed forward itinerary that clears their next call. 0 call times exposed. Recorded: <b>+$1,847 fare · 0 rest breaches · 4 A-list positions retained.</b></span>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /seat-tmc -->
+
+<div id="seat-prod" style="display:none">
+
+  <div class="prod-head">
+    <div>
+      <div class="prod-net">FOX SPORTS · PRODUCTION SEAT</div>
+      <h2>ALCS Gm 4 · Rangers @ Guardians</h2>
+      <div class="prod-sub">Progressive Field, Cleveland · 22 traveling crew · truck compound, gate 4</div>
+    </div>
+    <div class="prov-by">Travel desk · <b>CTM Entertainment</b><br>
+      <span>Seat provided by your travel management company</span></div>
+  </div>
+
+  <div class="strip" style="margin-bottom:16px">
+    <div class="cell"><div class="k">Game state</div>
+      <div class="v" id="p-gs" style="font-size:19px">Bot 9th · 4–4</div>
+      <div class="s" id="p-gs-s">Progressive Field · live</div></div>
+    <div class="cell"><div class="k">Projected final</div>
+      <div class="v" id="p-pf" style="font-size:19px">22:58</div>
+      <div class="s" id="p-pf-s">On schedule</div></div>
+    <div class="cell"><div class="k">Traveling crew</div>
+      <div class="v" style="font-size:19px">22</div>
+      <div class="s">6 hold a next call</div></div>
+  </div>
+
+  <div class="pstate calm" id="pstate"><span class="pi">✓</span><span id="pstate-t">Nothing open. 22 crew routed as booked.</span></div>
+
+  <div class="pcard" style="margin-bottom:16px">
+    <div class="pcard-h">Agent crew <span class="cnt">CTM Entertainment · sports desk</span></div>
+    <div style="padding:14px 18px 16px">
+      <div class="crewbar" id="pcrewbar"></div>
+      <div class="log" id="plog" style="max-height:300px"></div>
+    </div>
+  </div>
+
+  <div class="pcard">
+    <div class="pcard-h">Crew <span class="cnt">production view · external calls redacted unless disclosed</span></div>
+    <div class="roster-wrap">
+      <table>
+        <thead><tr>
+          <th>Position</th><th>Crew</th><th>Next call</th><th>Routing</th><th>State</th>
+        </tr></thead>
+        <tbody id="proster"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div><!-- /seat-prod -->
+
+</div>
+
+<style>
+.opts{border-top:1px solid var(--line);padding:18px 20px;background:var(--panel);display:none}
+.opts.open{display:block}
+.opts-h{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-2);
+  font-weight:640;margin-bottom:15px}
+.ogrp{margin-bottom:18px;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.ogrp-h{padding:11px 14px;background:var(--panel-2);border-bottom:1px solid var(--line);
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.ogrp-h .nm{font-weight:650;font-size:14px}
+.ogrp-h .cons{margin-left:auto;font-size:11.5px;color:var(--ink-2)}
+.ogrp-h .cons b{color:#F0908C}
+.opt{display:grid;grid-template-columns:26px 1fr 130px 96px 84px;gap:12px;padding:11px 14px;
+  border-bottom:1px solid var(--line);align-items:center;font-size:12.5px}
+.opt:last-child{border-bottom:none}
+.opt.rec{background:#0E1F13}
+.pick{width:15px;height:15px;border-radius:99px;border:2px solid var(--line-2);display:block}
+.opt.rec .pick{border-color:var(--clear);background:radial-gradient(circle,var(--clear) 40%,transparent 42%)}
+.opt .route{font-family:var(--m);font-size:12px;color:var(--ink)}
+.opt .why{font-size:11px;color:var(--ink-3);margin-top:2px}
+.opt .verdict{font-size:11.5px;font-weight:600}
+.verdict.y{color:var(--clear)} .verdict.n{color:var(--down)}
+.opt .cost{font-family:var(--m);font-size:12.5px;text-align:right;color:var(--ink-2)}
+.opt .tot{font-family:var(--m);font-size:13.5px;text-align:right;font-weight:700}
+.rec-tag{font-family:var(--m);font-size:9px;letter-spacing:.09em;background:var(--clear-bg);
+  color:var(--clear);padding:2px 6px;border-radius:3px;margin-left:7px}
+.handoff{border-top:1px solid var(--line);padding:18px 20px;background:var(--panel-2);display:none}
+.handoff.open{display:block}
+.handoff-h{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-2);
+  font-weight:640;margin-bottom:12px}
+.msg-box{background:#0B0B0C;border:1px solid var(--line-2);border-radius:8px;padding:16px;
+  font-family:var(--m);font-size:12.5px;line-height:1.65;color:var(--ink-2);white-space:pre-wrap}
+.msg-box b{color:var(--ink);font-weight:600}
+.handoff .note{margin-top:11px;font-size:11.5px;color:var(--ink-3)}
+.done-bar{margin-top:16px;padding:14px 16px;background:var(--clear-bg);border:1px solid #1C5C2E;
+  border-radius:9px;display:none;align-items:center;gap:12px}
+.done-bar.open{display:flex}
+.done-bar .tick{width:22px;height:22px;border-radius:99px;background:var(--clear);color:#06210E;
+  display:grid;place-items:center;font-weight:800;font-size:13px;flex:none}
+.done-bar .txt{font-size:13px;color:#8FE0A6}
+.done-bar .txt b{color:#fff}
+.ws-status{font-family:var(--m);font-size:9px;letter-spacing:.08em;padding:3px 8px;
+  border-radius:4px;margin-left:8px}
+.ws-status.connected{background:var(--clear-bg);color:var(--clear)}
+.ws-status.connecting{background:var(--watch-bg);color:var(--watch)}
+.ws-status.disconnected{background:var(--down-bg);color:var(--down)}
+</style>
+
+<script>
+(function(){
+"use strict";
+
+/* ============ STATE ============ */
+var SHOWS = [], CREW = [], CHAIN = [], SCRIPT = [];
+var OPTIONS = [], HANDOFF = '', OFFLINE = {}, CREWNOTE = '';
+var AGENTS = ['ADVANCE','WRANGLER','SPOTTER','TRAFFIC','STEWARD','FIXER','RUNNER','CUSTOMS'];
+var step = -1, playing = false, chainLevel = 0;
+var crewState = {};
+var CREW0 = [];
+
+var ws = null;
+
+/* ============ WEBSOCKET ============ */
+function connect() {
+  var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(proto + '//' + location.host);
+
+  ws.onopen = function() {
+    console.log('[ws] Connected');
+  };
+
+  ws.onmessage = function(e) {
+    var msg = JSON.parse(e.data);
+
+    if (msg.type === 'init') {
+      loadScenario(msg.scenario);
+      if (msg.currentStep >= 0) {
+        for (var i = 0; i <= msg.currentStep && i < SCRIPT.length; i++) {
+          var s = SCRIPT[i];
+          logEvent({ts: s.timestamp, who: s.agent, msg: s.message});
+          applyStep(s);
+        }
+        step = msg.currentStep;
+        if (step === 1) openDetail();
+      }
+      if (msg.playing) {
+        playing = true;
+        $('btn-play').textContent = 'Pause';
+      }
+    }
+
+    if (msg.type === 'step') {
+      step = msg.index;
+      var s = msg.step;
+      logEvent({ts: s.timestamp, who: s.agent, msg: s.message});
+      applyStep(s);
+      if (seatActive()) renderProd();
+      if (step === 1) openDetail();
+      if (step >= SCRIPT.length - 1) {
+        playing = false;
+        $('btn-play').textContent = 'Replay';
+      }
+    }
+
+    if (msg.type === 'reset') {
+      loadScenario(msg.scenario);
+    }
+  };
+
+  ws.onclose = function() {
+    console.log('[ws] Disconnected, reconnecting...');
+    setTimeout(connect, 2000);
+  };
+}
+
+function send(action) {
+  if (ws && ws.readyState === 1) {
+    ws.send(JSON.stringify({action: action}));
+  }
+}
+
+/* ============ LOAD SCENARIO ============ */
+function loadScenario(sc) {
+  SHOWS = sc.shows.map(function(s) {
+    return {id: s.id, net: s.net, title: s.title, venue: s.venue,
+      gs: s.gameState, live: s.live, crew: s.crewCount, state: s.state,
+      hero: s.hero, alert: null, note: null};
+  });
+  CREW = sc.crew.map(function(c) {
+    return {pos: c.position, key: c.keyPosition ? 1 : 0, nm: c.name,
+      ext: c.externalCall ? 1 : 0, DISCLOSED: c.disclosed ? 1 : 0,
+      pv: c.provenance.slice(), hm: c.homeMarket, tier: c.tier,
+      call: c.nextCall, route: c.routing, arr: c.arrival, slack: c.slackMinutes};
+  });
+  CHAIN = sc.chain.map(function(n) {
+    return {lb: n.label, base: n.baseTime, rev: n.revisedTime, mid: n.midTime, dur: n.isDuration ? 1 : 0};
+  });
+  SCRIPT = sc.steps;
+  OFFLINE = sc.offlineAgents;
+  CREWNOTE = sc.crewNote;
+  HANDOFF = sc.handoffText;
+  OPTIONS = sc.optionGroups.map(function(g) {
+    return {nm: g.crewNames, cons: g.constraint,
+      rows: g.options.map(function(o) {
+        return {route: o.route, why: o.rationale, verdict: o.verdict,
+          vc: o.verdictPass ? 'y' : 'n', cost: o.costDelta,
+          tot: o.totalCost, rec: o.recommended};
+      })};
+  });
+
+  step = -1; playing = false; chainLevel = 0;
+  crewState = {};
+  CREW.forEach(function(c,i) { crewState[i] = {st:'CLEAR', slack: c.slack}; });
+  CREW0 = CREW.map(function(c) {
+    return {route: c.route, arr: c.arr, pv: c.pv.slice(), call: c.call};
+  });
+
+  $('log').innerHTML = '';
+  $('opts').classList.remove('open');
+  $('handoff').classList.remove('open');
+  $('donebar').classList.remove('open');
+  $('btn-alt').disabled = true;
+  $('btn-runner').disabled = true;
+  $('m-risk').textContent = '0'; $('m-risk').className = 'v mono';
+  $('m-exposed').textContent = '0'; $('m-exposed').className = 'v mono';
+  $('m-clear').textContent = '147';
+  $('boardnote').textContent = 'Sunday 18 October · all productions nominal';
+  $('detail').classList.remove('open');
+
+  renderBoard(); renderChain(0); renderRoster(); renderCrewbar({});
+  $('btn-play').textContent = 'Run the night';
+  if (seatActive()) renderProd();
+}
+
+/* ============ RENDER ============ */
+var $ = function(id) { return document.getElementById(id); };
+
+function fmtSlack(m) {
+  var neg = m < 0, a = Math.abs(m);
+  return (neg ? '−' : '+') + Math.floor(a/60) + 'h' + String(a%60).padStart(2,'0');
+}
+function slackCls(m) { return m < 0 ? 'bad' : m < 90 ? 'warn' : 'ok'; }
+
+function renderBoard() {
+  $('board').innerHTML = SHOWS.map(function(s) {
+    var st = s.id === 'alcs' ? SHOWS[0].state : s.state;
+    return '<button class="show ' + (s.id==='alcs'&&st!=='clear'?'sel':'') + '" data-id="' + s.id + '">'
+      + '<div class="show-top"><div class="show-net"><span class="net">' + s.net + '</span>'
+      + '<span class="state ' + st + '">' + st.toUpperCase() + '</span></div>'
+      + '<h3>' + s.title + '</h3><div class="venue">' + s.venue + '</div></div>'
+      + '<div class="show-body"><div class="gs"><div class="lab">Game state</div>'
+      + '<div class="val ' + (s.live?'live':'') + '">' + s.gs + '</div></div>'
+      + '<div class="crewn"><div class="big">' + s.crew + '</div><div class="lab">Traveling</div></div></div>'
+      + (s.note ? '<div class="alert watchy"><span>' + s.note + '</span></div>' : '')
+      + (s.id==='alcs'&&s.alert ? '<div class="alert"><span>' + s.alert + '</span></div>' : '')
+      + '</button>';
+  }).join('');
+  document.querySelectorAll('.show').forEach(function(b) {
+    b.addEventListener('click', function() { if(b.dataset.id==='alcs') openDetail(); });
+  });
+}
+
+function renderChain(level) {
+  $('rail').innerHTML = CHAIN.map(function(n,i) {
+    var t = level >= 2 ? n.rev : level === 1 ? (n.mid || n.rev) : n.base;
+    var cls = '';
+    if(i === 0 && level === 0) cls = 'now';
+    else if(level >= 1 && i < 4) cls = 'shift';
+    if(level >= 2 && i === 4) cls = 'bad';
+    var diff = '';
+    if(n.dur) {
+      if(level === 1) diff = '− 1h39m';
+      else if(level >= 2) diff = 'below 8h minimum';
+    } else if(level >= 1 && n.base !== n.rev) {
+      diff = '+' + diffMin(n.base, n.rev) + 'm';
+    }
+    return '<div class="node ' + cls + '">'
+      + '<div class="bar"><span class="dot"></span></div>'
+      + '<div class="lb">' + n.lb + '</div>'
+      + '<div class="tm">' + t + '</div>'
+      + (diff ? '<div class="df">' + diff + '</div>' : '')
+      + '</div>';
+  }).join('');
+}
+
+function diffMin(a,b) {
+  function p(s) { var parts = s.split(':').map(Number); return parts[0]*60 + parts[1]; }
+  var d = p(b) - p(a); if(d < 0) d += 1440; return d;
+}
+
+function renderRoster() {
+  $('roster').innerHTML = CREW.map(function(c,i) {
+    var s = crewState[i];
+    return '<tr class="' + c.tier.toLowerCase() + '">'
+      + '<td><span class="pos ' + (c.key?'key':'') + '">' + c.pos + '</span></td>'
+      + '<td><div class="nm">' + c.nm + '</div><div class="sub2">' + c.hm + '</div></td>'
+      + '<td><span class="tier ' + c.tier + '">' + c.tier + '</span></td>'
+      + '<td style="font-size:12px">' + c.call
+      + '<div class="prov ' + c.pv[0] + '"><span class="pi">' + c.pv[1] + '</span>' + c.pv[2] + '</div></td>'
+      + '<td><div class="mono" style="font-size:11.5px">' + c.route + '</div><div class="sub2">' + c.arr + '</div></td>'
+      + '<td><span class="slack ' + slackCls(s.slack) + '">' + fmtSlack(s.slack) + '</span></td>'
+      + '<td><span class="st ' + s.st + '">' + s.st + '</span></td>'
+      + '</tr>';
+  }).join('');
+}
+
+function renderCrewbar(states) {
+  $('crewbar').innerHTML = AGENTS.map(function(a) {
+    return OFFLINE[a]
+      ? '<span class="ag off" title="' + OFFLINE[a] + '"><i></i>' + a + '<em>OFF</em></span>'
+      : '<span class="ag ' + (states[a]||'on') + '"><i></i>' + a + '</span>';
+  }).join('') + '<div class="crewnote">' + CREWNOTE + '</div>';
+}
+
+function renderOpts() {
+  $('opts').innerHTML = '<div class="opts-h">Options · generated by FIXER</div>'
+    + OPTIONS.map(function(g) {
+      return '<div class="ogrp"><div class="ogrp-h"><span class="nm">' + g.nm
+        + '</span><span class="cons">' + g.cons + '</span></div>'
+        + g.rows.map(function(r) {
+          return '<div class="opt ' + (r.rec?'rec':'') + '">'
+            + '<span class="pick"></span>'
+            + '<div><div class="route">' + r.route + '</div><div class="why">' + r.why + '</div></div>'
+            + '<div class="verdict ' + r.vc + '">' + r.verdict + (r.rec?'<span class="rec-tag">PICK</span>':'') + '</div>'
+            + '<div class="cost">' + r.cost + '</div>'
+            + '<div class="tot">' + r.tot + '</div></div>';
+        }).join('') + '</div>';
+    }).join('');
+}
+
+/* ============ APPLY STEP ============ */
+function applyStep(s) {
+  if (s.gameState) {
+    SHOWS[0].gs = s.gameState[0];
+    SHOWS[0].live = s.gameState[1] === 'live';
+    SHOWS[0].gsNote = s.gameState[1];
+    renderBoard();
+  }
+  if (s.showState) {
+    SHOWS[0].state = s.showState;
+    SHOWS[0].alert = s.showState === 'down'
+      ? '<span><b>4 call times exposed.</b> TD, A1, DIR and Lead EVS breach mandatory rest for a 14:00 CT call in Kansas City.</span>'
+      : s.showState === 'risk'
+      ? '<span><b>14 crew at risk.</b> Projected wrap 01:05 · 06:05 departures no longer reachable with rest.</span>'
+      : s.showState === 'watch'
+      ? '<span><b>Extra innings.</b> Chain recomputing for 22 traveling crew.</span>' : null;
+    if (s.showState === 'clear') SHOWS[0].alert = null;
+    renderBoard();
+  }
+  if (s.chainLevel !== undefined) { chainLevel = s.chainLevel; renderChain(s.chainLevel); }
+  if (s.slackDelta) CREW.forEach(function(c,i) { crewState[i].slack = c.slack + s.slackDelta; });
+  if (s.crewStates) {
+    CREW.forEach(function(c,i) {
+      if (s.crewStates.all) crewState[i].st = s.crewStates.all;
+      else if (s.crewStates.MNF && c.ext) crewState[i].st = s.crewStates.MNF;
+      else if (s.crewStates[c.tier]) crewState[i].st = s.crewStates[c.tier];
+    });
+  }
+  if (s.provenance) {
+    CREW.forEach(function(c) {
+      if (s.provenance[c.nm]) c.pv = s.provenance[c.nm];
+      if (s.calls && s.calls[c.nm]) c.call = s.calls[c.nm];
+    });
+    renderRoster();
+  }
+  if (s.routes) {
+    CREW.forEach(function(c) {
+      if (s.routes.MNF && c.ext) {
+        c.route = s.routes.MNF.route; c.arr = s.routes.MNF.arrival;
+      }
+    });
+  }
+  if (s.crewStates || s.slackDelta || s.routes) renderRoster();
+  if (s.metrics) {
+    if (s.metrics.risk !== undefined) {
+      $('m-risk').textContent = s.metrics.risk;
+      $('m-risk').className = 'v mono ' + (s.metrics.risk ? 'risk' : '');
+      $('m-clear').textContent = 147 - s.metrics.risk;
+    }
+    if (s.metrics.exposed !== undefined) {
+      $('m-exposed').textContent = s.metrics.exposed;
+      $('m-exposed').className = 'v mono ' + (s.metrics.exposed ? 'down' : '');
+    }
+  }
+  if (s.agentStates) renderCrewbar(s.agentStates);
+  if (s.showOptions) { renderOpts(); $('opts').classList.add('open'); $('btn-alt').disabled = false; }
+  if (s.showHandoff) { $('handoff').classList.add('open'); $('btn-runner').disabled = false;
+    $('msg').innerHTML = HANDOFF; }
+  if (s.done) {
+    $('donebar').classList.add('open');
+    $('boardnote').textContent = 'Sunday 18 October · 1 incident resolved · 0 open';
+    renderCrewbar({});
+  }
+  if (seatActive()) renderProd();
+}
+
+function logEvent(s) {
+  var d = document.createElement('div');
+  d.className = 'ev';
+  d.innerHTML = '<div class="ts">' + s.ts + '</div><div class="who ' + s.who + '">' + s.who + '</div><div class="msg">' + s.msg + '</div>';
+  $('log').prepend(d);
+  requestAnimationFrame(function() { d.classList.add('in'); });
+}
+
+function openDetail() {
+  var d = $('detail');
+  d.classList.add('open');
+  $('d-title').textContent = 'ALCS Gm 4 · Rangers @ Guardians';
+  $('d-sub').innerHTML = 'FOX · Progressive Field, Cleveland · <b>22 traveling crew</b> · 6 hold a next call';
+}
+
+/* ============ PRODUCTION SEAT ============ */
+function seatActive() { return document.getElementById('seat-prod').style.display !== 'none'; }
+
+function renderProd() {
+  var broken = CREW.filter(function(c,i) { return ['BROKEN','RISK'].indexOf(crewState[i].st) > -1; }).length;
+  var hot = step >= 3 && step < SCRIPT.length - 1;
+  var ps = $('pstate'), pt = $('pstate-t');
+  if (step >= SCRIPT.length - 1) {
+    ps.className = 'pstate calm';
+    pt.innerHTML = '<b>Closed.</b> 22 of 22 hold a confirmed forward itinerary that clears their next call.';
+  } else if (hot) {
+    ps.className = 'pstate hot';
+    pt.innerHTML = '<b>' + (broken||14) + ' crew will not make their departures.</b> Desk is working it.';
+  } else {
+    ps.className = 'pstate calm';
+    pt.innerHTML = '<b>Nothing open.</b> 22 crew routed as booked.';
+  }
+  $('proster').innerHTML = CREW.map(function(c,i) {
+    var st = crewState[i].st;
+    var brokerable = c.pv[2].indexOf('BROKERABLE') > -1 && c.pv[2].indexOf('NOT BROKERABLE') === -1;
+    var callCell = (c.ext && !brokerable)
+      ? 'External call · <span class="redact">withheld</span><div class="sub2">Arr MCI by Mon 13:00 CT</div>'
+      : c.call;
+    return '<tr class="' + (c.ext?'t1':'t2') + '">'
+      + '<td><span class="pos ' + (c.key?'key':'') + '">' + c.pos + '</span></td>'
+      + '<td><div class="nm">' + c.nm + '</div><div class="sub2">' + c.hm + '</div></td>'
+      + '<td style="font-size:12px">' + callCell + '</td>'
+      + '<td><div class="mono" style="font-size:11.5px">' + c.route + '</div><div class="sub2">' + c.arr + '</div></td>'
+      + '<td><span class="st ' + st + '">' + st + '</span></td>'
+      + '</tr>';
+  }).join('');
+  var sh = SHOWS[0];
+  $('p-gs').innerHTML = (sh.live ? '<span style="color:var(--live)">● </span>' : '') + sh.gs;
+  $('p-gs').className = 'v';
+  $('p-gs-s').textContent = sh.live ? 'Progressive Field · live' : 'Progressive Field · ' + (sh.gsNote || 'wrapped');
+  var pf = chainLevel >= 2 ? '01:05' : chainLevel === 1 ? '00:35' : '22:58';
+  $('p-pf').textContent = pf;
+  $('p-pf').className = 'v' + (chainLevel >= 1 ? ' watch' : '');
+  $('p-pf-s').textContent = chainLevel >= 2 ? '+2h07 from scheduled'
+    : chainLevel === 1 ? '+1h37 from scheduled' : 'On schedule';
+
+  $('pcrewbar').innerHTML = $('crewbar').innerHTML;
+  $('plog').innerHTML = $('log').innerHTML;
+}
+
+/* seat switching */
+function setSeat(which) {
+  var tmc = which === 'tmc';
+  $('seat-tmc').style.display = tmc ? '' : 'none';
+  $('seat-prod').style.display = tmc ? 'none' : '';
+  $('sw-tmc').classList.toggle('on', tmc);
+  $('sw-prod').classList.toggle('on', !tmc);
+  if (!tmc) renderProd();
+}
+$('sw-tmc').addEventListener('click', function() { setSeat('tmc'); });
+$('sw-prod').addEventListener('click', function() { setSeat('prod'); });
+
+/* clock */
+var t0 = 22*3600 + 41*60 + 7;
+setInterval(function() {
+  t0++;
+  var h = Math.floor(t0/3600) % 24, m = Math.floor(t0/60) % 60, s = t0 % 60;
+  $('clock').innerHTML = String(h).padStart(2,'0') + ':' + String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0') + ' <small>ET</small>';
+}, 1000);
+
+/* controls */
+$('btn-play').addEventListener('click', function() {
+  if (step >= SCRIPT.length - 1) { send('reset'); return; }
+  if (playing) {
+    playing = false;
+    send('pause');
+    $('btn-play').textContent = 'Resume';
+  } else {
+    playing = true;
+    send('play');
+    $('btn-play').textContent = 'Pause';
+  }
+});
+$('btn-reset').addEventListener('click', function() {
+  playing = false;
+  send('reset');
+});
+
+/* boot */
+connect();
+
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "name": "@apron/integration-clickhouse",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "main": "src/index.ts",
+  "dependencies": {
+    "@apron/types": "workspace:*",
+    "@clickhouse/client": "^1.8.0"
+  }
+}

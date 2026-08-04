@@ -1,0 +1,40 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "outDir": "dist",
+    "rootDir": ".",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "noUncheckedIndexedAccess": true,
+    "paths": {
+      "@apron/orchestrator": ["./packages/orchestrator/src/index.ts"],
+      "@apron/credentials": ["./packages/credentials/src/index.ts"],
+      "@apron/provenance": ["./packages/provenance/src/index.ts"],
+      "@apron/rules-engine": ["./packages/rules/engine/src/index.ts"],
+      "@apron/types": ["./packages/types/src/index.ts"],
+      "@apron/agent-spotter": ["./packages/agents/spotter/src/index.ts"],
+      "@apron/agent-traffic": ["./packages/agents/traffic/src/index.ts"],
+      "@apron/agent-advance": ["./packages/agents/advance/src/index.ts"],
+      "@apron/agent-wrangler": ["./packages/agents/wrangler/src/index.ts"],
+      "@apron/agent-steward": ["./packages/agents/steward/src/index.ts"],
+      "@apron/agent-fixer": ["./packages/agents/fixer/src/index.ts"],
+      "@apron/agent-runner": ["./packages/agents/runner/src/index.ts"],
+      "@apron/agent-customs": ["./packages/agents/customs/src/index.ts"],
+      "@apron/integration-grafana": ["./integrations/grafana/src/index.ts"],
+      "@apron/integration-clickhouse": ["./integrations/clickhouse/src/index.ts"],
+      "@apron/integration-google-cloud": ["./integrations/google-cloud/src/index.ts"]
+    }
+  },
+  "include": ["packages/*/src/**/*.ts", "packages/agents/*/src/**/*.ts", "packages/rules/*/src/**/*.ts", "integrations/*/src/**/*.ts", "fixtures/**/*.ts"],
+  "exclude": ["node_modules", "dist"]
+}
