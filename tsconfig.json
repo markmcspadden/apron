@@ -32,7 +32,8 @@
       "@apron/agent-customs": ["./packages/agents/customs/src/index.ts"],
       "@apron/integration-grafana": ["./integrations/grafana/src/index.ts"],
       "@apron/integration-clickhouse": ["./integrations/clickhouse/src/index.ts"],
-      "@apron/integration-google-cloud": ["./integrations/google-cloud/src/index.ts"]
+      "@apron/integration-google-cloud": ["./integrations/google-cloud/src/index.ts"],
+      "@apron/integration-firebase": ["./integrations/firebase/src/index.ts"]
     }
   },
   "include": ["packages/*/src/**/*.ts", "packages/agents/*/src/**/*.ts", "packages/rules/*/src/**/*.ts", "integrations/*/src/**/*.ts", "fixtures/**/*.ts"],

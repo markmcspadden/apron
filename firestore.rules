@@ -1,0 +1,40 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Shows — authenticated users can read; only the server (admin SDK) writes
+    match /shows/{showId} {
+      allow read: if request.auth != null;
+      allow write: if false; // server-side only via Admin SDK
+
+      match /decisions/{decisionId} {
+        allow read: if request.auth != null;
+        allow write: if false;
+      }
+    }
+
+    // Audit events — authenticated users can read; only the server writes
+    match /audit_events/{eventId} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+
+    // User profiles — users can read/write their own
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // TMC accounts — only members can read
+    match /tmc_accounts/{accountId} {
+      allow read: if request.auth != null
+        && request.auth.uid in resource.data.memberUids;
+      allow write: if false;
+    }
+
+    // Deny everything else
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

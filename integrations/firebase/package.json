@@ -1,0 +1,12 @@
+{
+  "name": "@apron/integration-firebase",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-only",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "dependencies": {
+    "firebase-admin": "^13.0.0"
+  }
+}

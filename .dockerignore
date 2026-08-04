@@ -1,0 +1,17 @@
+node_modules
+**/node_modules
+
+dist
+**/dist
+
+.git
+
+.env
+.env.*
+
+*.md
+!NOTICE
+
+LICENSE
+
+.claude/

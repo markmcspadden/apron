@@ -392,6 +392,18 @@ tbody tr.t2{box-shadow:inset 3px 0 0 var(--line-2)}
     </div>
   </div>
 
+  <div class="opts" id="popts"></div>
+
+  <div class="handoff" id="phandoff">
+    <div class="handoff-h">Desk instruction · composed by RUNNER</div>
+    <div class="msg-box" id="pmsg"></div>
+    <div class="note">PNRs grouped by carrier and handed to the named agent, not dropped in a queue.</div>
+    <div class="done-bar" id="pdonebar">
+      <span class="tick">✓</span>
+      <span class="txt"><b>Show closed.</b> 22 of 22 crew hold a confirmed forward itinerary that clears their next call. 0 call times exposed. Recorded: <b>+$1,847 fare · 0 rest breaches · 4 A-list positions retained.</b></span>
+    </div>
+  </div>
+
 </div><!-- /seat-prod -->
 
 </div>
@@ -556,6 +568,9 @@ function loadScenario(sc) {
   $('opts').classList.remove('open');
   $('handoff').classList.remove('open');
   $('donebar').classList.remove('open');
+  $('popts').classList.remove('open');
+  $('phandoff').classList.remove('open');
+  $('pdonebar').classList.remove('open');
   $('btn-alt').disabled = true;
   $('btn-runner').disabled = true;
   $('m-risk').textContent = '0'; $('m-risk').className = 'v mono';
@@ -789,6 +804,21 @@ function renderProd() {
 
   $('pcrewbar').innerHTML = $('crewbar').innerHTML;
   $('plog').innerHTML = $('log').innerHTML;
+
+  if ($('opts').classList.contains('open')) {
+    $('popts').innerHTML = $('opts').innerHTML;
+    $('popts').classList.add('open');
+  } else {
+    $('popts').classList.remove('open');
+  }
+
+  if ($('handoff').classList.contains('open')) {
+    $('phandoff').classList.add('open');
+    $('pmsg').innerHTML = HANDOFF;
+    if ($('donebar').classList.contains('open')) $('pdonebar').classList.add('open');
+  } else {
+    $('phandoff').classList.remove('open');
+  }
 }
 
 /* seat switching */

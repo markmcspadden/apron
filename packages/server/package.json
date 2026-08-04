@@ -21,6 +21,7 @@
     "@apron/integration-grafana": "workspace:*",
     "@apron/integration-clickhouse": "workspace:*",
     "@apron/integration-google-cloud": "workspace:*",
+    "@apron/integration-firebase": "workspace:*",
     "ws": "^8.18.0"
   }
 }

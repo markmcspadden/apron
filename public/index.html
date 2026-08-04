@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Apron — Crew integrity for live sports</title>
+<meta name="description" content="The show ran long. Apron keeps every traveling crew member's next call intact — an agent crew that watches the game, predicts the break, and hands a decided plan to your travel desk.">
+<style>
+:root{
+  --bg:#0B0B0C; --panel:#141416; --panel-2:#1B1B1E; --line:#2A2A2E; --line-2:#3A3A40;
+  --ink:#F2F1EE; --ink-2:#A9A69E; --ink-3:#6E6B65;
+  --clear:#25B04B; --clear-bg:#0E2A16;
+  --watch:#E8A81C; --watch-bg:#2E2308;
+  --risk:#EE7A3C; --risk-bg:#31190A;
+  --down:#E0403C; --down-bg:#33100F;
+  --live:#5DA9E9;
+  --f:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --m:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+  --w:1180px;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f);
+  font-size:15px;line-height:1.6;-webkit-font-smoothing:antialiased;overflow-x:hidden}
+.wrap{max-width:var(--w);margin:0 auto;padding:0 26px}
+a{color:inherit}
+h1,h2,h3{margin:0;letter-spacing:-.022em;line-height:1.12}
+p{margin:0}
+.mono{font-family:var(--m);font-variant-numeric:tabular-nums}
+.kicker{font-family:var(--m);font-size:10.5px;letter-spacing:.15em;text-transform:uppercase;
+  color:var(--ink-3);font-weight:600}
+
+/* ---------- nav ---------- */
+nav{position:sticky;top:0;z-index:50;background:rgba(11,11,12,.86);
+  backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+.nav-in{max-width:var(--w);margin:0 auto;padding:0 26px;height:60px;
+  display:flex;align-items:center;gap:26px}
+.logo{font-family:var(--m);font-size:15px;font-weight:700;letter-spacing:.06em;
+  text-decoration:none;white-space:nowrap}
+.logo span{color:var(--ink-3);font-weight:500;font-size:9.5px;letter-spacing:.16em;margin-left:8px}
+.nav-l{display:flex;gap:22px;margin-left:auto;align-items:center}
+.nav-l a{font-size:13px;color:var(--ink-2);text-decoration:none;white-space:nowrap}
+.nav-l a:hover{color:var(--ink)}
+.btn{display:inline-flex;align-items:center;gap:8px;background:var(--panel-2);
+  border:1px solid var(--line-2);color:var(--ink);border-radius:7px;padding:9px 16px;
+  font-size:13px;font-weight:560;text-decoration:none;white-space:nowrap;cursor:pointer;
+  transition:border-color .15s,background .15s}
+.btn:hover{border-color:var(--ink-3);background:#232327}
+.btn.pri{background:#1B6FE0;border-color:#1B6FE0}
+.btn.pri:hover{background:#2E80EE;border-color:#2E80EE}
+.lbl-s{display:none}
+@media(max-width:820px){
+  .nav-l a:not(.btn){display:none}
+  .nav-in{padding:0 18px;gap:12px}
+  .logo span{display:none}
+  .lbl-l{display:none}.lbl-s{display:inline}
+}
+
+/* ---------- section frame ---------- */
+section{padding:82px 0;border-bottom:1px solid var(--line);scroll-margin-top:60px}
+.sec-h{margin-bottom:38px;max-width:730px}
+.sec-h h2{font-size:33px;font-weight:680;margin:11px 0 14px}
+.sec-h p{color:var(--ink-2);font-size:16.5px}
+.lede{color:var(--ink-2);font-size:16.5px;max-width:700px}
+
+/* ---------- hero ---------- */
+.hero{padding:98px 0 78px;border-bottom:1px solid var(--line);position:relative;overflow:hidden}
+.hero::after{content:'';position:absolute;top:-320px;left:50%;transform:translateX(-50%);
+  width:1000px;height:640px;border-radius:50%;pointer-events:none;
+  background:radial-gradient(closest-side,rgba(93,169,233,.10),transparent 72%)}
+.hero-in{position:relative;z-index:1;max-width:960px}
+.hero h1{font-size:57px;font-weight:700;margin:16px 0 22px;letter-spacing:-.032em;
+  min-height:128px}
+.rot{transition:opacity .42s ease}
+.rot.out{opacity:.1}
+.hero .sub{color:var(--ink-2);font-size:19px;max-width:660px}
+.hero .sub b{color:var(--ink);font-weight:620}
+.cta{display:flex;gap:12px;margin-top:32px;flex-wrap:wrap}
+.hero-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);
+  border:1px solid var(--line);border-radius:11px;overflow:hidden;margin-top:52px;position:relative;z-index:1}
+.hs{background:var(--panel);padding:18px 20px}
+.hs .k{font-family:var(--m);font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--ink-3);margin-bottom:9px}
+.hs .v{font-family:var(--m);font-size:25px;font-weight:700;line-height:1;letter-spacing:-.02em}
+.hs .s{font-size:12px;color:var(--ink-3);margin-top:7px}
+@media(max-width:860px){
+  .hero{padding:64px 0 56px}
+  .hero h1{font-size:36px;min-height:172px}.hero .sub{font-size:17px}
+  .hero-strip{grid-template-columns:repeat(2,1fr)}
+  section{padding:58px 0}.sec-h h2{font-size:26px}
+}
+
+/* ---------- generic cards ---------- */
+.grid{display:grid;gap:16px}
+.g3{grid-template-columns:repeat(3,1fr)}
+.g2{grid-template-columns:repeat(2,1fr)}
+@media(max-width:900px){.g3,.g2{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:24px}
+.card h3{font-size:17px;font-weight:640;margin-bottom:10px}
+.card p{color:var(--ink-2);font-size:14.5px}
+.card .num{font-family:var(--m);font-size:10.5px;letter-spacing:.13em;color:var(--ink-3);
+  display:block;margin-bottom:13px}
+.card .tagline{font-family:var(--m);font-size:11px;letter-spacing:.06em;color:var(--ink-3);
+  margin-top:14px;padding-top:13px;border-top:1px solid var(--line)}
+
+/* ---------- why now ---------- */
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1px;background:var(--line);
+  border:1px solid var(--line);border-radius:11px;overflow:hidden;margin-bottom:20px}
+@media(max-width:900px){.stats{grid-template-columns:repeat(2,1fr)}}
+.stat{background:var(--panel);padding:22px 20px}
+.stat .n{font-family:var(--m);font-size:34px;font-weight:700;letter-spacing:-.03em;line-height:1}
+.stat .n.sm{font-size:23px;letter-spacing:-.02em}
+.stat .l{font-size:14px;font-weight:580;margin-top:11px;line-height:1.4}
+.stat .d{font-size:13px;color:var(--ink-2);margin-top:8px;line-height:1.5}
+.stat .src{font-family:var(--m);font-size:9.5px;letter-spacing:.09em;color:var(--ink-3);
+  margin-top:13px;padding-top:11px;border-top:1px solid var(--line);text-transform:uppercase}
+.pq{border-left:2px solid var(--clear);background:var(--panel-2);border-radius:0 11px 11px 0;
+  padding:26px 30px;margin-top:26px}
+.pq .q{font-size:21px;font-weight:600;letter-spacing:-.015em;line-height:1.4}
+.pq .a{font-family:var(--m);font-size:11px;letter-spacing:.08em;color:var(--ink-3);margin-top:14px}
+
+/* ---------- pull quote / principle ---------- */
+.principle{background:var(--panel-2);border:1px solid var(--line);border-left:2px solid var(--live);
+  border-radius:0 11px 11px 0;padding:24px 28px;margin:28px 0}
+.principle .p-t{font-size:19px;font-weight:640;letter-spacing:-.015em;margin-bottom:9px}
+.principle p{color:var(--ink-2);font-size:14.5px}
+
+/* ---------- agent crew ---------- */
+.crew{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:26px}
+.ag{display:flex;align-items:center;gap:7px;background:var(--panel);border:1px solid var(--line);
+  border-radius:7px;padding:7px 13px;font-family:var(--m);font-size:10.5px;letter-spacing:.08em}
+.ag i{width:5px;height:5px;border-radius:99px;display:block}
+.ag.off{border-style:dashed;color:var(--ink-3);background:transparent}
+.ag.off i{background:transparent;border:1px solid var(--ink-3);box-sizing:border-box}
+.ag em{font-style:normal;font-size:8.5px;letter-spacing:.09em;color:var(--ink-3);
+  border:1px solid var(--line);border-radius:3px;padding:1px 4px;margin-left:2px}
+.roles{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);
+  border-radius:11px;overflow:hidden}
+.role{background:var(--panel);padding:19px 22px;display:grid;
+  grid-template-columns:132px 1fr;gap:20px;align-items:start}
+.role .nm{font-family:var(--m);font-size:11.5px;letter-spacing:.1em;font-weight:640;padding-top:2px}
+.role .bd .t{font-weight:600;font-size:14.5px;margin-bottom:4px}
+.role .bd .d{color:var(--ink-2);font-size:14px}
+@media(max-width:700px){.role{grid-template-columns:1fr;gap:7px}}
+
+/* ---------- table ---------- */
+.tbl-wrap{border:1px solid var(--line);border-radius:11px;overflow:hidden;background:var(--panel)}
+.scroller{overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:660px}
+th{text-align:left;font-family:var(--m);font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--ink-3);font-weight:600;padding:13px 18px;background:var(--panel-2);
+  border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:14px 18px;border-bottom:1px solid var(--line);font-size:13.5px;
+  color:var(--ink-2);vertical-align:top}
+tr:last-child td{border-bottom:0}
+td.a{font-family:var(--m);font-size:11px;letter-spacing:.09em;color:var(--ink);white-space:nowrap}
+td.no{color:var(--ink-3)}
+.pill{display:inline-block;font-family:var(--m);font-size:9.5px;letter-spacing:.09em;
+  padding:2px 7px;border-radius:4px;white-space:nowrap}
+.pill.ro{background:#16233A;color:#8FC2F0}
+.pill.hold{background:var(--watch-bg);color:var(--watch)}
+.pill.wr{background:var(--clear-bg);color:var(--clear)}
+.pill.none{background:#232327;color:var(--ink-3)}
+
+/* ---------- dashboard mock ---------- */
+.mock{border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--panel);
+  margin-bottom:30px}
+.mock-bar{display:flex;align-items:center;gap:11px;padding:11px 17px;background:var(--panel-2);
+  border-bottom:1px solid var(--line);font-family:var(--m);font-size:10.5px;letter-spacing:.08em;
+  color:var(--ink-3);flex-wrap:wrap}
+.mock-bar .dot{width:7px;height:7px;border-radius:99px;background:var(--clear)}
+.mock-bar .r{margin-left:auto;color:var(--ink-2)}
+.mock-metrics{display:grid;grid-template-columns:repeat(5,1fr);gap:1px;background:var(--line)}
+.mm{background:var(--panel);padding:15px 17px}
+.mm .k{font-family:var(--m);font-size:9px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--ink-3);margin-bottom:7px}
+.mm .v{font-family:var(--m);font-size:21px;font-weight:700;line-height:1}
+.mm .s{font-size:11px;color:var(--ink-3);margin-top:5px}
+.mock-rows{padding:4px 0}
+.mr{display:grid;grid-template-columns:64px 1fr 90px 104px 74px;gap:14px;align-items:center;
+  padding:12px 17px;border-bottom:1px solid var(--line);font-size:13px}
+.mr:last-child{border-bottom:0}
+.net{font-family:var(--m);font-size:9px;letter-spacing:.1em;padding:3px 6px;border-radius:4px;
+  background:var(--panel-2);color:var(--ink-2);text-align:center;border:1px solid var(--line)}
+.mr .ttl{font-weight:580}
+.mr .sub2{color:var(--ink-3);font-size:11.5px;margin-top:2px}
+.mr .mono{font-size:12px;color:var(--ink-2)}
+.st{font-family:var(--m);font-size:9px;letter-spacing:.1em;padding:3px 7px;border-radius:4px;
+  text-align:center;display:inline-block}
+.st.CLEAR{background:var(--clear-bg);color:var(--clear)}
+.st.WATCH{background:var(--watch-bg);color:var(--watch)}
+.st.HELD{background:var(--risk-bg);color:var(--risk)}
+.st.DECIDE{background:var(--down-bg);color:#F08079}
+@media(max-width:900px){
+  .mock-metrics{grid-template-columns:repeat(2,1fr)}
+  .mr{grid-template-columns:52px 1fr 68px;gap:10px}
+  .mr .hidem{display:none}
+}
+
+/* ---------- alerts ---------- */
+.alerts{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:18px}
+@media(max-width:900px){.alerts{grid-template-columns:1fr}}
+.al{background:var(--panel);border:1px solid var(--line);border-radius:11px;overflow:hidden}
+.al-h{display:flex;align-items:center;gap:9px;padding:11px 15px;border-bottom:1px solid var(--line);
+  background:var(--panel-2);font-family:var(--m);font-size:9.5px;letter-spacing:.11em}
+.al-h .tier{padding:3px 8px;border-radius:4px;font-weight:640}
+.al-h .ch{margin-left:auto;color:var(--ink-3);letter-spacing:.08em}
+.al-b{padding:16px 15px}
+.al-b .m2{font-size:14px;line-height:1.55;color:var(--ink)}
+.al-b .m2 b{font-weight:640}
+.al-b .foot2{font-family:var(--m);font-size:9.5px;letter-spacing:.09em;margin-top:13px;
+  padding-top:12px;border-top:1px solid var(--line);color:var(--ink-3);
+  display:flex;gap:8px;flex-wrap:wrap}
+.al.w{border-color:#4A3A12} .al.d{border-color:#5A2A26}
+.quiet{font-family:var(--m);font-size:11px;color:var(--ink-3);margin-bottom:34px;letter-spacing:.02em}
+
+/* ---------- checklist ---------- */
+.checks{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);
+  border-radius:11px;overflow:hidden}
+.chk{background:var(--panel);padding:18px 22px;display:grid;grid-template-columns:22px 1fr;gap:14px}
+.chk .m{color:var(--clear);font-family:var(--m);font-size:14px;line-height:1.5}
+.chk .m.x{color:var(--ink-3)}
+.chk .t{font-weight:600;font-size:14.5px;margin-bottom:4px}
+.chk .d{color:var(--ink-2);font-size:14px}
+
+/* ---------- pricing ---------- */
+.price{background:var(--panel);border:1px solid var(--line-2);border-radius:13px;padding:34px;
+  display:grid;grid-template-columns:1fr 1fr;gap:34px;align-items:center}
+.price .big{font-family:var(--m);font-size:52px;font-weight:700;letter-spacing:-.03em;line-height:1}
+.price .big small{font-size:17px;color:var(--ink-3);font-weight:500;letter-spacing:0}
+.price ul{margin:0;padding-left:19px;color:var(--ink-2);font-size:14.5px}
+.price li{margin-bottom:9px}
+@media(max-width:820px){.price{grid-template-columns:1fr;padding:26px}.price .big{font-size:40px}}
+
+/* ---------- footer ---------- */
+footer{padding:52px 0 66px}
+.foot{display:flex;gap:22px;align-items:flex-start;flex-wrap:wrap}
+.foot p{color:var(--ink-3);font-size:13px;max-width:520px}
+.badge{font-family:var(--m);font-size:10px;letter-spacing:.11em;color:var(--ink-3);
+  border:1px solid var(--line);border-radius:6px;padding:6px 11px;margin-left:auto}
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="nav-in">
+    <a href="#top" class="logo">APRON<span>CREW INTEGRITY</span></a>
+    <div class="nav-l">
+      <a href="#problem">The problem</a>
+      <a href="#whynow">Why now</a>
+      <a href="#agents">Agent crew</a>
+      <a href="#security">Security</a>
+      <a href="#privacy">Privacy</a>
+      <a href="#tmc">TMC desk</a>
+      <a href="#alerts">Alerts</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#demo" class="btn pri"><span class="lbl-l">See the watch board</span><span class="lbl-s">Demo</span></a>
+    </div>
+  </div>
+</nav>
+
+<!-- ================= HERO ================= -->
+<div class="hero" id="top">
+  <div class="wrap hero-in">
+    <div class="kicker">Live sports &amp; entertainment production</div>
+    <h1><span class="rot" id="h-ev">Extra innings</span> shouldn't cost you Monday's
+      <span class="rot" id="h-pos">A1</span>.</h1>
+    <p class="sub">The game went long. Wrap slipped two hours. Twenty-two people in that
+      compound have somewhere to be tomorrow, in eleven different cities.
+      <b>Apron watches the show, the itinerary, and everything that impacts whether
+      the plan holds</b>, and keeps every next call intact.</p>
+    <div class="cta">
+      <a href="#demo" class="btn pri">See the watch board →</a>
+      <a href="#tmc" class="btn">Inside the TMC desk</a>
+    </div>
+
+    <div class="hero-strip">
+      <div class="hs"><div class="k">Positions covered</div><div class="v">147</div>
+        <div class="s">Across 6 productions</div></div>
+      <div class="hs"><div class="k">Crew in motion</div><div class="v">89</div>
+        <div class="s">Departing tonight</div></div>
+      <div class="hs"><div class="k">Call times exposed</div>
+        <div class="v" style="color:var(--clear)">0</div>
+        <div class="s">Next show jeopardy</div></div>
+      <div class="hs"><div class="k">Agents on shift</div><div class="v">8</div>
+        <div class="s">Provisioned per show</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ================= PROBLEM ================= -->
+<section id="problem">
+  <div class="wrap">
+    <div class="sec-h">
+      <div class="kicker">The 1:00 AM problem</div>
+      <h2>The schedule was clear. Your travel was booked correctly. Then the show
+        refused to end on time.</h2>
+      <p>Original booking is a solved problem. Your TMC does it well, weeks out, against a
+        schedule everyone agreed to. The failure isn't in the booking. It's in the four hours
+        after a live event decides to run long — and the person holding that bag is standing
+        in a truck compound with a phone and a spreadsheet.</p>
+    </div>
+
+    <div class="grid g3">
+      <div class="card">
+        <span class="num">01</span>
+        <h3>The uncovered position</h3>
+        <p>Your A1 misses the Monday call. You backfill with a local who has never seen
+          the show, never mixed that booth, and doesn't know the director's shorthand.
+          The position is filled. The show is not the same.</p>
+        <div class="tagline">COST — quality, not dollars</div>
+      </div>
+      <div class="card">
+        <span class="num">02</span>
+        <h3>The turnaround you find out about later</h3>
+        <p>IATSE and NABET-CWA measure turnaround wrap-to-call. Travel time counts as work,
+          not rest. A generic travel tool will happily book a 06:05 flight that satisfies
+          nobody's rest clock — and the grievance lands three weeks after the show.</p>
+        <div class="tagline">COST — labor exposure</div>
+      </div>
+      <div class="card">
+        <span class="num">03</span>
+        <h3>The 3:00 AM phone tree</h3>
+        <p>Twenty-two crew, eleven destinations, one after-hours desk, and a coordinator
+          who has been awake since the 06:00 truck call trying to remember who has an
+          early Monday and who is just going home.</p>
+        <div class="tagline">COST — the coordinator</div>
+      </div>
+    </div>
+
+    <div class="principle">
+      <div class="p-t">Every crew member is going somewhere different.</div>
+      <p>This is what makes live crew travel unlike corporate travel or team travel.
+        The team charters. The crew disperses. Most are going home — to eleven different
+        home markets — and a handful are going straight to the next show, sometimes for a
+        network that isn't yours. There is no single group itinerary to fix. There are
+        twenty-two individual ones.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= WHY NOW ================= -->
+<section id="whynow">
+  <div class="wrap">
+    <div class="sec-h">
+      <div class="kicker">Why now</div>
+      <h2>More crew, more cities, and a network that runs late.</h2>
+      <p>This has always been a hard night. Three things are making it a more
+        frequent one — and the fourth is the baseline everyone is planning against
+        without saying so out loud.</p>
+    </div>
+
+    <div class="stats">
+      <div class="stat">
+        <div class="n" style="color:var(--watch)">22.2%</div>
+        <div class="l">of US flights arrived late</div>
+        <div class="d">"On time" means within 15 minutes of schedule. More than one
+          in five misses that.</div>
+        <div class="src">DOT Air Travel Consumer Report · May 2026</div>
+      </div>
+      <div class="stat">
+        <div class="n sm" style="color:var(--risk)">Late aircraft</div>
+        <div class="l">is the single largest cause</div>
+        <div class="d">Bigger than carrier delay, airspace, or weather. The top reason
+          a flight is late is that the flight before it was late.</div>
+        <div class="src">DOT · 8.03% of operations, May 2026</div>
+      </div>
+      <div class="stat">
+        <div class="n">15%</div>
+        <div class="l">projected YoY revenue growth</div>
+        <div class="d">Entertainment is Global Travel Collection's fastest-growing
+          sector, on their own projection through 2026.</div>
+        <div class="src">Global Travel Collection · via Travel Weekly</div>
+      </div>
+      <div class="stat">
+        <div class="n">23</div>
+        <div class="l">states with production incentives</div>
+        <div class="d">Work is leaving Hollywood for New York, New Jersey, Atlanta and
+          D.C. More cities means more crew in motion between them.</div>
+        <div class="src">Travel Weekly · August 2026</div>
+      </div>
+    </div>
+
+    <div class="principle" style="margin-top:0">
+      <div class="p-t">Twenty-two people, multiple routings, a 22.2% late-arrival rate.</div>
+      <p>The question was never whether someone on tonight's crew gets disrupted. It's
+        how many, which positions, and whether anyone catches it while there is still
+        time to do something about it. That third one is the whole product.</p>
+    </div>
+
+    <div class="pq">
+      <div class="q">"If you don't make the show, you could be on the hook for millions
+        of dollars."</div>
+      <div class="a">COREY SLEE · COFOUNDER, ALTx COLLECTIVE · TRAVEL WEEKLY, AUG 2026</div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= WHAT IT DOES ================= -->
+<section id="how">
+  <div class="wrap">
+    <div class="sec-h">
+      <div class="kicker">What Apron does</div>
+      <h2>Watch. Predict. Decide. Know when you're done.</h2>
+      <p>Three jobs, run continuously from first pitch until the last A-list position
+        is wheels-up. Not a booking tool — an irregular operations desk that happens
+        to be pointed at your rundown.</p>
+    </div>
+
+    <div class="grid g3">
+      <div class="card">
+        <span class="num">01 — WATCH</span>
+        <h3>The game is the leading indicator</h3>
+        <p>Score, inning, clock, weather, rundown, plus flight status and airport ops.
+          When the projected final moves, the wrap-to-gate chain recomputes for every
+          traveling crew member — before anyone has missed anything.</p>
+        <div class="tagline">SPOTTER · TRAFFIC · STEWARD</div>
+      </div>
+      <div class="card">
+        <span class="num">02 — PREDICT</span>
+        <h3>Alternatives per person, not per trip</h3>
+        <p>When slack starts to die, Apron generates real options for each individual
+          against their own constraints: their home market, their next call, their rest
+          clock, their union's rules, their gear. Ranked by whether they actually make it.</p>
+        <div class="tagline">FIXER · ADVANCE · WRANGLER</div>
+      </div>
+      <div class="card">
+        <span class="num">03 — EXECUTE</span>
+        <h3>A defined end state</h3>
+        <p>Most tools have no concept of finished. Apron does: every A-list position
+          is confirmed en route to a call it can make, with rest intact. Until then the
+          board stays open — and it tells you exactly who is still outstanding.</p>
+        <div class="tagline">RUNNER · handoff to your desk</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= AGENT CREW ================= -->
+<section id="agents">
+  <div class="wrap">
+    <div class="sec-h">
+      <div class="kicker">The agent crew</div>
+      <h2>Eight specialists, staffed like a crew — because that's how the work divides.</h2>
+      <p>Not one model with a big prompt. Each agent owns one domain, holds one credential,
+        and reads only what its job requires. Crew is provisioned per show: a domestic
+        regular-season game doesn't call CUSTOMS to work.</p>
+    </div>
+
+    <div class="crew">
+      <span class="ag"><i style="background:#46C2A8"></i>ADVANCE</span>
+      <span class="ag"><i style="background:#E58AA6"></i>WRANGLER</span>
+      <span class="ag"><i style="background:#5DA9E9"></i>SPOTTER</span>
+      <span class="ag"><i style="background:#E8A81C"></i>TRAFFIC</span>
+      <span class="ag"><i style="background:#C58BE8"></i>STEWARD</span>
+      <span class="ag"><i style="background:#EE7A3C"></i>FIXER</span>
+      <span class="ag"><i style="background:#25B04B"></i>RUNNER</span>
+      <span class="ag off"><i></i>CUSTOMS<em>OFF</em></span>
+    </div>
+
+    <div class="roles">
+      <div class="role"><div class="nm" style="color:#46C2A8">ADVANCE</div>
+        <div class="bd"><div class="t">Holds the roster and the next call</div>
+          <div class="d">Who is traveling, what each person is booked to next, and
+            <em>how we know</em> — network crew sheet, crew-confirmed, or inferred from
+            return routing. Inferred is never treated as fact.</div></div></div>
+      <div class="role"><div class="nm" style="color:#E58AA6">WRANGLER</div>
+        <div class="bd"><div class="t">Brokers constraints with crew</div>
+          <div class="d">Turns an unconfirmed guess into a confirmed constraint —
+            "must be at MCI by Monday 13:00 CT" — without requiring the crew member
+            to reveal who they're working for or on what show.</div></div></div>
+      <div class="role"><div class="nm" style="color:#5DA9E9">SPOTTER</div>
+        <div class="bd"><div class="t">Watches the show</div>
+          <div class="d">Game state, score, clock, weather delay, rundown overrun.
+            Produces the projected final that everything downstream depends on.</div></div></div>
+      <div class="role"><div class="nm" style="color:#E8A81C">TRAFFIC</div>
+        <div class="bd"><div class="t">Watches the network</div>
+          <div class="d">Flight status, ground stops, crew-legality cancellations,
+            airport ops, last-bag and last-shuttle timing on the ground side.</div></div></div>
+      <div class="role"><div class="nm" style="color:#C58BE8">STEWARD</div>
+        <div class="bd"><div class="t">Holds the rule set</div>
+          <div class="d">Turnaround, rest, meal penalty, and travel-time treatment under
+            the applicable agreement. Flags options that clear the schedule but break the
+            contract — the failure mode generic travel tools cannot see.</div></div></div>
+      <div class="role"><div class="nm" style="color:#EE7A3C">FIXER</div>
+        <div class="bd"><div class="t">Finds and holds the alternatives</div>
+          <div class="d">Inventory, fare rules, policy compliance, seat holds. Works
+            against tokenized travelers. Holds only — never ticketing.</div></div></div>
+      <div class="role"><div class="nm" style="color:#25B04B">RUNNER</div>
+        <div class="bd"><div class="t">Carries the decision to a human</div>
+          <div class="d">Packages the chosen path — options, rationale, provenance, rule
+            check — and hands it to the travel desk for execution. Agents never message
+            crew directly.</div></div></div>
+      <div class="role"><div class="nm" style="color:var(--ink-3)">CUSTOMS<em style="font-style:normal;font-size:8.5px;letter-spacing:.09em;border:1px solid var(--line);border-radius:3px;padding:1px 4px;margin-left:6px">OFF</em></div>
+        <div class="bd"><div class="t">Carnets, permits, border clearance</div>
+          <div class="d">Not provisioned for a domestic show. Wakes for Toronto, London,
+            Mexico City and any cross-border next call — and carries the gear carnet with
+            it, because the camera package has to clear the border too.</div></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= SECURITY ================= -->
+<section id="security">
+  <div class="wrap">
+    <div class="sec-h">
+      <div class="kicker">Agent separation &amp; security</div>
+      <h2>The crew is split for a security reason, not an org-chart reason.</h2>
+      <p>An agent that reads live external feeds is an agent that can be fed something
+        hostile. An agent that can book travel is an agent that can spend your money.
+        Apron never makes them the same agent.</p>
+    </div>
+
+    <div class="principle">
+      <div class="p-t">1 · The agents that read the outside world cannot act on it.</div>
+      <p>SPOTTER and TRAFFIC ingest untrusted third-party data — scoreboard feeds, weather
+        services, carrier status APIs. They have zero write authority and zero access to
+        personal data. Anything arriving in those feeds is treated as an observation to be
+        evaluated, never as an instruction to be followed.</p>
+    </div>
+    <div class="principle">
+      <div class="p-t">2 · The agent with booking authority never sees a name.</div>
+      <p>FIXER searches inventory and places holds against tokenized travelers — a loyalty
+        tier, a home market, a rest window, a gear profile. It does not receive names,
+        contact details, employment records, or payment instruments. The re-identification
+        happens on the desk side, behind the human gate.</p>
+    </div>
+    <div class="principle">
+      <div class="p-t">3 · Nothing irreversible happens without a person.</div>
+      <p>Agents hold; people ticket. Every action that spends money, cancels inventory, or
+        reaches a crew member passes through a named human on the travel desk with the full
+        option set and rationale in front of them. The autonomy is in the analysis, not
+        the authority.</p>
+    </div>
+
+    <div class="tbl-wrap" style="margin-top:30px">
+      <div class="scroller">
+      <table>
+        <thead><tr><th>Agent</th><th>Reads</th><th>Authority</th><th>Never receives</th></tr></thead>
+        <tbody>
+          <tr><td class="a" style="color:#5DA9E9">SPOTTER</td>
+            <td>Game feeds, clock, weather, rundown</td>
+            <td><span class="pill ro">READ ONLY</span></td>
+            <td class="no">Crew identity · PNRs · any personal data</td></tr>
+          <tr><td class="a" style="color:#E8A81C">TRAFFIC</td>
+            <td>Carrier status, ground ops, airport conditions</td>
+            <td><span class="pill ro">READ ONLY</span></td>
+            <td class="no">Crew identity · next calls · fare data</td></tr>
+          <tr><td class="a" style="color:#46C2A8">ADVANCE</td>
+            <td>Crew sheets, call sheets, roster provenance</td>
+            <td><span class="pill wr">ROSTER STATE</span></td>
+            <td class="no">Payment instruments · fare detail · HR records</td></tr>
+          <tr><td class="a" style="color:#C58BE8">STEWARD</td>
+            <td>Agreement rule set, wrap and call timestamps</td>
+            <td><span class="pill wr">RULE FLAGS</span></td>
+            <td class="no">Contact info · payment · personnel files</td></tr>
+          <tr><td class="a" style="color:#E58AA6">WRANGLER</td>
+            <td>Constraints crew choose to disclose</td>
+            <td><span class="pill wr">CONSTRAINTS</span></td>
+            <td class="no">Undisclosed next-call detail · third-party call sheets</td></tr>
+          <tr><td class="a" style="color:#EE7A3C">FIXER</td>
+            <td>Inventory, fare rules, travel policy, tokenized traveler</td>
+            <td><span class="pill hold">HOLD ONLY</span></td>
+            <td class="no">Names · contact details · payment instruments</td></tr>
+          <tr><td class="a" style="color:#25B04B">RUNNER</td>
+            <td>The approved decision record</td>
+            <td><span class="pill hold">HANDOFF</span></td>
+            <td class="no">No outbound channel to crew, ever</td></tr>
+          <tr><td class="a" style="color:var(--ink-3)">CUSTOMS</td>
+            <td>Carnet requirements, permits, border rules</td>
+            <td><span class="pill wr">DOC FLAGS</span></td>
+            <td class="no">Fare data · payment · financial records</td></tr>
+        </tbody>
+      </table>
+      </div>
+    </div>
+
+    <div class="grid g2" style="margin-top:16px">
+      <div class="card"><h3>Every claim carries provenance</h3>
+        <p>Each fact on the board records which agent produced it, which source it came from,
+          how confident it is, and who is allowed to see it. An inferred next call looks
+          visibly different from a crew-confirmed one, and the system will not act on the
+          inference.</p></div>
+      <div class="card"><h3>Full action audit, exportable</h3>
+        <p>Every agent observation, option generated, hold placed, rule flag raised and human
+          approval is timestamped and attributable. Export the night as a single record for
+          your own review, your TMC's, or a labor inquiry.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= PRIVACY ================= -->
+<section id="privacy">
+  <div class="wrap">
+    <div class="sec-h">
+      <div class="kicker">Data &amp; disclosure</div>
+      <h2>Whoever owns the fact decides who sees it.</h2>
+      <p>Freelance crew work for a lot of people. The camera op in your compound tonight
+        may be on a competitor's show Monday. That's their business, and their next
+        employer's — not yours, and not ours. Apron is built around that boundary
+        instead of around it.</p>
+    </div>
+
+    <div class="checks">
+      <div class="chk"><div class="m">✓</div><div>
+        <div class="t">External calls are withheld by default</div>
+        <div class="d">If a crew member's next call is on another network's show, the
+          production seat sees <span class="mono" style="color:var(--ink-3)">External call · withheld</span>
+          — never the network, the show, or the client. The system still solves for it.</div></div></div>
+      <div class="chk"><div class="m">✓</div><div>
+        <div class="t">Constraints can be brokered without the commitment</div>
+        <div class="d">A crew member can confirm "I have to be at MCI by Monday 13:00 CT"
+          and nothing more. That's enough to route them correctly and enough to protect
+          their next gig. If they choose to say "it's for MNF," that displays.</div></div></div>
+      <div class="chk"><div class="m">✓</div><div>
+        <div class="t">Inferred is labeled, and never executed on</div>
+        <div class="d">Apron can infer a likely next call from return routing. It marks
+          that inference in plain sight and refuses to rebook against it until a human or the
+          crew member confirms. Guesses don't get to spend money.</div></div></div>
+      <div class="chk"><div class="m">✓</div><div>
+        <div class="t">Crew are not users, and are not tracked between shows</div>
+        <div class="d">No app to install, no account to make, no persistent profile following
+          a freelancer from network to network. A crew member exists in the system for the
+          window of the show they're working and the trip home.</div></div></div>
+      <div class="chk"><div class="m">✓</div><div>
+        <div class="t">Monitoring data expires with the trip</div>
+        <div class="d">PNR and itinerary data is retained for the watch window and the audit
+          record, then dropped. Personal data is never used to train models — ours or
+          anyone else's.</div></div></div>
+      <div class="chk"><div class="m x">✕</div><div>
+        <div class="t">What we deliberately don't collect</div>
+        <div class="d">No crew location tracking. No message or SMS interception. No rate or
+          day-rate data. No performance or reliability scoring of individual crew. The tool
+          protects call times; it is not a surveillance layer on freelancers.</div></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= TMC DASHBOARD ================= -->
+<section id="tmc">
+  <div class="wrap">
+    <div class="sec-h">
+      <div class="kicker">Deep dive · the TMC desk</div>
+      <h2>Two seats, one incident, different disclosure.</h2>
+      <p>Your coordinator gets the production seat — their show, their crew, their night.
+        Your travel management company gets the desk: every show on the board, every
+        network, every PNR under watch. The same incident, rendered for the person
+        who has to act on it.</p>
+    </div>
+
+    <div class="mock">
+      <div class="mock-bar">
+        <span class="dot"></span>TMC DESK · SPORTS &amp; ENTERTAINMENT
+        <span class="r">SUNDAY 18 OCTOBER · 22:41 ET · 7 OF 8 AGENTS ON SHIFT</span>
+      </div>
+      <div class="mock-metrics">
+        <div class="mm"><div class="k">Shows on the board</div><div class="v">6</div>
+          <div class="s">4 live</div></div>
+        <div class="mm"><div class="k">PNRs under watch</div><div class="v">147</div>
+          <div class="s">Across 6 productions</div></div>
+        <div class="mm"><div class="k">Clear</div>
+          <div class="v" style="color:var(--clear)">143</div><div class="s">No action needed</div></div>
+        <div class="mm"><div class="k">At risk</div>
+          <div class="v" style="color:var(--watch)">4</div><div class="s">Watching</div></div>
+        <div class="mm"><div class="k">Escalated to human</div><div class="v">1</div>
+          <div class="s">Awaiting desk approval</div></div>
+      </div>
+      <div class="mock-rows">
+        <div class="mr"><span class="net">FOX</span>
+          <div><div class="ttl">ALCS Gm 4 · Rangers @ Guardians</div>
+            <div class="sub2">Progressive Field · Cleveland</div></div>
+          <div class="mono hidem">22 crew</div>
+          <div class="mono hidem">Bot 11th · 4–4</div>
+          <div><span class="st WATCH">WATCH</span></div></div>
+        <div class="mr"><span class="net">NBC</span>
+          <div><div class="ttl">Sunday Night Football · Ravens @ Chiefs</div>
+            <div class="sub2">Arrowhead · Kansas City</div></div>
+          <div class="mono hidem">34 crew</div>
+          <div class="mono hidem">Q3 · 21–17</div>
+          <div><span class="st CLEAR">CLEAR</span></div></div>
+        <div class="mr"><span class="net">GOLF</span>
+          <div><div class="ttl">Shriners Children's Open · R4</div>
+            <div class="sub2">TPC Summerlin · Las Vegas</div></div>
+          <div class="mono hidem">31 crew</div>
+          <div class="mono hidem">Wrapped 21:12</div>
+          <div><span class="st HELD">3 HELD</span></div></div>
+        <div class="mr"><span class="net">ESPN</span>
+          <div><div class="ttl">Celtics @ Nuggets</div>
+            <div class="sub2">Ball Arena · Denver</div></div>
+          <div class="mono hidem">19 crew</div>
+          <div class="mono hidem">Q2 · 48–51</div>
+          <div><span class="st CLEAR">CLEAR</span></div></div>
+      </div>
+    </div>
+
+    <div class="grid g2">
+      <div class="card"><h3>Per-PNR watch, priced like your book</h3>
+        <p>Every monitored PNR is a line item with a state, a watch window, and a reason it's
+          being watched. Roll it up by production, by network, by client. The commercial model
+          matches how a TMC already meters work — no savings-claim arithmetic required.</p></div>
+      <div class="card"><h3>After-hours absorption, measured</h3>
+        <p>The number the desk manager actually wants: how many disruptions the agent crew
+          resolved to a decided plan versus how many rang an agent's phone at 2:00 AM.
+          Broken out by show, by night, and by reason code.</p></div>
+      <div class="card"><h3>Exception queue with reason codes</h3>
+        <p>Escalations arrive pre-worked, not raw — options generated, policy checked, rule
+          conflicts flagged, provenance attached. The human decision is approve or redirect,
+          not investigate from zero.</p></div>
+      <div class="card"><h3>Your policy, your inventory, your contracts</h3>
+        <p>Preferred carriers, negotiated fares, class-of-service rules and approval
+          thresholds come from the TMC's existing policy engine. Apron proposes inside
+          those walls — it doesn't route around them to find a cheaper seat.</p></div>
+      <div class="card"><h3>Hard walls between clients</h3>
+        <p>A TMC serving four networks runs four sealed tenants. No cross-client inference,
+          no shared roster memory, no pooled model context. A freelancer appearing on two
+          clients' shows is two unlinked records.</p></div>
+      <div class="card"><h3>Handoff, both directions</h3>
+        <p>The coordinator raises an issue from the compound; the desk sees it with full
+          detail. The desk resolves it; the coordinator sees the outcome with external
+          commitments redacted. One incident, two disclosure levels, no re-keying.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= ALERTS ================= -->
+<section id="alerts">
+  <div class="wrap">
+    <div class="sec-h">
+      <div class="kicker">Apron Alerts</div>
+      <h2>Nobody is watching the board at 1:00 AM.</h2>
+      <p>Your coordinator is in a truck compound with a headset on and a director in
+        their ear. A dashboard only helps the person looking at it. Apron Alerts is how
+        the board finds them when they're not.</p>
+    </div>
+
+    <div class="alerts">
+      <div class="al w">
+        <div class="al-h"><span class="tier st WATCH">WATCH</span>
+          <span class="ch">NO ACTION</span></div>
+        <div class="al-b">
+          <div class="m2">Bot 11th, still tied. Projected final <b>00:35</b>, up from
+            22:58. All 22 crew still clear their next call with slack.</div>
+          <div class="foot2"><span style="color:#5DA9E9">SPOTTER</span>
+            <span>· 23:52 ET · game feed</span></div>
+        </div>
+      </div>
+      <div class="al d">
+        <div class="al-h"><span class="tier st DECIDE">DECIDE</span>
+          <span class="ch">YOU ARE NEEDED</span></div>
+        <div class="al-b">
+          <div class="m2"><b>4 A-list positions</b> breach mandatory rest for the 14:00 CT
+            Kansas City call. Three options generated, one recommended, holds placed.
+            <b>Nothing ticketed.</b></div>
+          <div class="foot2"><span style="color:#C58BE8">STEWARD</span>
+            <span>+</span><span style="color:#EE7A3C">FIXER</span>
+            <span>· 00:57 ET · rule pack + inventory</span></div>
+        </div>
+      </div>
+      <div class="al">
+        <div class="al-h"><span class="tier st CLEAR">CLEAR</span>
+          <span class="ch">CLOSED</span></div>
+        <div class="al-b">
+          <div class="m2">All 22 routed and confirmed. <b>0 call times exposed</b>,
+            0 rest breaches, 4 A-list positions retained. Show closed.</div>
+          <div class="foot2"><span style="color:#25B04B">RUNNER</span>
+            <span>· 02:14 ET · desk confirmed</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="quiet">ONE OF THESE THREE WAKES YOU UP.</div>
+
+    <div class="grid g3">
+      <div class="card"><h3>Tiered by what you have to do</h3>
+        <p>Not by how loud it is. <b>Watch</b> means we're tracking it and you don't need
+          to know yet. <b>Decide</b> means a human is required. <b>Clear</b> means it's
+          finished. Only one of the three interrupts anything.</p></div>
+      <div class="card"><h3>Quiet by default</h3>
+        <p>Apron fires when a decision is needed, not when something changed. A coordinator
+          who gets forty pings a night ignores the forty-first — which is always the one
+          that mattered. Restraint is the feature.</p></div>
+      <div class="card"><h3>Routed by seat</h3>
+        <p>The production coordinator gets their show. The TMC desk gets the escalation
+          with the full option set. Same incident, two alerts, two levels of detail.</p></div>
+      <div class="card"><h3>Disclosure holds on your phone</h3>
+        <p>An external call stays <span class="mono" style="color:var(--ink-3)">withheld</span>
+          in the alert exactly as it is on the board. The redaction is enforced at the
+          data layer, not the display layer — so it survives every channel.</p></div>
+      <div class="card"><h3>Provenance travels with it</h3>
+        <p>Which agent raised it, which source it came from, how confident it is, and
+          whether it's confirmed or inferred. Enough to act on without opening a laptop
+          to check whether it's real.</p></div>
+      <div class="card"><h3>Wherever you already are</h3>
+        <p>SMS and push for the compound. Straight into the TMC's existing exception
+          queue for the desk. No new app for a coordinator to install at 1:00 AM on the
+          worst night of their season.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= INTEGRATION / SCOPE ================= -->
+<section id="fit">
+  <div class="wrap">
+    <div class="sec-h">
+      <div class="kicker">How it fits</div>
+      <h2>Integrated with your TMC. Not a replacement for them.</h2>
+      <p>Apron sits on top of the travel program you already have. Your TMC keeps the
+        booking, the contracts, the servicing relationship and the ticketing authority.
+        We take the four hours they were never staffed to cover.</p>
+    </div>
+
+    <div class="grid g3">
+      <div class="card"><span class="num">CONNECT</span>
+        <h3>Reads the itineraries you already have</h3>
+        <p>Mid-office feed, GDS or NDC queue, or your TMC's own API. If your TMC is already
+          on Apron, the production seat comes with the program — nothing for the
+          broadcaster to procure.</p></div>
+      <div class="card"><span class="num">CONNECT</span>
+        <h3>Reads the show you already run</h3>
+        <p>Crew sheets and call sheets in, plus live game state. Works from a spreadsheet
+          on night one; integrates with your scheduling and crewing system when you're ready.</p></div>
+      <div class="card"><span class="num">CONNECT</span>
+        <h3>Carries the agreement that governs the crew</h3>
+        <p>The applicable turnaround, rest and travel-time provisions are configured per
+          production and per local, so the rule check reflects the deal your show
+          actually works under.</p></div>
+    </div>
+
+    <div class="principle" style="border-left-color:var(--ink-3)">
+      <div class="p-t">What Apron does not do</div>
+      <p>It does not book your original travel — that's well covered and we're not trying
+        to win it. It does not staff or crew your show. It does not message your crew
+        directly. It does not hold your payment instruments. It does not claim a savings
+        number, because the value here is a covered position at 14:00 Monday, not a
+        cheaper seat.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ================= DEMO ================= -->
+<section id="demo">
+  <div class="wrap">
+    <div class="sec-h">
+      <div class="kicker">See it run</div>
+      <h2>One night, twelve innings, twenty-two people.</h2>
+      <p>The watch board plays a real irregular-operations night end to end — from
+        "projected final revised" in the bottom of the ninth to the last A-list position
+        confirmed en route. Switch between the production seat and the TMC desk to watch
+        the same incident change shape depending on who's allowed to see what.</p>
+    </div>
+    <div class="cta">
+      <a href="board.html" class="btn pri">Open the watch board →</a>
+      <a href="#tmc" class="btn">Read the TMC deep dive</a>
+    </div>
+  </div>
+</section>
+
+<!-- ================= PRICING ================= -->
+<section id="pricing">
+  <div class="wrap">
+    <div class="sec-h">
+      <div class="kicker">Pricing</div>
+      <h2>Priced per PNR monitored.</h2>
+      <p>Not per seat, not per user, not a platform fee. You pay for the itineraries
+        actually under watch, for the window they're under watch.</p>
+    </div>
+    <div class="price">
+      <div>
+        <div class="big">$1<small> / PNR monitored</small></div>
+        <p style="color:var(--ink-2);margin-top:14px;font-size:14.5px">
+          $0.50 at volume. Billed through your travel management company alongside the
+          transaction fees you already pay — one line, one relationship.</p>
+      </div>
+      <ul>
+        <li>All eight agents, provisioned per show</li>
+        <li>Production seat included for every coordinator on the show</li>
+        <li>TMC desk with cross-show board and audit export</li>
+        <li>Watch window runs from load-in through final arrival</li>
+        <li>No charge for a PNR that never enters a watch window</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot">
+    <div>
+      <div class="logo" style="font-size:16px;display:block;margin-bottom:12px">APRON
+        <span>CREW INTEGRITY</span></div>
+      <p>An irregular operations desk for live sports and entertainment production.
+        Built for the coordinator standing in the compound when the show runs long.</p>
+      <p style="margin-top:14px;font-size:12px">Named for the apron — the ground where
+        aircraft turn, and the stage that reaches past the curtain.</p>
+    </div>
+    <div class="badge">AGENTIC CINEMA · 2026</div>
+  </div>
+</footer>
+
+<script>
+(function(){
+  /* The overrun changes by sport. The position changes by who you can't replace. */
+  var HEADS = [
+    ['Extra innings',   'A1'],        /* baseball  */
+    ['Double overtime', 'EIC'],       /* hockey, basketball */
+    ['Penalty kicks',   'RF tech'],   /* soccer */
+    ['A rain delay',    'Lead EVS']   /* golf, tennis, anything outdoors */
+  ];
+  var ev = document.getElementById('h-ev'), pos = document.getElementById('h-pos');
+  if(!ev || !pos) return;
+  var i = Math.floor(Math.random() * HEADS.length);
+  function set(n){ ev.textContent = HEADS[n][0]; pos.textContent = HEADS[n][1]; }
+  set(i);
+  var still = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if(still) return;
+  setInterval(function(){
+    ev.classList.add('out'); pos.classList.add('out');
+    setTimeout(function(){
+      i = (i + 1) % HEADS.length; set(i);
+      ev.classList.remove('out'); pos.classList.remove('out');
+    }, 430);
+  }, 4200);
+})();
+</script>
+</body>
+</html>
