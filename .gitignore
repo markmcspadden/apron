@@ -1,0 +1,46 @@
+# env / secrets — never commit these
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+service-account*.json
+gcloud-credentials*.json
+
+# dependencies
+node_modules/
+.pnpm-store/
+.yarn/
+vendor/
+
+# build output
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# test / coverage
+coverage/
+.nyc_output/
+playwright-report/
+test-results/
+
+# editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Apron-specific: production rule packs and real TMC adapters live in a
+# separate private repo. Never commit them here. See NOTICE.
+packages/rules/packs/*
+!packages/rules/packs/sample-local/
+integrations/tmc/*
+!integrations/tmc/mock/

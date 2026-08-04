@@ -1,0 +1,83 @@
+Apron — crew integrity for live sports and entertainment production
+Copyright (c) 2026 Mark McSpadden
+
+This product includes software developed as part of the Apron project.
+
+Licensed under the GNU Affero General Public License v3.0 (AGPL-3.0).
+See the LICENSE file for the full terms.
+
+
+-------------------------------------------------------------------------------
+TRADEMARKS
+-------------------------------------------------------------------------------
+
+The AGPL-3.0 grants rights in the *software*. It grants no rights in names,
+logos, or marks.
+
+"Apron" is an ordinary English word with many unrelated users. Nothing in this
+notice claims the word generally. What is reserved is narrower:
+
+  - APRON as used to identify THIS software and the services it provides --
+    irregular-operations monitoring and travel coordination for live
+    production crews;
+  - the Apron logo and visual identity;
+  - the agent role names used together as a system ("SPOTTER", "TRAFFIC",
+    "STEWARD", "FIXER", "RUNNER", "ADVANCE", "WRANGLER", "CUSTOMS") as the
+    Apron agent crew.
+
+These are asserted as common-law marks in that field of use only. No federal
+registration is claimed at this time.
+
+You may:
+  - state accurately that your work is based on, derived from, or compatible
+    with Apron;
+  - retain this NOTICE file and the copyright headers in source files.
+
+You may not, without prior written permission:
+  - use "Apron" or the marks as the name of a forked or derivative
+    distribution, product, or hosted service in this field;
+  - use the marks in a way that suggests endorsement by, affiliation with, or
+    origination from the Apron project.
+
+Forks must be renamed. Nominative reference ("a fork of Apron") is fine.
+
+
+-------------------------------------------------------------------------------
+NO AFFILIATION
+-------------------------------------------------------------------------------
+
+Other companies and products use the name "Apron" in unrelated fields --
+among them consumer goods, food and grocery services, and financial
+technology. This project is not affiliated with, endorsed by, sponsored by, or
+connected to any of them.
+
+
+-------------------------------------------------------------------------------
+COMMERCIAL LICENSING
+-------------------------------------------------------------------------------
+
+The AGPL-3.0 requires that anyone who runs a modified version of this software
+over a network make the corresponding source of their modified version
+available to users of that service.
+
+If those terms do not work for your organization, a separate commercial license
+is available. See COMMERCIAL.md.
+
+
+-------------------------------------------------------------------------------
+DATA, RULE PACKS, AND THIRD-PARTY CONTENT
+-------------------------------------------------------------------------------
+
+This repository ships a SAMPLE rule pack for demonstration only. It is
+illustrative and must not be relied on to determine any real obligation under
+any collective bargaining agreement or employment contract.
+
+Collective bargaining agreements are the copyrighted works of their respective
+parties. This repository does not reproduce them. Production rule packs encoding
+specific agreements are maintained separately and are not distributed here.
+
+Fixture data under `fixtures/` is synthetic. It contains no real crew members,
+no real itineraries, and no real passenger name records. Any resemblance to a
+real production, person, or booking is coincidental.
+
+Third-party dependency licenses are listed in THIRD-PARTY-NOTICES.md.

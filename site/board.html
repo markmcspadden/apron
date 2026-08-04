@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>APRON — crew integrity board</title>
+<style>
+:root{
+  --bg:#0B0B0C; --panel:#141416; --panel-2:#1B1B1E; --line:#2A2A2E; --line-2:#3A3A40;
+  --ink:#F2F1EE; --ink-2:#A9A69E; --ink-3:#6E6B65;
+  --clear:#25B04B; --clear-bg:#0E2A16;
+  --watch:#E8A81C; --watch-bg:#2E2308;
+  --risk:#EE7A3C; --risk-bg:#31190A;
+  --down:#E0403C; --down-bg:#33100F;
+  --live:#5DA9E9;
+  --f:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --m:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f);font-size:14px;
+  line-height:1.45;-webkit-font-smoothing:antialiased}
+.mono{font-family:var(--m);font-variant-numeric:tabular-nums}
+
+/* ---------- top bar ---------- */
+.top{position:sticky;top:0;z-index:80;background:#0B0B0Cf2;backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--line)}
+.top-in{max-width:1400px;margin:0 auto;padding:11px 20px;display:flex;align-items:center;gap:20px}
+.logo{display:flex;align-items:baseline;gap:9px;white-space:nowrap}
+.logo b{font-size:16px;font-weight:750;letter-spacing:.13em}
+.logo span{font-size:10.5px;letter-spacing:.16em;color:var(--ink-3);text-transform:uppercase}
+.desk{font-size:11px;color:var(--ink-2);border-left:1px solid var(--line-2);padding-left:18px}
+.desk b{color:var(--ink);font-weight:600}
+.top-right{margin-left:auto;display:flex;align-items:center;gap:18px}
+.clock{font-family:var(--m);font-size:15px;font-weight:600;letter-spacing:.03em}
+.clock small{font-size:10px;color:var(--ink-3);margin-left:6px;letter-spacing:.1em}
+.crew-chip{display:flex;align-items:center;gap:7px;font-size:11px;color:var(--ink-2);
+  background:var(--panel);border:1px solid var(--line);border-radius:99px;padding:5px 12px}
+.pulse{width:6px;height:6px;border-radius:99px;background:var(--clear);
+  box-shadow:0 0 0 0 rgba(37,176,75,.6);animation:p 2.4s infinite}
+@keyframes p{0%{box-shadow:0 0 0 0 rgba(37,176,75,.55)}70%{box-shadow:0 0 0 7px rgba(37,176,75,0)}100%{box-shadow:0 0 0 0 rgba(37,176,75,0)}}
+
+/* ---------- shell ---------- */
+.shell{max-width:1400px;margin:0 auto;padding:22px 20px 80px}
+
+/* ---------- status strip ---------- */
+.strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(158px,1fr));gap:1px;
+  background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-bottom:24px}
+.cell{background:var(--panel);padding:15px 17px}
+.cell .k{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);
+  margin-bottom:7px;white-space:nowrap}
+.cell .v{font-size:27px;font-weight:700;letter-spacing:-.02em;line-height:1;font-family:var(--m)}
+.cell .s{font-size:11px;color:var(--ink-2);margin-top:5px}
+.v.clear{color:var(--clear)} .v.watch{color:var(--watch)}
+.v.risk{color:var(--risk)} .v.down{color:var(--down)}
+
+.sec-h{display:flex;align-items:baseline;gap:12px;margin:0 0 13px}
+.sec-h h2{margin:0;font-size:12px;letter-spacing:.15em;text-transform:uppercase;
+  color:var(--ink-2);font-weight:640}
+.sec-h .n{font-family:var(--m);font-size:11px;color:var(--ink-3)}
+
+/* ---------- board ---------- */
+.board{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
+.show{background:var(--panel);border:1px solid var(--line);border-radius:11px;padding:0;
+  cursor:pointer;transition:border-color .15s,transform .12s;overflow:hidden;text-align:left;
+  font:inherit;color:inherit;display:block;width:100%}
+.show:hover{border-color:var(--line-2);transform:translateY(-1px)}
+.show.sel{border-color:var(--line-2)}
+.show-top{padding:14px 16px 12px;border-bottom:1px solid var(--line)}
+.show-net{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.net{font-family:var(--m);font-size:9.5px;letter-spacing:.1em;padding:3px 7px;border-radius:4px;
+  background:var(--panel-2);color:var(--ink-2);border:1px solid var(--line-2)}
+.state{margin-left:auto;font-family:var(--m);font-size:9.5px;letter-spacing:.1em;padding:3px 8px;
+  border-radius:4px;font-weight:700}
+.state.clear{background:var(--clear-bg);color:var(--clear)}
+.state.watch{background:var(--watch-bg);color:var(--watch)}
+.state.risk{background:var(--risk-bg);color:var(--risk)}
+.state.down{background:var(--down-bg);color:var(--down)}
+.show h3{margin:0 0 3px;font-size:15.5px;font-weight:650;letter-spacing:-.01em}
+.show .venue{font-size:12px;color:var(--ink-3)}
+.show-body{padding:12px 16px 14px;display:flex;gap:18px;align-items:flex-end}
+.gs{flex:1}
+.gs .lab{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);margin-bottom:4px}
+.gs .val{font-family:var(--m);font-size:13px;font-weight:600}
+.gs .val.live{color:var(--live)}
+.gs .val.live::before{content:"● ";font-size:8px;vertical-align:2px}
+.crewn{text-align:right}
+.crewn .big{font-family:var(--m);font-size:22px;font-weight:700;line-height:1}
+.crewn .lab{font-size:9.5px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);margin-top:4px}
+.alert{padding:10px 16px;background:var(--down-bg);border-top:1px solid #4A1A18;
+  font-size:12px;color:#F09B98;display:flex;gap:8px;align-items:flex-start}
+.alert.watchy{background:var(--watch-bg);border-top-color:#4A3A10;color:#EBC96A}
+.alert b{color:#fff;font-weight:640}
+
+/* ---------- detail ---------- */
+.detail{margin-top:26px;border:1px solid var(--line-2);border-radius:12px;overflow:hidden;
+  background:var(--panel);display:none}
+.detail.open{display:block}
+.det-head{padding:17px 20px;background:linear-gradient(180deg,#1C1C20,#141416);
+  border-bottom:1px solid var(--line);display:flex;align-items:flex-start;gap:20px;flex-wrap:wrap}
+.det-head h3{margin:0 0 4px;font-size:20px;font-weight:700;letter-spacing:-.015em}
+.det-head .sub{font-size:12.5px;color:var(--ink-2)}
+.det-actions{margin-left:auto;display:flex;gap:9px;align-items:center}
+.btn{font:inherit;font-size:12px;font-weight:600;padding:8px 15px;border-radius:7px;cursor:pointer;
+  border:1px solid var(--line-2);background:var(--panel-2);color:var(--ink);transition:.14s}
+.btn:hover{border-color:var(--ink-3)}
+.btn.pri{background:#2A6FB5;border-color:#2A6FB5;color:#fff}
+.btn.pri:hover{background:#3480CC}
+.btn:disabled{opacity:.4;cursor:default}
+
+/* chain */
+.chain{padding:20px;border-bottom:1px solid var(--line);background:var(--panel-2)}
+.chain-h{display:flex;align-items:baseline;gap:10px;margin-bottom:16px}
+.chain-h .t{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-2);font-weight:640}
+.chain-h .d{font-size:11.5px;color:var(--ink-3)}
+.rail{display:flex;align-items:stretch;gap:0;position:relative}
+.node{flex:1;position:relative;padding:0 4px}
+.node .bar{height:3px;background:var(--line-2);border-radius:2px;margin-bottom:11px;position:relative}
+.node.done .bar{background:var(--ink-3)}
+.node.now .bar{background:var(--live)}
+.node.shift .bar{background:var(--watch)}
+.node.bad .bar{background:var(--down)}
+.node .dot{position:absolute;left:0;top:-3px;width:9px;height:9px;border-radius:99px;
+  background:var(--line-2);border:2px solid var(--panel-2)}
+.node.done .dot{background:var(--ink-3)} .node.now .dot{background:var(--live)}
+.node.shift .dot{background:var(--watch)}
+.node.bad .dot{background:var(--down)}
+.node .lb{font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--ink-3);margin-bottom:3px}
+.node .tm{font-family:var(--m);font-size:14px;font-weight:600}
+.node.shift .tm{color:var(--watch)}
+.node.bad .tm{color:var(--down)}
+.node.now .tm{color:var(--live)}
+.node .df{font-family:var(--m);font-size:10.5px;color:var(--watch);margin-top:2px}
+.node.bad .df{color:var(--down)}
+
+/* roster */
+.roster-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead th{text-align:left;padding:10px 14px;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--ink-3);font-weight:640;border-bottom:1px solid var(--line);white-space:nowrap;
+  background:var(--panel-2);position:sticky;top:0}
+tbody td{padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:middle}
+tbody tr:hover{background:#1A1A1D}
+tbody tr.t1{box-shadow:inset 3px 0 0 #3E6E96}
+tbody tr.t2{box-shadow:inset 3px 0 0 var(--line-2)}
+.pos{font-family:var(--m);font-size:11px;font-weight:700;letter-spacing:.06em;
+  background:var(--panel-2);border:1px solid var(--line-2);padding:3px 7px;border-radius:4px;
+  display:inline-block;min-width:52px;text-align:center}
+.pos.key{background:#12212E;border-color:#25405A;color:#9CC6EA}
+.nm{font-weight:600}
+.sub2{font-size:11px;color:var(--ink-3);margin-top:1px}
+.tier{font-family:var(--m);font-size:9.5px;letter-spacing:.08em;padding:2px 6px;border-radius:3px}
+.tier.T1{background:#0F1E2B;color:#7FB6E4;border:1px solid #21384A}
+.tier.T2{background:var(--panel-2);color:var(--ink-3);border:1px solid var(--line-2)}
+.slack{font-family:var(--m);font-size:14px;font-weight:700}
+.slack.ok{color:var(--clear)} .slack.warn{color:var(--watch)}
+.slack.bad{color:var(--down)}
+.st{font-family:var(--m);font-size:10px;letter-spacing:.08em;padding:3px 8px;border-radius:4px;font-weight:700}
+.st.CLEAR{background:var(--clear-bg);color:var(--clear)}
+.st.WATCH{background:var(--watch-bg);color:var(--watch)}
+.st.RISK{background:var(--risk-bg);color:var(--risk)}
+.st.BROKEN{background:var(--down-bg);color:var(--down)}
+.st.SOLVED{background:var(--clear-bg);color:var(--clear)}
+
+/* agent feed */
+.feed{border-bottom:1px solid var(--line);background:var(--panel-2);padding:16px 20px 20px}
+.feed-h{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-2);
+  font-weight:640;margin-bottom:13px;display:flex;align-items:center;gap:10px}
+.crewbar{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:15px}
+.ag{display:flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--line);
+  border-radius:6px;padding:5px 10px;font-family:var(--m);font-size:10px;letter-spacing:.07em;color:var(--ink-2)}
+.ag i{width:5px;height:5px;border-radius:99px;background:var(--ink-3);display:block}
+.ag.on{border-color:var(--clear);color:var(--ink)} .ag.on i{background:var(--clear);
+  animation:p 2s infinite}
+.ag.hot{border-color:var(--down);color:#F0A79F} .ag.hot i{background:var(--down)}
+.ag.off{border-style:dashed;border-color:var(--line);color:var(--ink-3);background:transparent}
+.ag.off i{background:transparent;border:1px solid var(--ink-3);width:5px;height:5px;box-sizing:border-box}
+.ag em{font-style:normal;font-size:8.5px;letter-spacing:.09em;color:var(--ink-3);
+  border:1px solid var(--line);border-radius:3px;padding:1px 4px;margin-left:3px}
+.crewnote{flex-basis:100%;font-size:11px;color:var(--ink-3);margin-top:2px;line-height:1.5}
+.crewnote b{color:var(--ink-2);font-weight:600}
+.log{display:flex;flex-direction:column;gap:0;max-height:280px;overflow-y:auto}
+.ev{display:grid;grid-template-columns:60px 84px 1fr;gap:12px;padding:9px 0;
+  border-bottom:1px solid var(--line);font-size:12.5px;opacity:0;transform:translateY(6px);
+  transition:opacity .35s,transform .35s}
+.ev.in{opacity:1;transform:none}
+.ev .ts{font-family:var(--m);font-size:11px;color:var(--ink-3)}
+.ev .who{font-family:var(--m);font-size:10px;letter-spacing:.09em;font-weight:700;padding-top:1px}
+.ev .who.SPOTTER{color:#5DA9E9} .ev .who.TRAFFIC{color:#E8A81C}
+.ev .who.STEWARD{color:#C58BE8} .ev .who.FIXER{color:#EE7A3C}
+.ev .who.RUNNER{color:#25B04B} .ev .who.ADVANCE{color:#46C2A8}
+.ev .who.WRANGLER{color:#E58AA6} .ev .who.CUSTOMS{color:#8A94A6}
+.prov{font-size:10px;margin-top:3px;display:flex;align-items:center;gap:4px;color:var(--ink-3);
+  font-family:var(--m);letter-spacing:.01em}
+.prov .pi{font-size:9px;font-weight:700}
+.prov.confirmed{color:#6FCB89} .prov.confirmed .pi{color:var(--clear)}
+.prov.sheet{color:var(--ink-3)}
+.prov.inferred{color:#E0B45A} .prov.inferred .pi{color:var(--watch)}
+.prov.none{color:#5C5A55}
+.prov.external{color:#8FB4DE} .prov.external .pi{color:#5DA9E9}
+.redact{color:var(--ink-3);font-style:italic}
+.brk{font-family:var(--m);font-size:8.5px;letter-spacing:.07em;background:#0E2A16;color:#3FBE62;
+  border:1px solid #1C5C2E;padding:1px 5px;border-radius:3px;margin-left:6px}
+.nobrk{font-family:var(--m);font-size:8.5px;letter-spacing:.07em;background:#232326;color:#7E7B74;
+  border:1px solid var(--line-2);padding:1px 5px;border-radius:3px;margin-left:6px}
+.ev .msg{color:var(--ink-2);line-height:1.5}
+.ev .msg b{color:var(--ink);font-weight:600}
+.ev .msg .hl{color:var(--down);font-weight:600}
+
+/* ---------- seat switch ---------- */
+.seatsw{display:flex;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;
+  padding:2px;gap:2px}
+.seatsw button{font:inherit;font-size:11px;font-weight:640;letter-spacing:.05em;padding:6px 12px;
+  border-radius:6px;border:none;background:transparent;color:var(--ink-3);cursor:pointer;
+  font-family:var(--m);white-space:nowrap}
+.seatsw button.on{background:var(--panel);color:var(--ink);box-shadow:0 1px 0 rgba(0,0,0,.4)}
+
+/* ---------- production seat ---------- */
+.prod-head{display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;
+  padding:20px 22px;background:var(--panel);border:1px solid var(--line);border-radius:12px;margin-bottom:16px}
+.prod-net{font-family:var(--m);font-size:10px;letter-spacing:.14em;color:var(--ink-3);margin-bottom:7px}
+.prod-head h2{margin:0 0 4px;font-size:22px;font-weight:700;letter-spacing:-.02em}
+.prod-sub{font-size:13px;color:var(--ink-2)}
+.prov-by{margin-left:auto;text-align:right;font-size:11.5px;color:var(--ink-3);line-height:1.5}
+.prov-by b{color:var(--ink-2);font-weight:620}
+
+.pstate{padding:15px 20px;border-radius:11px;margin-bottom:16px;display:flex;align-items:center;
+  gap:14px;font-size:15px;border:1px solid}
+.pstate.calm{background:var(--clear-bg);border-color:#1C5C2E;color:#8FE0A6}
+.pstate.hot{background:var(--down-bg);border-color:#4A1A18;color:#F09B98}
+.pstate b{color:#fff;font-weight:660}
+.pstate .pi{font-size:20px;line-height:1}
+
+@media(max-width:980px){.twocol{grid-template-columns:1fr}}
+.pcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.pcard-h{padding:13px 18px;border-bottom:1px solid var(--line);background:var(--panel-2);
+  font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-2);font-weight:640;
+  display:flex;align-items:center;gap:10px}
+.pcard-h .cnt{margin-left:auto;font-family:var(--m);font-size:11px;color:var(--ink-3);letter-spacing:0}
+
+.sleep-foot.go{color:#8FE0A6}.sleep-foot.go b{color:#fff}
+
+@media(max-width:900px){
+  .rail{flex-direction:column;gap:12px}
+  .node{padding:0}
+  .node .bar{width:3px;height:22px;margin:0 0 6px}
+  .det-actions{margin-left:0;width:100%}
+  .top-in{flex-wrap:wrap;gap:12px}
+  .desk{border-left:none;padding-left:0}
+}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="top-in">
+    <div class="logo"><b>APRON</b><span>Crew Integrity</span></div>
+    <div class="desk">Sports &amp; Entertainment Desk · <b>CTM Entertainment</b></div>
+    <div class="top-right">
+      <div class="seatsw">
+        <button id="sw-tmc" class="on">TMC DESK</button>
+        <button id="sw-prod">PRODUCTION SEAT</button>
+      </div>
+      <div class="crew-chip"><span class="pulse"></span>7 of 8 agents on shift</div>
+      <div class="clock" id="clock">22:41:07 <small>ET</small></div>
+      <button class="btn" id="btn-reset">Reset</button>
+      <button class="btn pri" id="btn-play">Run the night</button>
+    </div>
+  </div>
+</div>
+
+<div class="shell">
+
+<div id="seat-tmc">
+
+  <div class="strip">
+    <div class="cell"><div class="k">Shows on the board</div><div class="v" id="m-shows">6</div><div class="s">Sun 18 Oct · 4 live</div></div>
+    <div class="cell"><div class="k">Positions covered</div><div class="v mono" id="m-pos">147</div><div class="s">Across 6 productions</div></div>
+    <div class="cell"><div class="k">Crew in motion</div><div class="v mono" id="m-motion">89</div><div class="s">Departing tonight</div></div>
+    <div class="cell"><div class="k">Clear</div><div class="v clear mono" id="m-clear">147</div><div class="s">No action needed</div></div>
+    <div class="cell"><div class="k">At risk</div><div class="v mono" id="m-risk">0</div><div class="s">Watching</div></div>
+    <div class="cell"><div class="k">Call times exposed</div><div class="v mono" id="m-exposed">0</div><div class="s">Next show jeopardy</div></div>
+  </div>
+
+  <div class="sec-h">
+    <h2>The Board</h2>
+    <span class="n" id="boardnote">Sunday 18 October · all productions nominal</span>
+  </div>
+
+  <div class="board" id="board"></div>
+
+  <div class="detail" id="detail">
+    <div class="det-head">
+      <div>
+        <h3 id="d-title">—</h3>
+        <div class="sub" id="d-sub">—</div>
+      </div>
+      <div class="det-actions">
+        <button class="btn" id="btn-alt" disabled>Generate options</button>
+        <button class="btn pri" id="btn-runner" disabled>Hand to desk</button>
+      </div>
+    </div>
+
+    <div class="chain">
+      <div class="chain-h">
+        <span class="t">Wrap-to-gate chain</span>
+        <span class="d" id="chain-note">Projected from live game state · Progressive Field, gate 4 load-out</span>
+      </div>
+      <div class="rail" id="rail"></div>
+    </div>
+
+    <div class="feed">
+      <div class="feed-h">Agent crew</div>
+      <div class="crewbar" id="crewbar"></div>
+      <div class="log" id="log"></div>
+    </div>
+
+    <div class="roster-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Position</th>
+            <th>Crew</th>
+            <th>Tier</th>
+            <th>Next call</th>
+            <th>Routing</th>
+            <th class="mono">Slack</th>
+            <th>State</th>
+          </tr>
+        </thead>
+        <tbody id="roster"></tbody>
+      </table>
+    </div>
+
+    <div class="opts" id="opts"></div>
+
+    <div class="handoff" id="handoff">
+      <div class="handoff-h">Desk instruction · composed by RUNNER</div>
+      <div class="msg-box" id="msg"></div>
+      <div class="note">PNRs grouped by carrier and handed to the named agent, not dropped in a queue.</div>
+      <div class="done-bar" id="donebar">
+        <span class="tick">✓</span>
+        <span class="txt"><b>Show closed.</b> 22 of 22 crew hold a confirmed forward itinerary that clears their next call. 0 call times exposed. Recorded: <b>+$1,847 fare · 0 rest breaches · 4 A-list positions retained.</b></span>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /seat-tmc -->
+
+<div id="seat-prod" style="display:none">
+
+  <div class="prod-head">
+    <div>
+      <div class="prod-net">FOX SPORTS · PRODUCTION SEAT</div>
+      <h2>ALCS Gm 4 · Rangers @ Guardians</h2>
+      <div class="prod-sub">Progressive Field, Cleveland · 22 traveling crew · truck compound, gate 4</div>
+    </div>
+    <div class="prov-by">Travel desk · <b>CTM Entertainment</b><br>
+      <span>Seat provided by your travel management company</span></div>
+  </div>
+
+  <div class="strip" style="margin-bottom:16px">
+    <div class="cell"><div class="k">Game state</div>
+      <div class="v" id="p-gs" style="font-size:19px">Bot 9th · 4–4</div>
+      <div class="s" id="p-gs-s">Progressive Field · live</div></div>
+    <div class="cell"><div class="k">Projected final</div>
+      <div class="v" id="p-pf" style="font-size:19px">22:58</div>
+      <div class="s" id="p-pf-s">On schedule</div></div>
+    <div class="cell"><div class="k">Traveling crew</div>
+      <div class="v" style="font-size:19px">22</div>
+      <div class="s">6 hold a next call</div></div>
+  </div>
+
+  <div class="pstate calm" id="pstate"><span class="pi">✓</span><span id="pstate-t">Nothing open. 22 crew routed as booked.</span></div>
+
+  <div class="pcard" style="margin-bottom:16px">
+    <div class="pcard-h">Agent crew <span class="cnt">CTM Entertainment · sports desk</span></div>
+    <div style="padding:14px 18px 16px">
+      <div class="crewbar" id="pcrewbar"></div>
+      <div class="log" id="plog" style="max-height:300px"></div>
+    </div>
+  </div>
+
+  <div class="pcard">
+    <div class="pcard-h">Crew <span class="cnt">production view · external calls redacted unless disclosed</span></div>
+    <div class="roster-wrap">
+      <table>
+        <thead><tr>
+          <th>Position</th><th>Crew</th><th>Next call</th><th>Routing</th><th>State</th>
+        </tr></thead>
+        <tbody id="proster"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div><!-- /seat-prod -->
+
+</div>
+
+<style>
+.opts{border-top:1px solid var(--line);padding:18px 20px;background:var(--panel);display:none}
+.opts.open{display:block}
+.opts-h{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-2);
+  font-weight:640;margin-bottom:15px}
+.ogrp{margin-bottom:18px;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+.ogrp-h{padding:11px 14px;background:var(--panel-2);border-bottom:1px solid var(--line);
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.ogrp-h .nm{font-weight:650;font-size:14px}
+.ogrp-h .cons{margin-left:auto;font-size:11.5px;color:var(--ink-2)}
+.ogrp-h .cons b{color:#F0908C}
+.opt{display:grid;grid-template-columns:26px 1fr 130px 96px 84px;gap:12px;padding:11px 14px;
+  border-bottom:1px solid var(--line);align-items:center;font-size:12.5px}
+.opt:last-child{border-bottom:none}
+.opt.rec{background:#0E1F13}
+.pick{width:15px;height:15px;border-radius:99px;border:2px solid var(--line-2);display:block}
+.opt.rec .pick{border-color:var(--clear);background:radial-gradient(circle,var(--clear) 40%,transparent 42%)}
+.opt .route{font-family:var(--m);font-size:12px;color:var(--ink)}
+.opt .why{font-size:11px;color:var(--ink-3);margin-top:2px}
+.opt .verdict{font-size:11.5px;font-weight:600}
+.verdict.y{color:var(--clear)} .verdict.n{color:var(--down)}
+.opt .cost{font-family:var(--m);font-size:12.5px;text-align:right;color:var(--ink-2)}
+.opt .tot{font-family:var(--m);font-size:13.5px;text-align:right;font-weight:700}
+.rec-tag{font-family:var(--m);font-size:9px;letter-spacing:.09em;background:var(--clear-bg);
+  color:var(--clear);padding:2px 6px;border-radius:3px;margin-left:7px}
+.handoff{border-top:1px solid var(--line);padding:18px 20px;background:var(--panel-2);display:none}
+.handoff.open{display:block}
+.handoff-h{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-2);
+  font-weight:640;margin-bottom:12px}
+.msg-box{background:#0B0B0C;border:1px solid var(--line-2);border-radius:8px;padding:16px;
+  font-family:var(--m);font-size:12.5px;line-height:1.65;color:var(--ink-2);white-space:pre-wrap}
+.msg-box b{color:var(--ink);font-weight:600}
+.handoff .note{margin-top:11px;font-size:11.5px;color:var(--ink-3)}
+.done-bar{margin-top:16px;padding:14px 16px;background:var(--clear-bg);border:1px solid #1C5C2E;
+  border-radius:9px;display:none;align-items:center;gap:12px}
+.done-bar.open{display:flex}
+.done-bar .tick{width:22px;height:22px;border-radius:99px;background:var(--clear);color:#06210E;
+  display:grid;place-items:center;font-weight:800;font-size:13px;flex:none}
+.done-bar .txt{font-size:13px;color:#8FE0A6}
+.done-bar .txt b{color:#fff}
+</style>
+
+<script>
+(function(){
+"use strict";
+
+/* ============ DATA ============ */
+
+const SHOWS = [
+  { id:'alcs', net:'FOX', title:'ALCS Gm 4 · Rangers @ Guardians', venue:'Progressive Field · Cleveland',
+    gs:'Bot 9th · 4–4', live:true, crew:22, state:'clear', hero:true },
+  { id:'snf', net:'NBC', title:'Sunday Night Football · Ravens @ Chiefs', venue:'Arrowhead · Kansas City',
+    gs:'Q3 · 21–17', live:true, crew:34, state:'clear' },
+  { id:'nba', net:'ESPN', title:'Celtics @ Nuggets', venue:'Ball Arena · Denver',
+    gs:'Q2 · 48–51', live:true, crew:19, state:'clear' },
+  { id:'pga', net:'GOLF', title:'Shriners Children\'s Open · R4', venue:'TPC Summerlin · Las Vegas',
+    gs:'Wrapped 21:12', live:false, crew:31, state:'watch',
+    note:'<b>TRAFFIC:</b> LAS ground stop lifted 21:40. 3 crew rebooked, all clear.' },
+  { id:'b1g', net:'FOX', title:'Michigan @ Penn State', venue:'Beaver Stadium · State College',
+    gs:'Wrapped 19:48', live:false, crew:26, state:'clear' },
+  { id:'nhl', net:'VIC+', title:'Stars @ Avalanche', venue:'Ball Arena · Denver',
+    gs:'Wrapped 22:02', live:false, crew:15, state:'clear' }
+];
+
+const CREW = [
+  {pos:'TD',       key:1, nm:'Marcus Vale', ext:1, pv:['external','⧉','External network · validated · Fri 14:22<span class="nobrk">NOT BROKERABLE</span>'],      hm:'Truck · A-unit',  tier:'T1', call:'External call · <span class="redact">production withheld</span><br><span class="sub2">Arr MCI by Mon 13:00 CT</span>', route:'UA 4412 · 06:05 CLE→ORD→MCI', arr:'arr 09:48', slack:225},
+  {pos:'A1', DISCLOSED:1, key:1, nm:'Dana Roarke', ext:1, pv:['external','⧉','External network · crew-confirmed · Sun 16:05<span class="brk">BROKERABLE</span>'],      hm:'Audio booth',     tier:'T1', call:'MNF · Kansas City<br><span class="sub2">Mon 14:00 CT · arr MCI by 13:00</span>', route:'UA 4412 · 06:05 CLE→ORD→MCI', arr:'arr 09:48', slack:225},
+  {pos:'DIR',      key:1, nm:'Hal Brennan', ext:1, pv:['external','⧉','External network · validated · Fri 14:22<span class="nobrk">NOT BROKERABLE</span>'],      hm:'Truck · A-unit',  tier:'T1', call:'External call · <span class="redact">production withheld</span><br><span class="sub2">Arr MCI by Mon 13:00 CT</span>', route:'UA 4412 · 06:05 CLE→ORD→MCI', arr:'arr 09:48', slack:225},
+  {pos:'LEAD EVS', key:1, nm:'Priya Raman', ext:1, pv:['inferred','⚠','Inferred from return routing'],      hm:'Tape room',       tier:'T1', call:'External call · <span class="redact">production withheld</span><br><span class="sub2">Arr MCI by Mon 13:00 CT</span>', route:'UA 4412 · 06:05 CLE→ORD→MCI', arr:'arr 09:48', slack:225},
+  {pos:'EIC',      key:1, nm:'Sal Ferreira', pv:['sheet','▪','FOX crew sheet · Thu 09:10'],     hm:'Truck · engineering', tier:'T1', call:'ALCS Gm 5 · Arlington<br><span class="sub2">Tue 09:00 CT</span>', route:'AA 1188 · 07:20 CLE→DFW', arr:'arr 09:15', slack:300},
+  {pos:'TECH MGR', key:0, nm:'Beth Calloway', pv:['sheet','▪','FOX crew sheet · Thu 09:10'],    hm:'Compound',        tier:'T1', call:'ALCS Gm 5 · Arlington<br><span class="sub2">Tue 09:00 CT</span>', route:'AA 1188 · 07:20 CLE→DFW', arr:'arr 09:15', slack:300},
+  {pos:'A2',       key:0, nm:'Nina Kowalski', pv:['sheet','▪','FOX crew sheet · Thu 09:10'],    hm:'Field',           tier:'T1', call:'ALCS Gm 5 · Arlington<br><span class="sub2">Tue 09:00 CT</span>', route:'AA 1188 · 07:20 CLE→DFW', arr:'arr 09:15', slack:300},
+  {pos:'V1 SHADE', key:0, nm:'Terrence Ott', pv:['none','—','No commitment on record'],     hm:'Truck · video',   tier:'T2', call:'Home · PHX<br><span class="sub2">No call held</span>',      route:'AA 2244 · 06:40 CLE→PHX', arr:'arr 08:55', slack:260},
+  {pos:'EVS 2',    key:0, nm:'Chris Bell', pv:['none','—','No commitment on record'],       hm:'Tape room',       tier:'T2', call:'Home · ATL<br><span class="sub2">No call held</span>',      route:'DL 1907 · 06:15 CLE→ATL', arr:'arr 08:12', slack:235},
+  {pos:'EVS 3',    key:0, nm:'Ray Nkemdirim', pv:['sheet','▪','FOX crew sheet · soft hold'],    hm:'Tape room',       tier:'T2', call:'Home · DFW<br><span class="sub2">Thu 12:00 held</span>',    route:'AA 1188 · 07:20 CLE→DFW', arr:'arr 09:15', slack:300},
+  {pos:'GFX',      key:0, nm:'Joel Amado', pv:['none','—','No commitment on record'],       hm:'Graphics',        tier:'T2', call:'Home · CLT<br><span class="sub2">No call held</span>',      route:'AA 1620 · 09:05 CLE→CLT', arr:'arr 10:52', slack:405},
+  {pos:'RF ENG',   key:0, nm:'Danny Osei', pv:['none','—','No commitment on record'],       hm:'Field',           tier:'T2', call:'Home · BNA<br><span class="sub2">No call held</span>',      route:'WN 2210 · 10:15 CLE→BNA', arr:'arr 11:34', slack:475},
+  {pos:'A2',       key:0, nm:'Sofia Vance', pv:['none','—','No commitment on record'],      hm:'Field',           tier:'T2', call:'Home · MSP<br><span class="sub2">No call held</span>',      route:'DL 2016 · 06:25 CLE→MSP', arr:'arr 07:58', slack:245},
+  {pos:'PROD',     key:0, nm:'Ellen Mabry', pv:['none','—','No commitment on record'],      hm:'Truck · A-unit',  tier:'T2', call:'Home · LGA<br><span class="sub2">No call held</span>',      route:'DL 1422 · 08:30 CLE→LGA', arr:'arr 10:05', slack:370}
+];
+
+/* chain nodes: label, baseline time, revised time */
+const CHAIN = [
+  {lb:'Final out',      base:'22:58', rev:'01:05'},
+  {lb:'Strike complete',base:'00:13', rev:'02:20'},
+  {lb:'Shuttle rolls',  base:'00:28', rev:'02:35'},
+  {lb:'Airport hotel',  base:'00:55', rev:'03:02'},
+  {lb:'Rest before 04:30 lobby', base:'3h50m', mid:'2h11m', rev:'1h28m', dur:1}
+];
+
+const AGENTS = ['ADVANCE','WRANGLER','SPOTTER','TRAFFIC','STEWARD','FIXER','RUNNER','CUSTOMS'];
+
+/* Agents that are not provisioned for this show. Crew is configured per-show, not fixed. */
+const OFFLINE = {
+  CUSTOMS: 'Carnet, work permit and border-clearance watch. Not provisioned: CLE is domestic and all 6 next calls stay inside the US.'
+};
+const CREWNOTE = '<b>CUSTOMS is off for this show</b> — no border crossing on the wrap or on any of the 6 next calls. '
+  + 'It provisions for Toronto, London, Mexico City and any cross-border next call, and carries the gear carnet with it.';
+
+/* ============ SCENARIO ============ */
+const SCRIPT = [
+  { ts:'22:38', who:'ADVANCE', msg:'Roster locked for FOX / ALCS Gm 4. <b>22 traveling · 6 hold a next call.</b> 4 from network crew sheets, 1 confirmed by crew, <span class="hl">1 inferred from return routing — Raman/Priya, unconfirmed.</span>' },
+
+  { ts:'22:41', who:'SPOTTER', gs:['Bot 9th · 4–4','live'], msg:'Bot 9th, tied 4–4. Projected final revised <b>22:58 → 23:40</b>. Chain recomputed for 22 traveling crew.',
+    show:'watch', metrics:{risk:0, exposed:0} },
+
+  { ts:'23:52', who:'SPOTTER', gs:['Bot 11th · 4–4','live'], msg:'11th inning. Projected final <b>00:35</b>. Wrap-to-gate chain now lands crew at the airport hotel <b>03:02</b>.',
+    chain:1, show:'watch', slack:{all:-130} },
+
+  { ts:'23:54', who:'TRAFFIC', msg:'<b>14 of 22</b> crew are on 06:05–06:40 departures. At a 03:02 hotel arrival that is <span class="hl">90 minutes of sleep</span> before a 04:30 lobby call.',
+    show:'risk', metrics:{risk:14, exposed:0}, states:{T2:'WATCH', T1:'RISK'} },
+
+  { ts:'00:47', who:'SPOTTER', gs:['Top 12th · 4–4','live'], msg:'12th inning. Projected final <b>01:05</b>. Strike complete 02:20. This is now the longest ALCS game since 2018.',
+    chain:2, show:'risk' },
+
+  { ts:'00:49', who:'STEWARD', msg:'Turnaround check against <b>NABET-CWA Art. 8.3</b> Wrap 01:05 → external call 14:00 CT (per ADVANCE). Travel counts as work, not rest. <span class="hl">4 crew breach mandatory rest.</span>',
+    metrics:{exposed:4}, states:{MNF:'BROKEN'}, agents:{STEWARD:'hot'} },
+
+  { ts:'00:50', who:'ADVANCE', msg:'Hold — one of those four is <b>inferred, not confirmed</b>. Raman/Priya\'s external call came from return routing, never validated. Requesting confirmation before STEWARD acts on it.',
+    agents:{ADVANCE:'hot', STEWARD:'hot'} },
+
+  { ts:'00:51', who:'WRANGLER', msg:'Raman is <b>live on the show</b> — tape room, 12th inning. Holding contact until the half-inning break. Will not interrupt a working position for a data confirmation.',
+    agents:{WRANGLER:'hot', ADVANCE:'hot'} },
+
+  { ts:'00:52', who:'WRANGLER', msg:'Confirmed by Raman during the break — <b>arrival MCI by 13:00 CT</b>. I asked only for the constraint. <b>She volunteered the production</b> — Monday Night Football — so it is hers to show, and we show it.',
+    prov:{'Priya Raman':['external','⧉','Crew-confirmed &amp; disclosed · Sun 00:52<span class="brk">BROKERABLE</span>']},
+    calls:{'Priya Raman':'MNF · Kansas City<br><span class="sub2">Mon 14:00 CT · arr MCI by 13:00</span>'} },
+
+  { ts:'00:53', who:'ADVANCE', msg:'Provenance upgraded. Constraint is <b>brokerable</b> and the production is now visible — Raman disclosed it herself. Vale and Brennan stay redacted: their calls came off the network sheet, which is not ours to share. Count stands at 4.' },
+
+  { ts:'00:54', who:'STEWARD', msg:'All four hold <b>external calls</b> — the penalty tier lands on the calling network, <b>not on FOX</b>. Contractual exposure to FOX tonight: <b>$0</b>. FOX\'s exposure is <span class="hl">four A-list positions burned</span> and unavailable for the Gm 5 turnaround.',
+    show:'down' },
+
+  { ts:'00:56', who:'TRAFFIC', msg:'<span class="hl">ORD ground delay program issued 06:00–09:00</span> — low ceilings. The 06:05 CLE→ORD→MCI connection is no longer viable for any of the four.',
+    metrics:{risk:14, exposed:4} },
+
+  { ts:'00:57', who:'FIXER', msg:'Generating alternatives. Constraint set per crew member: next call time, contractual rest, ground plan at destination, seat availability at current fare class.',
+    agents:{FIXER:'hot'}, showOpts:true },
+
+  { ts:'00:59', who:'FIXER', msg:'<b>3 viable paths</b> for the Kansas City four. Recommending DL 1140 via DTW — lands MCI 12:40, clears the external call with <b>7h20m</b> rest, zero rest breach, +$602 fare delta to keep four A-list positions callable.',
+    states:{MNF:'SOLVED'}, metrics:{risk:10, exposed:0},
+    routes:{MNF:{route:'DL 1140 · 08:50 CLE→DTW→MCI', arr:'arr 12:40 · rebooked'}} },
+
+  { ts:'01:01', who:'RUNNER', msg:'Desk instruction composed for <b>CTM Entertainment · Sports Desk</b>. PNRs grouped by carrier. Awaiting your release.',
+    agents:{RUNNER:'hot'}, showHandoff:true },
+
+  { ts:'01:06', who:'RUNNER', gs:['Final · 5–4 (12)','wrapped 01:05'], msg:'Released to desk. Agent <b>M. Iyer</b> acknowledged, 14 tickets in motion. Crew notified by SMS with new lobby call <b>07:15</b>.',
+    states:{all:'SOLVED'}, metrics:{risk:0, exposed:0}, show:'clear', done:true }
+];
+
+/* ============ RENDER ============ */
+const $ = id => document.getElementById(id);
+let step = -1, playing = false, timer = null, chainLevel = 0;
+let crewState = {};
+CREW.forEach((c,i) => crewState[i] = {st:'CLEAR', slack:c.slack});
+const CREW0 = CREW.map(c => ({route:c.route, arr:c.arr, pv:c.pv.slice(), call:c.call}));
+
+function fmtSlack(m){
+  const neg = m < 0, a = Math.abs(m);
+  return (neg?'−':'+') + Math.floor(a/60) + 'h' + String(a%60).padStart(2,'0');
+}
+function slackCls(m){ return m < 0 ? 'bad' : m < 90 ? 'warn' : 'ok'; }
+
+function renderBoard(){
+  $('board').innerHTML = SHOWS.map(s => {
+    const st = s.id === 'alcs' ? (SHOWS[0].state) : s.state;
+    return `<button class="show ${s.id==='alcs'&&st!=='clear'?'sel':''}" data-id="${s.id}">
+      <div class="show-top">
+        <div class="show-net">
+          <span class="net">${s.net}</span>
+          <span class="state ${st}">${st.toUpperCase()}</span>
+        </div>
+        <h3>${s.title}</h3>
+        <div class="venue">${s.venue}</div>
+      </div>
+      <div class="show-body">
+        <div class="gs">
+          <div class="lab">Game state</div>
+          <div class="val ${s.live?'live':''}">${s.gs}</div>
+        </div>
+        <div class="crewn">
+          <div class="big">${s.crew}</div>
+          <div class="lab">Traveling</div>
+        </div>
+      </div>
+      ${s.note ? `<div class="alert watchy"><span>${s.note}</span></div>` : ''}
+      ${s.id==='alcs'&&s.alert ? `<div class="alert"><span>${s.alert}</span></div>` : ''}
+    </button>`;
+  }).join('');
+  document.querySelectorAll('.show').forEach(b =>
+    b.addEventListener('click', () => { if(b.dataset.id==='alcs') openDetail(); }));
+}
+
+function renderChain(level){
+  $('rail').innerHTML = CHAIN.map((n,i) => {
+    const t = level >= 2 ? n.rev : level === 1 ? (n.mid || n.rev) : n.base;
+    let cls = '';
+    if(i === 0 && level === 0) cls = 'now';
+    else if(level >= 1 && i < 4) cls = 'shift';
+    if(level >= 2 && i === 4) cls = 'bad';
+    let diff = '';
+    if(n.dur){
+      if(level === 1) diff = '\u2212 1h39m';
+      else if(level >= 2) diff = 'below 8h minimum';
+    } else if(level >= 1 && n.base !== n.rev){
+      diff = `+${diffMin(n.base,n.rev)}m`;
+    }
+    return `<div class="node ${cls}">
+      <div class="bar"><span class="dot"></span></div>
+      <div class="lb">${n.lb}</div>
+      <div class="tm">${t}</div>
+      ${diff?`<div class="df">${diff}</div>`:''}
+    </div>`;
+  }).join('');
+}
+function diffMin(a,b){
+  const p = s => { const [h,m]=s.split(':').map(Number); return h*60+m; };
+  let d = p(b)-p(a); if(d<0) d += 1440; return d;
+}
+
+function renderRoster(){
+  $('roster').innerHTML = CREW.map((c,i) => {
+    const s = crewState[i];
+    return `<tr class="${c.tier.toLowerCase()}">
+      <td><span class="pos ${c.key?'key':''}">${c.pos}</span></td>
+      <td><div class="nm">${c.nm}</div><div class="sub2">${c.hm}</div></td>
+      <td><span class="tier ${c.tier}">${c.tier}</span></td>
+      <td style="font-size:12px">${c.call}
+        <div class="prov ${c.pv[0]}"><span class="pi">${c.pv[1]}</span>${c.pv[2]}</div></td>
+      <td><div class="mono" style="font-size:11.5px">${c.route}</div><div class="sub2">${c.arr}</div></td>
+      <td><span class="slack ${slackCls(s.slack)}">${fmtSlack(s.slack)}</span></td>
+      <td><span class="st ${s.st}">${s.st}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+function renderCrewbar(states){
+  $('crewbar').innerHTML = AGENTS.map(a => OFFLINE[a]
+    ? `<span class="ag off" title="${OFFLINE[a]}"><i></i>${a}<em>OFF</em></span>`
+    : `<span class="ag ${states[a]||'on'}"><i></i>${a}</span>`).join('')
+    + `<div class="crewnote">${CREWNOTE}</div>`;
+}
+
+const OPTIONS = [
+  { nm:'A1 · Dana Roarke  ·  TD · Marcus Vale  ·  DIR · Hal Brennan  ·  LEAD EVS · Priya Raman',
+    cons:'External call · arrive <b>MCI by Mon 13:00 CT</b> · mandatory rest 8h · liability external',
+    rows:[
+      {route:'AA 2287 · 09:15 CLE→DFW→MCI · arr 14:32', why:'Cheapest available seat at current fare class',
+       verdict:'Misses call by 32m', vc:'n', cost:'+$418', tot:'—', rec:false},
+      {route:'DL 1140 · 08:50 CLE→DTW→MCI · arr 12:40', why:'Clears call with 7h20m rest · ground plan intact',
+       verdict:'Clears · no penalty', vc:'y', cost:'+$602', tot:'+$602', rec:true},
+      {route:'Hold overnight · 9h drive CLE→MCI', why:'Zero fare cost, but a 9-hour drive after a 14-hour day',
+       verdict:'Clears · fatigue risk', vc:'n', cost:'+$0', tot:'—', rec:false}
+    ]},
+  { nm:'EIC · Sal Ferreira  ·  TECH MGR · Beth Calloway  ·  A2 · Nina Kowalski',
+    cons:'ALCS Gm 5 · Arlington · call <b>Tue 09:00 CT</b> · 29h available',
+    rows:[
+      {route:'AA 1188 · 07:20 CLE→DFW · arr 09:15 (as booked)', why:'Departure holds. Push lobby call to 05:45.',
+       verdict:'Clears · no change', vc:'y', cost:'$0', tot:'$0', rec:true},
+      {route:'AA 1420 · 11:40 CLE→DFW · arr 13:35', why:'Adds 4h sleep · still clears Tuesday call by 19h',
+       verdict:'Clears · more rest', vc:'y', cost:'+$96', tot:'+$96', rec:false}
+    ]}
+];
+
+function renderOpts(){
+  $('opts').innerHTML = '<div class="opts-h">Options · generated by FIXER</div>' +
+    OPTIONS.map(g => `<div class="ogrp">
+      <div class="ogrp-h"><span class="nm">${g.nm}</span><span class="cons">${g.cons}</span></div>
+      ${g.rows.map(r => `<div class="opt ${r.rec?'rec':''}">
+        <span class="pick"></span>
+        <div><div class="route">${r.route}</div><div class="why">${r.why}</div></div>
+        <div class="verdict ${r.vc}">${r.verdict}${r.rec?'<span class="rec-tag">PICK</span>':''}</div>
+        <div class="cost">${r.cost}</div>
+        <div class="tot">${r.tot}</div>
+      </div>`).join('')}
+    </div>`).join('');
+}
+
+const HANDOFF = `<b>To:</b> CTM Entertainment · Sports &amp; Entertainment Desk
+<b>Re:</b> FOX / ALCS Gm 4 · Progressive Field · crew backhaul
+
+Game ran to 01:05 ET. 14 crew will not make 06:05–06:40 departures.
+ORD has a ground delay program 06:00–09:00 — do not reroute via ORD.
+
+<b>GROUP A — rebook, hard call time (4 pax)</b>
+  VALE/MARCUS      PNR K7Q2XP    UA4412 → <b>DL1140 08:50 CLE-DTW-MCI</b>
+  ROARKE/DANA      PNR K7Q2XR    UA4412 → <b>DL1140</b>
+  BRENNAN/HAL      PNR K7Q2XS    UA4412 → <b>DL1140</b>
+  RAMAN/PRIYA      PNR K7Q2XT    UA4412 → <b>DL1140</b>
+  ↳ Must be MCI by 12:40. Monday Night Football call 14:00 CT.
+
+<b>GROUP B — hold as booked (3 pax)</b>
+  FERREIRA/SAL · CALLOWAY/BETH · KOWALSKI/NINA — AA1188 07:20 CLE-DFW stands.
+
+<b>GROUP C — same-day rebook, no hard call (7 pax)</b>
+  Push to first available after 10:00. Comfort over speed. Detail attached.
+
+Hotel: 14 rooms extended to 09:00 checkout, central bill.
+Ground: shuttle re-called for <b>07:15</b> lobby.`;
+
+/* ============ PLAYBACK ============ */
+function apply(s){
+  if(s.gs){
+    SHOWS[0].gs = s.gs[0];
+    SHOWS[0].live = s.gs[1] === 'live';
+    SHOWS[0].gsNote = s.gs[1];
+    renderBoard();
+  }
+  if(s.show){ SHOWS[0].state = s.show;
+    SHOWS[0].alert = s.show==='down'
+      ? '<span><b>4 call times exposed.</b> TD, A1, DIR and Lead EVS breach mandatory rest for a 14:00 CT call in Kansas City.</span>'
+      : s.show==='risk'
+      ? '<span><b>14 crew at risk.</b> Projected wrap 01:05 · 06:05 departures no longer reachable with rest.</span>'
+      : s.show==='watch'
+      ? '<span><b>Extra innings.</b> Chain recomputing for 22 traveling crew.</span>' : null;
+    if(s.show==='clear') SHOWS[0].alert = null;
+    renderBoard();
+  }
+  if(s.chain !== undefined){ chainLevel = s.chain; renderChain(s.chain); }
+  if(s.slack) CREW.forEach((c,i)=>{ crewState[i].slack = c.slack + s.slack.all; });
+  if(s.states){
+    CREW.forEach((c,i)=>{
+      if(s.states.all) crewState[i].st = s.states.all;
+      else if(s.states.MNF && c.ext) crewState[i].st = s.states.MNF;
+      else if(s.states[c.tier]) crewState[i].st = s.states[c.tier];
+    });
+  }
+  if(s.prov){
+    CREW.forEach(c => {
+      if(s.prov[c.nm]) c.pv = s.prov[c.nm];
+      if(s.calls && s.calls[c.nm]) c.call = s.calls[c.nm];
+    });
+    renderRoster();
+  }
+  if(s.routes){
+    CREW.forEach(c => {
+      if(s.routes.MNF && c.ext){
+        c.route = s.routes.MNF.route; c.arr = s.routes.MNF.arr;
+      }
+    });
+  }
+  if(s.states || s.slack || s.routes) renderRoster();
+  if(s.metrics){
+    if(s.metrics.risk !== undefined){
+      $('m-risk').textContent = s.metrics.risk;
+      $('m-risk').className = 'v mono ' + (s.metrics.risk?'risk':'');
+      $('m-clear').textContent = 147 - s.metrics.risk;
+    }
+    if(s.metrics.exposed !== undefined){
+      $('m-exposed').textContent = s.metrics.exposed;
+      $('m-exposed').className = 'v mono ' + (s.metrics.exposed?'down':'');
+    }
+  }
+  if(s.agents) renderCrewbar(s.agents);
+  if(s.showOpts){ renderOpts(); $('opts').classList.add('open'); $('btn-alt').disabled = false; }
+  if(s.showHandoff){ $('handoff').classList.add('open'); $('btn-runner').disabled = false;
+    $('msg').innerHTML = HANDOFF; }
+  if(s.done){ $('donebar').classList.add('open');
+    $('boardnote').textContent = 'Sunday 18 October · 1 incident resolved · 0 open';
+    renderCrewbar({}); }
+}
+
+function logEvent(s){
+  const d = document.createElement('div');
+  d.className = 'ev';
+  d.innerHTML = `<div class="ts">${s.ts}</div><div class="who ${s.who}">${s.who}</div><div class="msg">${s.msg}</div>`;
+  $('log').prepend(d);
+  requestAnimationFrame(()=>d.classList.add('in'));
+}
+
+function next(){
+  step++;
+  if(step >= SCRIPT.length){ stop(); return; }
+  const s = SCRIPT[step];
+  logEvent(s); apply(s);
+  if(seatActive()) renderProd();
+  if(step === 1) openDetail();
+}
+function play(){
+  if(playing) return;
+  playing = true; $('btn-play').textContent = 'Pause';
+  next();
+  timer = setInterval(()=>{ if(step >= SCRIPT.length-1){ stop(); } else next(); }, 2900);
+}
+function stop(){ playing = false; clearInterval(timer);
+  $('btn-play').textContent = step >= SCRIPT.length-1 ? 'Replay' : 'Resume'; }
+function reset(){
+  clearInterval(timer); playing = false; step = -1;
+  CREW.forEach((c,i)=>{ crewState[i] = {st:'CLEAR', slack:c.slack};
+    c.route = CREW0[i].route; c.arr = CREW0[i].arr; c.pv = CREW0[i].pv.slice(); c.call = CREW0[i].call; });
+  SHOWS[0].state='clear'; SHOWS[0].alert=null;
+  SHOWS[0].gs='Bot 9th · 4–4'; SHOWS[0].live=true; SHOWS[0].gsNote='live'; chainLevel=0;
+  $('log').innerHTML=''; $('opts').classList.remove('open');
+  $('handoff').classList.remove('open'); $('donebar').classList.remove('open');
+  $('btn-alt').disabled=true; $('btn-runner').disabled=true;
+  $('m-risk').textContent='0'; $('m-risk').className='v mono';
+  $('m-exposed').textContent='0'; $('m-exposed').className='v mono';
+  $('m-clear').textContent='147';
+  $('boardnote').textContent='Sunday 18 October · all productions nominal';
+  renderBoard(); renderChain(0); renderRoster(); renderCrewbar({});
+  $('btn-play').textContent='Run the night';
+  if(seatActive()) renderProd();
+}
+
+function openDetail(){
+  const d = $('detail');
+  d.classList.add('open');
+  $('d-title').textContent = 'ALCS Gm 4 · Rangers @ Guardians';
+  $('d-sub').innerHTML = 'FOX · Progressive Field, Cleveland · <b>22 traveling crew</b> · 6 hold a next call';
+}
+
+/* ============ PRODUCTION SEAT ============ */
+function seatActive(){ return document.getElementById('seat-prod').style.display !== 'none'; }
+
+function renderProd(){
+  const broken = CREW.filter((c,i)=>['BROKEN','RISK'].includes(crewState[i].st)).length;
+  const hot = step >= 3 && step < SCRIPT.length-1;
+  const ps = $('pstate'), pt = $('pstate-t');
+  if(step >= SCRIPT.length-1){
+    ps.className = 'pstate calm';
+    pt.innerHTML = '<b>Closed.</b> 22 of 22 hold a confirmed forward itinerary that clears their next call.';
+  } else if(hot){
+    ps.className = 'pstate hot';
+    pt.innerHTML = '<b>' + (broken||14) + ' crew will not make their departures.</b> Desk is working it.';
+  } else {
+    ps.className = 'pstate calm';
+    pt.innerHTML = '<b>Nothing open.</b> 22 crew routed as booked.';
+  }
+  $('proster').innerHTML = CREW.map((c,i) => {
+    const st = crewState[i].st;
+    const brokerable = c.pv[2].indexOf('BROKERABLE') > -1 && c.pv[2].indexOf('NOT BROKERABLE') === -1;
+    const callCell = (c.ext && !brokerable)
+      ? 'External call · <span class="redact">withheld</span><div class="sub2">Arr MCI by Mon 13:00 CT</div>'
+      : c.call;
+    return `<tr class="${c.ext?'t1':'t2'}">
+      <td><span class="pos ${c.key?'key':''}">${c.pos}</span></td>
+      <td><div class="nm">${c.nm}</div><div class="sub2">${c.hm}</div></td>
+      <td style="font-size:12px">${callCell}</td>
+      <td><div class="mono" style="font-size:11.5px">${c.route}</div><div class="sub2">${c.arr}</div></td>
+      <td><span class="st ${st}">${st}</span></td>
+    </tr>`;
+  }).join('');
+  const sh = SHOWS[0];
+  $('p-gs').innerHTML = (sh.live ? '<span style="color:var(--live)">● </span>' : '') + sh.gs;
+  $('p-gs').className = 'v';
+  $('p-gs-s').textContent = sh.live ? 'Progressive Field · live' : 'Progressive Field · ' + (sh.gsNote || 'wrapped');
+  const pf = chainLevel >= 2 ? '01:05' : chainLevel === 1 ? '00:35' : '22:58';
+  $('p-pf').textContent = pf;
+  $('p-pf').className = 'v' + (chainLevel >= 1 ? ' watch' : '');
+  $('p-pf-s').textContent = chainLevel >= 2 ? '+2h07 from scheduled'
+    : chainLevel === 1 ? '+1h37 from scheduled' : 'On schedule';
+
+  $('pcrewbar').innerHTML = $('crewbar').innerHTML;
+  $('plog').innerHTML = $('log').innerHTML;
+}
+
+/* seat switching */
+function setSeat(which){
+  const tmc = which === 'tmc';
+  $('seat-tmc').style.display = tmc ? '' : 'none';
+  $('seat-prod').style.display = tmc ? 'none' : '';
+  $('sw-tmc').classList.toggle('on', tmc);
+  $('sw-prod').classList.toggle('on', !tmc);
+  if(!tmc) renderProd();
+}
+$('sw-tmc').addEventListener('click', ()=>setSeat('tmc'));
+$('sw-prod').addEventListener('click', ()=>setSeat('prod'));
+
+/* clock */
+let t0 = 22*3600 + 41*60 + 7;
+setInterval(()=>{ t0++;
+  const h=Math.floor(t0/3600)%24, m=Math.floor(t0/60)%60, s=t0%60;
+  $('clock').innerHTML = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')} <small>ET</small>`;
+}, 1000);
+
+/* boot */
+renderBoard(); renderChain(0); renderRoster(); renderCrewbar({});
+$('btn-play').addEventListener('click', ()=>{
+  if(step >= SCRIPT.length-1){ reset(); return; }
+  playing ? stop() : play();
+});
+$('btn-reset').addEventListener('click', reset);
+})();
+</script>
+</body>
+</html>
