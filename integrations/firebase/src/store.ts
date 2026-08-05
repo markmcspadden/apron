@@ -33,6 +33,11 @@ export class FirestoreStore {
     return this.db !== null;
   }
 
+  /** Returns the underlying Firestore instance, or null if not connected. */
+  async getDb(): Promise<Firestore | null> {
+    return this.db ?? this.dbReady;
+  }
+
   private async ready(): Promise<Firestore | null> {
     return this.db ?? this.dbReady;
   }

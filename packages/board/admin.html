@@ -1,0 +1,1033 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>APRON — Admin</title>
+<style>
+:root{
+  --bg:#0B0B0C; --panel:#141416; --panel-2:#1B1B1E; --line:#2A2A2E; --line-2:#3A3A40;
+  --ink:#F2F1EE; --ink-2:#A9A69E; --ink-3:#6E6B65;
+  --clear:#25B04B; --clear-bg:#0E2A16;
+  --watch:#E8A81C; --watch-bg:#2E2308;
+  --risk:#EE7A3C; --risk-bg:#31190A;
+  --down:#E0403C; --down-bg:#33100F;
+  --live:#5DA9E9;
+  --f:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --m:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f);font-size:14px;
+  line-height:1.45;-webkit-font-smoothing:antialiased;display:flex;min-height:100vh}
+.mono{font-family:var(--m);font-variant-numeric:tabular-nums}
+
+/* ---------- sidebar ---------- */
+.sidebar{width:220px;min-height:100vh;background:var(--panel);border-right:1px solid var(--line);
+  position:fixed;top:0;left:0;bottom:0;z-index:90;display:flex;flex-direction:column}
+.sidebar-brand{padding:18px 20px 16px;border-bottom:1px solid var(--line)}
+.sidebar-brand b{font-size:16px;font-weight:750;letter-spacing:.13em}
+.sidebar-brand span{font-size:10px;letter-spacing:.16em;color:var(--ink-3);text-transform:uppercase;
+  margin-left:9px}
+.sidebar-nav{padding:12px 0;flex:1}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 20px;font-size:13px;font-weight:600;
+  color:var(--ink-3);cursor:pointer;transition:background .12s,color .12s;border:none;background:none;
+  width:100%;text-align:left;font-family:var(--f);letter-spacing:.02em}
+.nav-item:hover{background:var(--panel-2);color:var(--ink-2)}
+.nav-item.active{color:var(--ink);background:var(--panel-2);border-right:2px solid var(--live)}
+.nav-icon{font-size:15px;width:22px;text-align:center;opacity:.6}
+.nav-item.active .nav-icon{opacity:1}
+.sidebar-foot{padding:14px 20px;border-top:1px solid var(--line);font-size:10px;color:var(--ink-3);
+  letter-spacing:.08em;font-family:var(--m)}
+
+/* ---------- top bar ---------- */
+.topbar{position:fixed;top:0;left:220px;right:0;z-index:80;background:#0B0B0Cf2;
+  backdrop-filter:blur(10px);border-bottom:1px solid var(--line);height:52px;
+  display:flex;align-items:center;padding:0 24px;gap:16px}
+.topbar-title{font-size:12px;letter-spacing:.15em;text-transform:uppercase;color:var(--ink-2);
+  font-weight:640}
+.topbar-acct{margin-left:auto;font-size:12px;color:var(--ink-3);display:flex;align-items:center;gap:8px}
+.topbar-acct b{color:var(--ink);font-weight:600}
+.acct-dot{width:7px;height:7px;border-radius:99px;background:var(--clear)}
+
+/* ---------- main ---------- */
+.main{margin-left:220px;padding-top:52px;flex:1;min-height:100vh}
+.content{padding:24px 28px 80px}
+
+/* ---------- shared ---------- */
+.sec-h{display:flex;align-items:center;gap:12px;margin:0 0 16px}
+.sec-h h2{font-size:12px;letter-spacing:.15em;text-transform:uppercase;color:var(--ink-2);font-weight:640}
+.sec-h .n{font-family:var(--m);font-size:11px;color:var(--ink-3)}
+
+.btn{font:inherit;font-size:12px;font-weight:600;padding:8px 15px;border-radius:7px;cursor:pointer;
+  border:1px solid var(--line-2);background:var(--panel-2);color:var(--ink);transition:.14s;
+  display:inline-flex;align-items:center;gap:6px}
+.btn:hover{border-color:var(--ink-3)}
+.btn.pri{background:#2A6FB5;border-color:#2A6FB5;color:#fff}
+.btn.pri:hover{background:#3480CC}
+.btn.sm{font-size:11px;padding:5px 10px;border-radius:5px}
+.btn.danger{color:var(--down);border-color:#5A2220}
+.btn.danger:hover{background:var(--down-bg);border-color:var(--down)}
+.btn:disabled{opacity:.4;cursor:default}
+
+.empty{padding:40px 20px;text-align:center;color:var(--ink-3);font-size:13px;
+  border:1px dashed var(--line-2);border-radius:10px;margin-bottom:16px}
+.empty b{display:block;font-size:14px;color:var(--ink-2);margin-bottom:6px;font-weight:600}
+
+.loading{color:var(--ink-3);font-size:12px;font-family:var(--m);padding:20px;text-align:center}
+
+.err-msg{background:var(--down-bg);border:1px solid #4A1A18;border-radius:7px;padding:10px 14px;
+  font-size:12px;color:#F09B98;margin-bottom:12px;display:none}
+.err-msg.show{display:block}
+
+/* ---------- cards ---------- */
+.acct-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;margin-bottom:20px}
+.acct-card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;
+  cursor:pointer;transition:border-color .15s,transform .12s}
+.acct-card:hover{border-color:var(--line-2);transform:translateY(-1px)}
+.acct-card.selected{border-color:var(--live);box-shadow:0 0 0 1px var(--live)}
+.acct-card .acct-name{font-size:15px;font-weight:650;letter-spacing:-.01em;margin-bottom:4px}
+.acct-card .acct-type{font-family:var(--m);font-size:10px;letter-spacing:.1em;color:var(--ink-3);
+  text-transform:uppercase}
+
+/* entities */
+.entity-section{margin-top:16px;padding:16px 18px;background:var(--panel);border:1px solid var(--line);
+  border-radius:10px;margin-bottom:20px}
+.entity-section h3{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-2);
+  font-weight:640;margin-bottom:12px}
+.entity-row{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--panel-2);
+  border:1px solid var(--line);border-radius:7px;margin-bottom:6px;font-size:13px}
+.entity-type{font-family:var(--m);font-size:9.5px;letter-spacing:.1em;padding:3px 7px;border-radius:4px;
+  background:var(--bg);color:var(--ink-2);border:1px solid var(--line-2);text-transform:uppercase}
+.entity-name{font-weight:600}
+
+/* ---------- table ---------- */
+.tbl-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;margin-bottom:16px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead th{text-align:left;padding:10px 14px;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--ink-3);font-weight:640;border-bottom:1px solid var(--line);white-space:nowrap;
+  background:var(--panel-2)}
+tbody td{padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:middle}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover{background:#1A1A1D}
+tbody tr.clickable{cursor:pointer}
+tbody tr.sel{background:var(--panel-2);box-shadow:inset 3px 0 0 var(--live)}
+
+.tag{font-family:var(--m);font-size:10px;letter-spacing:.08em;padding:3px 7px;border-radius:4px;
+  display:inline-block;text-transform:uppercase}
+.tag.pos{background:#12212E;border:1px solid #25405A;color:#9CC6EA}
+.tag.tier{background:var(--panel-2);color:var(--ink-3);border:1px solid var(--line-2)}
+.tag.role{background:var(--panel-2);color:var(--ink-2);border:1px solid var(--line-2)}
+
+/* ---------- inline forms ---------- */
+.inline-form{background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:16px 18px;
+  margin-bottom:16px;display:none}
+.inline-form.open{display:block}
+.form-title{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-2);
+  font-weight:640;margin-bottom:14px}
+.form-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;align-items:flex-end}
+.form-group{display:flex;flex-direction:column;gap:4px;flex:1;min-width:160px}
+.form-group label{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);
+  font-weight:640}
+.form-group input,.form-group select{font:inherit;font-size:13px;padding:8px 12px;
+  background:var(--bg);border:1px solid var(--line-2);border-radius:6px;color:var(--ink);
+  font-family:var(--f);outline:none;transition:border-color .15s}
+.form-group input:focus,.form-group select:focus{border-color:var(--live)}
+.form-group select{cursor:pointer;appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='7'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%236E6B65' stroke-width='1.5'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 10px center;padding-right:28px}
+.form-actions{display:flex;gap:8px;align-items:center;margin-top:4px}
+.form-actions .btn{margin-top:0}
+
+/* ---------- assignments panel ---------- */
+.assign-panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+  margin-bottom:16px;overflow:hidden}
+.assign-header{padding:14px 18px;background:var(--panel-2);border-bottom:1px solid var(--line);
+  display:flex;align-items:center;gap:12px}
+.assign-header h3{font-size:14px;font-weight:650;letter-spacing:-.01em}
+.assign-header .sub{font-size:11px;color:var(--ink-3);margin-left:auto}
+.assign-body{padding:14px 18px}
+.assign-add{display:flex;gap:8px;margin-bottom:12px;align-items:flex-end}
+.assign-add select{font:inherit;font-size:12px;padding:7px 10px;background:var(--bg);
+  border:1px solid var(--line-2);border-radius:6px;color:var(--ink);cursor:pointer;
+  appearance:none;min-width:180px;outline:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='7'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%236E6B65' stroke-width='1.5'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 10px center;padding-right:28px}
+.assign-add select:focus{border-color:var(--live)}
+
+/* ---------- sections ---------- */
+.section{display:none}
+.section.active{display:block}
+
+/* ---------- responsive ---------- */
+@media(max-width:760px){
+  .sidebar{width:56px}
+  .sidebar-brand span,.nav-item span:not(.nav-icon){display:none}
+  .sidebar-foot{display:none}
+  .nav-item{padding:12px 16px;justify-content:center}
+  .main{margin-left:56px}
+  .topbar{left:56px}
+  .form-row{flex-direction:column}
+  .form-group{min-width:100%}
+}
+</style>
+</head>
+<body>
+
+<!-- ======== SIDEBAR ======== -->
+<nav class="sidebar">
+  <div class="sidebar-brand"><b>APRON</b><span>Admin</span></div>
+  <div class="sidebar-nav">
+    <button class="nav-item active" data-section="accounts"><span class="nav-icon">&#9632;</span><span>Accounts</span></button>
+    <button class="nav-item" data-section="games"><span class="nav-icon">&#9654;</span><span>Games</span></button>
+    <button class="nav-item" data-section="crew"><span class="nav-icon">&#9679;</span><span>Crew</span></button>
+    <button class="nav-item" data-section="members"><span class="nav-icon">&#9733;</span><span>Members</span></button>
+  </div>
+  <div class="sidebar-foot">ADMIN CONSOLE</div>
+</nav>
+
+<!-- ======== TOP BAR ======== -->
+<div class="topbar">
+  <div class="topbar-title">Admin Console</div>
+  <div class="topbar-acct" id="topbar-acct" style="display:none">
+    <span class="acct-dot"></span>
+    <b id="topbar-acct-name"></b>
+  </div>
+</div>
+
+<!-- ======== MAIN ======== -->
+<div class="main">
+<div class="content">
+
+<!-- ---- ACCOUNTS ---- -->
+<div class="section active" id="sec-accounts">
+  <div class="sec-h">
+    <h2>Accounts</h2>
+    <span class="n" id="accounts-count"></span>
+    <button class="btn sm" id="btn-new-acct" style="margin-left:auto">+ New Account</button>
+  </div>
+
+  <div id="err-accounts" class="err-msg"></div>
+
+  <div class="inline-form" id="form-new-acct">
+    <div class="form-title">New Account</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Name</label>
+        <input type="text" id="acct-name" placeholder="e.g. CTM Entertainment">
+      </div>
+      <div class="form-group">
+        <label>Type</label>
+        <select id="acct-type">
+          <option value="tmc">TMC</option>
+          <option value="production">Production</option>
+          <option value="hybrid">Hybrid</option>
+        </select>
+      </div>
+      <div class="form-actions">
+        <button class="btn pri sm" id="btn-save-acct">Create</button>
+        <button class="btn sm" id="btn-cancel-acct">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="accounts-list" class="acct-grid"></div>
+  <div id="accounts-loading" class="loading">Loading accounts...</div>
+
+  <!-- entities appear when account is selected -->
+  <div id="entities-section" class="entity-section" style="display:none">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
+      <h3 id="entities-title">Entities</h3>
+      <button class="btn sm" id="btn-new-entity" style="margin-left:auto">+ Create Entity</button>
+    </div>
+
+    <div id="err-entities" class="err-msg"></div>
+
+    <div class="inline-form" id="form-new-entity">
+      <div class="form-title">New Entity</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Name</label>
+          <input type="text" id="entity-name" placeholder="e.g. Sports Desk">
+        </div>
+        <div class="form-group">
+          <label>Type</label>
+          <select id="entity-type">
+            <option value="tmc">TMC</option>
+            <option value="production">Production</option>
+          </select>
+        </div>
+        <div class="form-actions">
+          <button class="btn pri sm" id="btn-save-entity">Create</button>
+          <button class="btn sm" id="btn-cancel-entity">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="entities-list"></div>
+  </div>
+</div>
+
+<!-- ---- GAMES ---- -->
+<div class="section" id="sec-games">
+  <div class="sec-h">
+    <h2>Games</h2>
+    <span class="n" id="games-count"></span>
+    <button class="btn sm" id="btn-new-game" style="margin-left:auto">+ Add Game</button>
+  </div>
+
+  <div id="no-acct-games" class="empty" style="display:none">
+    <b>No account selected</b>
+    Select an account from the Accounts tab first.
+  </div>
+
+  <div id="err-games" class="err-msg"></div>
+
+  <div class="inline-form" id="form-new-game">
+    <div class="form-title">New Game</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Network</label>
+        <select id="game-network">
+          <option value="">Select...</option>
+          <option value="FOX">FOX</option>
+          <option value="NBC">NBC</option>
+          <option value="ESPN">ESPN</option>
+          <option value="CBS">CBS</option>
+          <option value="ABC">ABC</option>
+          <option value="TNT">TNT</option>
+          <option value="NFL Network">NFL Network</option>
+          <option value="MLB Network">MLB Network</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Title</label>
+        <input type="text" id="game-title" placeholder="e.g. ALCS Gm 4 - Rangers @ Guardians">
+      </div>
+      <div class="form-group">
+        <label>Venue</label>
+        <input type="text" id="game-venue" placeholder="e.g. Progressive Field, Cleveland">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Date</label>
+        <input type="date" id="game-date">
+      </div>
+      <div class="form-group">
+        <label>Call Time</label>
+        <input type="time" id="game-calltime">
+      </div>
+      <div class="form-actions">
+        <button class="btn pri sm" id="btn-save-game">Create</button>
+        <button class="btn sm" id="btn-cancel-game">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="games-loading" class="loading" style="display:none">Loading games...</div>
+
+  <div class="tbl-wrap" id="games-table-wrap" style="display:none">
+    <table>
+      <thead>
+        <tr>
+          <th>Network</th>
+          <th>Title</th>
+          <th>Venue</th>
+          <th>Date</th>
+          <th>Crew</th>
+        </tr>
+      </thead>
+      <tbody id="games-body"></tbody>
+    </table>
+  </div>
+
+  <!-- assignments panel -->
+  <div class="assign-panel" id="assign-panel" style="display:none">
+    <div class="assign-header">
+      <h3 id="assign-game-title">Game Assignments</h3>
+      <span class="sub" id="assign-count"></span>
+    </div>
+    <div class="assign-body">
+      <div id="err-assign" class="err-msg"></div>
+      <div class="assign-add">
+        <div class="form-group" style="min-width:180px;flex:none">
+          <label>Crew Member</label>
+          <select id="assign-crew-select"><option value="">Select crew...</option></select>
+        </div>
+        <div class="form-group" style="min-width:140px;flex:none">
+          <label>Position</label>
+          <select id="assign-pos-select">
+            <option value="">Select...</option>
+            <option>TD</option><option>A1</option><option>A2</option><option>DIR</option>
+            <option>AD</option><option>LEAD EVS</option><option>EVS 2</option><option>EVS 3</option>
+            <option>GFX</option><option>V1 SHADE</option><option>EIC</option><option>TECH MGR</option>
+            <option>RF ENG</option><option>UTIL</option>
+          </select>
+        </div>
+        <button class="btn pri sm" id="btn-assign">Assign</button>
+      </div>
+      <div class="tbl-wrap" id="assign-table-wrap" style="display:none">
+        <table>
+          <thead><tr><th>Crew</th><th>Position</th><th></th></tr></thead>
+          <tbody id="assign-body"></tbody>
+        </table>
+      </div>
+      <div id="assign-empty" class="empty" style="display:none">No crew assigned to this game yet.</div>
+    </div>
+  </div>
+</div>
+
+<!-- ---- CREW ---- -->
+<div class="section" id="sec-crew">
+  <div class="sec-h">
+    <h2>Crew</h2>
+    <span class="n" id="crew-count"></span>
+    <button class="btn sm" id="btn-new-crew" style="margin-left:auto">+ Add Crew</button>
+  </div>
+
+  <div id="no-acct-crew" class="empty" style="display:none">
+    <b>No account selected</b>
+    Select an account from the Accounts tab first.
+  </div>
+
+  <div id="err-crew" class="err-msg"></div>
+
+  <div class="inline-form" id="form-new-crew">
+    <div class="form-title">New Crew Member</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Name</label>
+        <input type="text" id="crew-name" placeholder="e.g. John Smith">
+      </div>
+      <div class="form-group">
+        <label>Position</label>
+        <select id="crew-position">
+          <option value="">Select...</option>
+          <option>TD</option><option>A1</option><option>A2</option><option>DIR</option>
+          <option>AD</option><option>LEAD EVS</option><option>EVS 2</option><option>EVS 3</option>
+          <option>GFX</option><option>V1 SHADE</option><option>EIC</option><option>TECH MGR</option>
+          <option>RF ENG</option><option>UTIL</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Department</label>
+        <select id="crew-department">
+          <option value="">Select...</option>
+          <option>Truck</option><option>Audio booth</option><option>Field</option>
+          <option>Tape room</option><option>Graphics</option><option>Compound</option>
+          <option>Engineering</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Home Market</label>
+        <input type="text" id="crew-market" placeholder="e.g. Los Angeles, CA">
+      </div>
+      <div class="form-group">
+        <label>Tier</label>
+        <select id="crew-tier">
+          <option value="">Select...</option>
+          <option value="A-list">A-list</option>
+          <option value="B-list">B-list</option>
+          <option value="day-hire">Day-hire</option>
+        </select>
+      </div>
+      <div class="form-actions">
+        <button class="btn pri sm" id="btn-save-crew">Create</button>
+        <button class="btn sm" id="btn-cancel-crew">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="crew-loading" class="loading" style="display:none">Loading crew...</div>
+
+  <div class="tbl-wrap" id="crew-table-wrap" style="display:none">
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Position</th>
+          <th>Department</th>
+          <th>Home Market</th>
+          <th>Tier</th>
+        </tr>
+      </thead>
+      <tbody id="crew-body"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ---- MEMBERS ---- -->
+<div class="section" id="sec-members">
+  <div class="sec-h">
+    <h2>Members</h2>
+    <span class="n" id="members-count"></span>
+    <button class="btn sm" id="btn-new-member" style="margin-left:auto">+ Add Member</button>
+  </div>
+
+  <div id="no-acct-members" class="empty" style="display:none">
+    <b>No account selected</b>
+    Select an account from the Accounts tab first.
+  </div>
+
+  <div id="err-members" class="err-msg"></div>
+
+  <div class="inline-form" id="form-new-member">
+    <div class="form-title">New Member</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Name</label>
+        <input type="text" id="member-name" placeholder="e.g. Jane Doe">
+      </div>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="member-email" placeholder="e.g. jane@example.com">
+      </div>
+      <div class="form-group">
+        <label>Entity</label>
+        <select id="member-entity"><option value="">Select entity...</option></select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Role</label>
+        <select id="member-role">
+          <option value="">Select...</option>
+          <option value="admin">Admin</option>
+          <option value="desk_agent">Desk Agent</option>
+          <option value="desk_lead">Desk Lead</option>
+          <option value="coordinator">Coordinator</option>
+          <option value="viewer">Viewer</option>
+        </select>
+      </div>
+      <div class="form-actions">
+        <button class="btn pri sm" id="btn-save-member">Create</button>
+        <button class="btn sm" id="btn-cancel-member">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="members-loading" class="loading" style="display:none">Loading members...</div>
+
+  <div class="tbl-wrap" id="members-table-wrap" style="display:none">
+    <table>
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Email</th>
+          <th>Entity</th>
+          <th>Role</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="members-body"></tbody>
+    </table>
+  </div>
+</div>
+
+</div><!-- /content -->
+</div><!-- /main -->
+
+<script>
+(function(){
+"use strict";
+
+/* ============ HELPERS ============ */
+var $ = function(id){ return document.getElementById(id); };
+
+var selectedAccountId = null;
+var selectedAccountName = '';
+var selectedGameId = null;
+var crewCache = [];
+var entitiesCache = [];
+
+function showErr(id, msg){
+  var el = $(id);
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(function(){ el.classList.remove('show'); }, 6000);
+}
+
+function clearErr(id){ $(id).classList.remove('show'); }
+
+async function api(method, path, body){
+  var opts = { method: method, headers: {} };
+  if(body){
+    opts.headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(body);
+  }
+  var res = await fetch(path, opts);
+  if(!res.ok){
+    var text = '';
+    try{ var j = await res.json(); text = j.error || j.message || res.statusText; }
+    catch(e){ text = res.statusText; }
+    throw new Error(text);
+  }
+  if(res.status === 204) return null;
+  return res.json();
+}
+
+/* ============ NAVIGATION ============ */
+var navItems = document.querySelectorAll('.nav-item');
+navItems.forEach(function(btn){
+  btn.addEventListener('click', function(){
+    navItems.forEach(function(b){ b.classList.remove('active'); });
+    btn.classList.add('active');
+    var sec = btn.dataset.section;
+    document.querySelectorAll('.section').forEach(function(s){ s.classList.remove('active'); });
+    $('sec-' + sec).classList.add('active');
+
+    // check if account required
+    if(sec !== 'accounts' && !selectedAccountId){
+      $('no-acct-' + sec).style.display = '';
+    } else if(sec !== 'accounts'){
+      $('no-acct-' + sec).style.display = 'none';
+    }
+
+    if(sec === 'games' && selectedAccountId) loadGames();
+    if(sec === 'crew' && selectedAccountId) loadCrew();
+    if(sec === 'members' && selectedAccountId) loadMembers();
+  });
+});
+
+/* ============ ACCOUNTS ============ */
+async function loadAccounts(){
+  $('accounts-loading').style.display = '';
+  $('accounts-list').innerHTML = '';
+  clearErr('err-accounts');
+  try{
+    var data = await api('GET', '/api/admin/accounts');
+    var accounts = Array.isArray(data) ? data : (data.accounts || data.data || []);
+    $('accounts-count').textContent = accounts.length + ' account' + (accounts.length !== 1 ? 's' : '');
+    $('accounts-list').innerHTML = accounts.map(function(a){
+      var sel = a.id === selectedAccountId ? ' selected' : '';
+      return '<div class="acct-card' + sel + '" data-id="' + a.id + '" data-name="' + esc(a.name) + '">'
+        + '<div class="acct-name">' + esc(a.name) + '</div>'
+        + '<div class="acct-type">' + esc(a.type || '') + '</div></div>';
+    }).join('');
+
+    document.querySelectorAll('.acct-card').forEach(function(card){
+      card.addEventListener('click', function(){
+        selectAccount(card.dataset.id, card.dataset.name);
+      });
+    });
+  }catch(e){
+    showErr('err-accounts', 'Failed to load accounts: ' + e.message);
+  }
+  $('accounts-loading').style.display = 'none';
+}
+
+function selectAccount(id, name){
+  selectedAccountId = id;
+  selectedAccountName = name;
+
+  // update topbar
+  $('topbar-acct').style.display = '';
+  $('topbar-acct-name').textContent = name;
+
+  // update card selection
+  document.querySelectorAll('.acct-card').forEach(function(c){
+    c.classList.toggle('selected', c.dataset.id === id);
+  });
+
+  // hide no-account messages
+  ['games','crew','members'].forEach(function(s){
+    $('no-acct-' + s).style.display = 'none';
+  });
+
+  // load entities
+  loadEntities();
+
+  // reset game selection
+  selectedGameId = null;
+  $('assign-panel').style.display = 'none';
+}
+
+// Toggle form
+$('btn-new-acct').addEventListener('click', function(){
+  $('form-new-acct').classList.toggle('open');
+});
+$('btn-cancel-acct').addEventListener('click', function(){
+  $('form-new-acct').classList.remove('open');
+});
+$('btn-save-acct').addEventListener('click', async function(){
+  var name = $('acct-name').value.trim();
+  var type = $('acct-type').value;
+  if(!name){ showErr('err-accounts', 'Name is required.'); return; }
+  clearErr('err-accounts');
+  try{
+    await api('POST', '/api/admin/accounts', { name: name, type: type });
+    $('form-new-acct').classList.remove('open');
+    $('acct-name').value = '';
+    loadAccounts();
+  }catch(e){
+    showErr('err-accounts', 'Failed to create account: ' + e.message);
+  }
+});
+
+/* ============ ENTITIES ============ */
+async function loadEntities(){
+  if(!selectedAccountId) return;
+  $('entities-section').style.display = '';
+  $('entities-title').textContent = 'Entities for ' + selectedAccountName;
+  $('entities-list').innerHTML = '<div class="loading">Loading...</div>';
+  clearErr('err-entities');
+  try{
+    var data = await api('GET', '/api/admin/accounts/' + selectedAccountId + '/entities');
+    entitiesCache = Array.isArray(data) ? data : (data.entities || data.data || []);
+    renderEntities();
+    updateMemberEntityDropdown();
+  }catch(e){
+    showErr('err-entities', 'Failed to load entities: ' + e.message);
+    $('entities-list').innerHTML = '';
+  }
+}
+
+function renderEntities(){
+  if(entitiesCache.length === 0){
+    $('entities-list').innerHTML = '<div class="empty">No entities yet. Create one to get started.</div>';
+    return;
+  }
+  $('entities-list').innerHTML = entitiesCache.map(function(e){
+    return '<div class="entity-row"><span class="entity-type">' + esc(e.type || '') + '</span>'
+      + '<span class="entity-name">' + esc(e.name || e.id || '') + '</span></div>';
+  }).join('');
+}
+
+$('btn-new-entity').addEventListener('click', function(){
+  $('form-new-entity').classList.toggle('open');
+});
+$('btn-cancel-entity').addEventListener('click', function(){
+  $('form-new-entity').classList.remove('open');
+});
+$('btn-save-entity').addEventListener('click', async function(){
+  var name = $('entity-name').value.trim();
+  var type = $('entity-type').value;
+  if(!name){ showErr('err-entities', 'Name is required.'); return; }
+  clearErr('err-entities');
+  try{
+    await api('POST', '/api/admin/accounts/' + selectedAccountId + '/entities', { name: name, type: type });
+    $('form-new-entity').classList.remove('open');
+    $('entity-name').value = '';
+    loadEntities();
+  }catch(e){
+    showErr('err-entities', 'Failed to create entity: ' + e.message);
+  }
+});
+
+/* ============ GAMES ============ */
+async function loadGames(){
+  if(!selectedAccountId) return;
+  $('games-loading').style.display = '';
+  $('games-table-wrap').style.display = 'none';
+  clearErr('err-games');
+  try{
+    var data = await api('GET', '/api/admin/accounts/' + selectedAccountId + '/games');
+    var games = Array.isArray(data) ? data : (data.games || data.data || []);
+    $('games-count').textContent = games.length + ' game' + (games.length !== 1 ? 's' : '');
+    if(games.length === 0){
+      $('games-table-wrap').style.display = 'none';
+      $('games-loading').style.display = 'none';
+      return;
+    }
+    $('games-body').innerHTML = games.map(function(g){
+      var sel = g.id === selectedGameId ? ' sel' : '';
+      return '<tr class="clickable' + sel + '" data-id="' + g.id + '">'
+        + '<td><span class="tag pos">' + esc(g.network || '') + '</span></td>'
+        + '<td style="font-weight:600">' + esc(g.title || '') + '</td>'
+        + '<td>' + esc(g.venue || '') + '</td>'
+        + '<td class="mono" style="font-size:12px">' + esc(g.date || '') + (g.callTime ? ' ' + esc(g.callTime) : '') + '</td>'
+        + '<td class="mono">' + (g.crewCount != null ? g.crewCount : '--') + '</td></tr>';
+    }).join('');
+    $('games-table-wrap').style.display = '';
+
+    document.querySelectorAll('#games-body tr').forEach(function(row){
+      row.addEventListener('click', function(){
+        document.querySelectorAll('#games-body tr').forEach(function(r){ r.classList.remove('sel'); });
+        row.classList.add('sel');
+        selectedGameId = row.dataset.id;
+        var game = games.find(function(g){ return g.id === row.dataset.id; });
+        openAssignments(game);
+      });
+    });
+  }catch(e){
+    showErr('err-games', 'Failed to load games: ' + e.message);
+  }
+  $('games-loading').style.display = 'none';
+}
+
+$('btn-new-game').addEventListener('click', function(){
+  if(!selectedAccountId){
+    showErr('err-games', 'Select an account first.');
+    return;
+  }
+  $('form-new-game').classList.toggle('open');
+});
+$('btn-cancel-game').addEventListener('click', function(){
+  $('form-new-game').classList.remove('open');
+});
+$('btn-save-game').addEventListener('click', async function(){
+  var network = $('game-network').value;
+  var title = $('game-title').value.trim();
+  var venue = $('game-venue').value.trim();
+  var date = $('game-date').value;
+  var callTime = $('game-calltime').value;
+  if(!title){ showErr('err-games', 'Title is required.'); return; }
+  clearErr('err-games');
+  try{
+    await api('POST', '/api/admin/accounts/' + selectedAccountId + '/games', {
+      network: network, title: title, venue: venue, date: date, callTime: callTime
+    });
+    $('form-new-game').classList.remove('open');
+    $('game-title').value = '';
+    $('game-venue').value = '';
+    $('game-date').value = '';
+    $('game-calltime').value = '';
+    $('game-network').value = '';
+    loadGames();
+  }catch(e){
+    showErr('err-games', 'Failed to create game: ' + e.message);
+  }
+});
+
+/* ============ ASSIGNMENTS ============ */
+async function openAssignments(game){
+  $('assign-panel').style.display = '';
+  $('assign-game-title').textContent = (game ? game.title : 'Game') + ' - Crew Assignments';
+  loadAssignments();
+  loadCrewForAssign();
+}
+
+async function loadAssignments(){
+  if(!selectedAccountId || !selectedGameId) return;
+  clearErr('err-assign');
+  try{
+    var data = await api('GET', '/api/admin/accounts/' + selectedAccountId + '/games/' + selectedGameId + '/assignments');
+    var assignments = Array.isArray(data) ? data : (data.assignments || data.data || []);
+    $('assign-count').textContent = assignments.length + ' assigned';
+    if(assignments.length === 0){
+      $('assign-table-wrap').style.display = 'none';
+      $('assign-empty').style.display = '';
+    } else {
+      $('assign-empty').style.display = 'none';
+      $('assign-table-wrap').style.display = '';
+      $('assign-body').innerHTML = assignments.map(function(a){
+        return '<tr><td style="font-weight:600">' + esc(a.crewName || a.name || a.crewId || '') + '</td>'
+          + '<td><span class="tag pos">' + esc(a.position || '') + '</span></td>'
+          + '<td><button class="btn sm danger" data-aid="' + a.id + '">Remove</button></td></tr>';
+      }).join('');
+
+      document.querySelectorAll('#assign-body .btn.danger').forEach(function(btn){
+        btn.addEventListener('click', async function(){
+          var aid = btn.dataset.aid;
+          try{
+            await api('DELETE', '/api/admin/accounts/' + selectedAccountId + '/games/' + selectedGameId + '/assignments/' + aid);
+            loadAssignments();
+            loadGames();
+          }catch(e){
+            showErr('err-assign', 'Failed to remove: ' + e.message);
+          }
+        });
+      });
+    }
+  }catch(e){
+    showErr('err-assign', 'Failed to load assignments: ' + e.message);
+  }
+}
+
+async function loadCrewForAssign(){
+  if(!selectedAccountId) return;
+  try{
+    var data = await api('GET', '/api/admin/accounts/' + selectedAccountId + '/crew');
+    crewCache = Array.isArray(data) ? data : (data.crew || data.data || []);
+    var sel = $('assign-crew-select');
+    sel.innerHTML = '<option value="">Select crew...</option>' + crewCache.map(function(c){
+      return '<option value="' + c.id + '">' + esc(c.name) + ' (' + esc(c.position || '') + ')</option>';
+    }).join('');
+  }catch(e){/* silently fail */}
+}
+
+$('btn-assign').addEventListener('click', async function(){
+  var crewId = $('assign-crew-select').value;
+  var position = $('assign-pos-select').value;
+  if(!crewId){ showErr('err-assign', 'Select a crew member.'); return; }
+  if(!position){ showErr('err-assign', 'Select a position.'); return; }
+  clearErr('err-assign');
+  try{
+    await api('POST', '/api/admin/accounts/' + selectedAccountId + '/games/' + selectedGameId + '/assignments', {
+      crewId: crewId, position: position
+    });
+    $('assign-crew-select').value = '';
+    $('assign-pos-select').value = '';
+    loadAssignments();
+    loadGames();
+  }catch(e){
+    showErr('err-assign', 'Failed to assign: ' + e.message);
+  }
+});
+
+/* ============ CREW ============ */
+async function loadCrew(){
+  if(!selectedAccountId) return;
+  $('crew-loading').style.display = '';
+  $('crew-table-wrap').style.display = 'none';
+  clearErr('err-crew');
+  try{
+    var data = await api('GET', '/api/admin/accounts/' + selectedAccountId + '/crew');
+    var crew = Array.isArray(data) ? data : (data.crew || data.data || []);
+    crewCache = crew;
+    $('crew-count').textContent = crew.length + ' crew member' + (crew.length !== 1 ? 's' : '');
+    if(crew.length === 0){
+      $('crew-table-wrap').style.display = 'none';
+      $('crew-loading').style.display = 'none';
+      return;
+    }
+    $('crew-body').innerHTML = crew.map(function(c){
+      var tierCls = c.tier === 'A-list' ? 'pos' : 'tier';
+      return '<tr><td style="font-weight:600">' + esc(c.name || '') + '</td>'
+        + '<td><span class="tag pos">' + esc(c.position || '') + '</span></td>'
+        + '<td>' + esc(c.department || '') + '</td>'
+        + '<td>' + esc(c.homeMarket || '') + '</td>'
+        + '<td><span class="tag ' + tierCls + '">' + esc(c.tier || '') + '</span></td></tr>';
+    }).join('');
+    $('crew-table-wrap').style.display = '';
+  }catch(e){
+    showErr('err-crew', 'Failed to load crew: ' + e.message);
+  }
+  $('crew-loading').style.display = 'none';
+}
+
+$('btn-new-crew').addEventListener('click', function(){
+  if(!selectedAccountId){
+    showErr('err-crew', 'Select an account first.');
+    return;
+  }
+  $('form-new-crew').classList.toggle('open');
+});
+$('btn-cancel-crew').addEventListener('click', function(){
+  $('form-new-crew').classList.remove('open');
+});
+$('btn-save-crew').addEventListener('click', async function(){
+  var name = $('crew-name').value.trim();
+  var position = $('crew-position').value;
+  var department = $('crew-department').value;
+  var homeMarket = $('crew-market').value.trim();
+  var tier = $('crew-tier').value;
+  if(!name){ showErr('err-crew', 'Name is required.'); return; }
+  clearErr('err-crew');
+  try{
+    await api('POST', '/api/admin/accounts/' + selectedAccountId + '/crew', {
+      name: name, position: position, department: department, homeMarket: homeMarket, tier: tier
+    });
+    $('form-new-crew').classList.remove('open');
+    $('crew-name').value = '';
+    $('crew-position').value = '';
+    $('crew-department').value = '';
+    $('crew-market').value = '';
+    $('crew-tier').value = '';
+    loadCrew();
+  }catch(e){
+    showErr('err-crew', 'Failed to create crew: ' + e.message);
+  }
+});
+
+/* ============ MEMBERS ============ */
+async function loadMembers(){
+  if(!selectedAccountId) return;
+  $('members-loading').style.display = '';
+  $('members-table-wrap').style.display = 'none';
+  clearErr('err-members');
+  try{
+    var data = await api('GET', '/api/admin/accounts/' + selectedAccountId + '/members');
+    var members = Array.isArray(data) ? data : (data.members || data.data || []);
+    $('members-count').textContent = members.length + ' member' + (members.length !== 1 ? 's' : '');
+    if(members.length === 0){
+      $('members-table-wrap').style.display = 'none';
+      $('members-loading').style.display = 'none';
+      return;
+    }
+    $('members-body').innerHTML = members.map(function(m){
+      return '<tr><td style="font-weight:600">' + esc(m.name || '') + '</td>'
+        + '<td class="mono" style="font-size:12px">' + esc(m.email || '') + '</td>'
+        + '<td>' + esc(m.entityName || m.entity || m.entityId || '') + '</td>'
+        + '<td><span class="tag role">' + esc(m.role || '') + '</span></td>'
+        + '<td><button class="btn sm danger" data-mid="' + m.id + '">Remove</button></td></tr>';
+    }).join('');
+    $('members-table-wrap').style.display = '';
+
+    document.querySelectorAll('#members-body .btn.danger').forEach(function(btn){
+      btn.addEventListener('click', async function(){
+        var mid = btn.dataset.mid;
+        try{
+          await api('DELETE', '/api/admin/accounts/' + selectedAccountId + '/members/' + mid);
+          loadMembers();
+        }catch(e){
+          showErr('err-members', 'Failed to remove member: ' + e.message);
+        }
+      });
+    });
+  }catch(e){
+    showErr('err-members', 'Failed to load members: ' + e.message);
+  }
+  $('members-loading').style.display = 'none';
+}
+
+function updateMemberEntityDropdown(){
+  var sel = $('member-entity');
+  sel.innerHTML = '<option value="">Select entity...</option>' + entitiesCache.map(function(e){
+    return '<option value="' + e.id + '">' + esc(e.name || e.id || '') + ' (' + esc(e.type || '') + ')</option>';
+  }).join('');
+}
+
+$('btn-new-member').addEventListener('click', function(){
+  if(!selectedAccountId){
+    showErr('err-members', 'Select an account first.');
+    return;
+  }
+  // ensure entity dropdown is populated
+  if(entitiesCache.length > 0) updateMemberEntityDropdown();
+  $('form-new-member').classList.toggle('open');
+});
+$('btn-cancel-member').addEventListener('click', function(){
+  $('form-new-member').classList.remove('open');
+});
+$('btn-save-member').addEventListener('click', async function(){
+  var name = $('member-name').value.trim();
+  var email = $('member-email').value.trim();
+  var entityId = $('member-entity').value;
+  var role = $('member-role').value;
+  if(!name || !email){ showErr('err-members', 'Name and email are required.'); return; }
+  if(!role){ showErr('err-members', 'Role is required.'); return; }
+  clearErr('err-members');
+  try{
+    await api('POST', '/api/admin/accounts/' + selectedAccountId + '/members', {
+      name: name, email: email, entityId: entityId, role: role
+    });
+    $('form-new-member').classList.remove('open');
+    $('member-name').value = '';
+    $('member-email').value = '';
+    $('member-entity').value = '';
+    $('member-role').value = '';
+    loadMembers();
+  }catch(e){
+    showErr('err-members', 'Failed to create member: ' + e.message);
+  }
+});
+
+/* ============ UTILS ============ */
+function esc(s){
+  if(!s) return '';
+  var d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+/* ============ BOOT ============ */
+loadAccounts();
+
+})();
+</script>
+</body>
+</html>

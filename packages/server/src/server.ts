@@ -141,7 +141,7 @@ export async function createServer(opts: ServerOptions = {}) {
     // CORS for API routes
     if (path.startsWith('/api/')) {
       res.setHeader('Access-Control-Allow-Origin', '*');
-      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+      res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
       res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
       if (req.method === 'OPTIONS') {
         res.writeHead(204);
@@ -215,10 +215,26 @@ export async function createServer(opts: ServerOptions = {}) {
       return;
     }
 
+    // Admin API routes
+    if (path.startsWith('/api/admin/')) {
+      try {
+        const { handleAdminRoutes } = await import('./admin-api.js');
+        const handled = await handleAdminRoutes(req, res, firestore);
+        if (handled) return;
+      } catch {
+        // admin-api module not available
+      }
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Not found' }));
+      return;
+    }
+
     // Static files
     let filePath: string;
     if (path === '/board' || path === '/board.html') {
       filePath = join(ROOT, 'packages', 'board', 'index.html');
+    } else if (path === '/admin' || path === '/admin.html') {
+      filePath = join(ROOT, 'packages', 'board', 'admin.html');
     } else if (path === '/' || path === '/index.html') {
       filePath = join(ROOT, 'site', 'index.html');
     } else {
