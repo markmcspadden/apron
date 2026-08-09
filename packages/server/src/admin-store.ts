@@ -26,7 +26,7 @@ interface CollectionRef {
 interface DocRef {
   readonly id: string;
   collection(path: string): CollectionRef;
-  set(data: Record<string, unknown>): Promise<unknown>;
+  set(data: Record<string, unknown>, options?: { merge?: boolean }): Promise<unknown>;
   get(): Promise<DocSnap>;
   update(data: Record<string, unknown>): Promise<unknown>;
   delete(): Promise<unknown>;
@@ -74,6 +74,18 @@ export interface Member {
   updatedAt: string;
 }
 
+export type GameType = 'baseball' | 'hockey' | 'football' | 'basketball' | 'soccer' | 'entertainment';
+
+/** Default durations by sport/show type (minutes). */
+export const GAME_TYPE_DEFAULTS: Record<GameType, { duration: number; strike: number }> = {
+  baseball:      { duration: 180, strike: 75 },
+  hockey:        { duration: 150, strike: 60 },
+  football:      { duration: 210, strike: 90 },
+  basketball:    { duration: 150, strike: 45 },
+  soccer:        { duration: 120, strike: 45 },
+  entertainment: { duration: 180, strike: 90 },
+};
+
 export interface Game {
   id: string;
   accountId: string;
@@ -83,8 +95,53 @@ export interface Game {
   date: string;
   callTime?: string;
   crewCount?: number;
+
+  // ---- timing model ----
+  gameType?: GameType;
+  /** Game/show start time (HH:MM, 24h local). */
+  startTime?: string;
+  /** Override expected duration in minutes (otherwise uses gameType default). */
+  expectedDuration?: number;
+  /** Override expected end time (HH:MM). Takes precedence over startTime + duration. */
+  expectedEndTime?: string;
+  /** Strike / load-out duration in minutes (override; otherwise gameType default). */
+  strikeDuration?: number;
+  /** Drive from venue to transport hub in minutes. */
+  venueToTransport?: number;
+  /** Drive from transport hub to overnight location in minutes. */
+  transportDuration?: number;
+  /** Departure airport IATA code (e.g. 'CLE'). */
+  departureAirport?: string;
+  /** Label for overnight stop (e.g. 'Airport hotel', 'Team hotel'). */
+  overnightLabel?: string;
+  /** Lobby call time for next day (HH:MM, 24h local). */
+  lobbyCallTime?: string;
+  /** Minimum crew rest in hours (NABET default: 8). */
+  minRestHours?: number;
+
+  // ---- live monitoring ----
+  /** ESPN event ID for live score monitoring (numeric string). */
+  espnEventId?: string;
+
+  /**
+   * Lightweight agent status summary — uniform shape for every agent.
+   * The game doc answers "which agents are running?" at a glance.
+   * Agent-specific data lives in the `agents` subcollection.
+   */
+  agents?: Partial<Record<import('@apron/types').AgentName, AgentAssignment>>;
+
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * Uniform agent lifecycle on the game document — same three fields
+ * regardless of whether it's SPOTTER, TRAFFIC, ADVANCE, etc.
+ */
+export interface AgentAssignment {
+  status: 'active' | 'idle' | 'done';
+  startedAt: string;
+  stoppedAt?: string;
 }
 
 export interface CrewRecord {
@@ -132,20 +189,11 @@ function docToRecord(doc: DocSnap): Record<string, unknown> {
   return result;
 }
 
-/**
- * Dynamic module specifiers — using variables prevents TypeScript from
- * attempting static module resolution against firebase-admin, which is only
- * a transitive dependency of the server package under strict pnpm hoisting.
- */
-const FIRESTORE_MOD = 'firebase-admin/firestore';
-const APP_MOD = 'firebase-admin/app';
-
-/** Get `FieldValue.serverTimestamp()` from the dynamically-imported SDK. */
-async function serverTimestamp(): Promise<unknown> {
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
-  const { FieldValue } = await import(FIRESTORE_MOD);
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call
-  return FieldValue.serverTimestamp();
+/** ISO timestamp for Firestore records — we use plain strings rather than
+ *  FieldValue.serverTimestamp() because firebase-admin isn't directly
+ *  resolvable from packages/server/ under pnpm strict hoisting. */
+function serverTimestamp(): string {
+  return new Date().toISOString();
 }
 
 // ---------------------------------------------------------------------------
@@ -164,27 +212,22 @@ export class AdminStore {
   private readonly memCrew = new Map<string, Map<string, CrewRecord>>();
   // Assignments keyed by "accountId:gameId"
   private readonly memAssignments = new Map<string, Map<string, Assignment>>();
+  // Agent records keyed by "accountId:gameId" → Map<agentName, record>
+  private readonly memAgentRecords = new Map<string, Map<string, Record<string, unknown>>>();
 
   constructor(firestoreStore: FirestoreStore | null) {
-    if (firestoreStore && firestoreStore.isEnabled()) {
-      this.dbReady = this.initFirestore();
+    if (firestoreStore) {
+      // Get the Firestore db instance from FirestoreStore — we can't import
+      // firebase-admin directly because pnpm strict hoisting makes it
+      // unreachable from packages/server/.
+      this.dbReady = firestoreStore.getDb().then(db => {
+        if (db) {
+          this.db = db as unknown as FirestoreDb;
+        }
+        return this.db;
+      });
     } else {
       this.dbReady = Promise.resolve(null);
-    }
-  }
-
-  private async initFirestore(): Promise<FirestoreDb | null> {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
-      const { getFirestore } = await import(FIRESTORE_MOD);
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
-      const { getApp } = await import(APP_MOD);
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-call
-      const db = getFirestore(getApp()) as unknown as FirestoreDb;
-      this.db = db;
-      return db;
-    } catch {
-      return null;
     }
   }
 
@@ -205,8 +248,8 @@ export class AdminStore {
     return [...this.memAccounts.values()];
   }
 
-  async createAccount(data: { name: string; type?: string }): Promise<Account> {
-    const id = randomUUID();
+  async createAccount(data: { name: string; type?: string; id?: string }): Promise<Account> {
+    const id = data.id ?? randomUUID();
     const now = new Date().toISOString();
 
     const db = await this.ready();
@@ -261,9 +304,9 @@ export class AdminStore {
 
   async createEntity(
     accountId: string,
-    data: { type: 'tmc' | 'production'; name: string },
+    data: { type: 'tmc' | 'production'; name: string; id?: string },
   ): Promise<Entity> {
-    const id = randomUUID();
+    const id = data.id ?? randomUUID();
     const now = new Date().toISOString();
 
     const db = await this.ready();
@@ -318,9 +361,9 @@ export class AdminStore {
 
   async createMember(
     accountId: string,
-    data: { entityId: string; role: string; email: string; name: string },
+    data: { entityId: string; role: string; email: string; name: string; id?: string },
   ): Promise<Member> {
-    const id = randomUUID();
+    const id = data.id ?? randomUUID();
     const now = new Date().toISOString();
 
     const db = await this.ready();
@@ -397,9 +440,22 @@ export class AdminStore {
       date: string;
       callTime?: string;
       crewCount?: number;
+      id?: string;
+      gameType?: GameType;
+      startTime?: string;
+      expectedDuration?: number;
+      expectedEndTime?: string;
+      strikeDuration?: number;
+      venueToTransport?: number;
+      transportDuration?: number;
+      departureAirport?: string;
+      overnightLabel?: string;
+      lobbyCallTime?: string;
+      minRestHours?: number;
+      espnEventId?: string;
     },
   ): Promise<Game> {
-    const id = randomUUID();
+    const id = data.id ?? randomUUID();
     const now = new Date().toISOString();
 
     const db = await this.ready();
@@ -414,8 +470,16 @@ export class AdminStore {
         createdAt: ts,
         updatedAt: ts,
       };
-      if (data.callTime != null) record['callTime'] = data.callTime;
-      if (data.crewCount != null) record['crewCount'] = data.crewCount;
+      // Optional fields — write to Firestore only if provided
+      const optionalFields = [
+        'callTime', 'crewCount', 'gameType', 'startTime', 'expectedDuration',
+        'expectedEndTime', 'strikeDuration', 'venueToTransport', 'transportDuration',
+        'departureAirport', 'overnightLabel', 'lobbyCallTime', 'minRestHours',
+        'espnEventId',
+      ] as const;
+      for (const field of optionalFields) {
+        if (data[field] != null) record[field] = data[field];
+      }
       await db.collection('accounts').doc(accountId).collection('games').doc(id).set(record);
       return { id, accountId, ...data, createdAt: now, updatedAt: now };
     }
@@ -471,6 +535,168 @@ export class AdminStore {
     return updated;
   }
 
+  /**
+   * Update a single agent's lifecycle status on the game document.
+   * Uses Firestore dot-notation to avoid clobbering sibling agent entries.
+   */
+  async setAgentAssignment(
+    accountId: string,
+    gameId: string,
+    agentName: import('@apron/types').AgentName,
+    assignment: AgentAssignment,
+  ): Promise<void> {
+    const db = await this.ready();
+    if (db) {
+      const ref = db
+        .collection('accounts').doc(accountId)
+        .collection('games').doc(gameId);
+      // Dot-notation update: `agents.SPOTTER` won't overwrite `agents.TRAFFIC`
+      await ref.update({
+        [`agents.${agentName}`]: assignment,
+        updatedAt: serverTimestamp(),
+      });
+      return;
+    }
+    // In-memory fallback
+    const games = this.memGames.get(accountId);
+    const existing = games?.get(gameId);
+    if (existing) {
+      existing.agents = { ...existing.agents, [agentName]: assignment };
+      existing.updatedAt = new Date().toISOString();
+    }
+  }
+
+  async deleteGame(accountId: string, gameId: string): Promise<boolean> {
+    const db = await this.ready();
+    if (db) {
+      const ref = db
+        .collection('accounts')
+        .doc(accountId)
+        .collection('games')
+        .doc(gameId);
+      const doc = await ref.get();
+      if (!doc.exists) return false;
+      // Delete assignments subcollection first
+      const assignments = await ref.collection('assignments').get();
+      for (const a of assignments.docs) {
+        await db
+          .collection('accounts')
+          .doc(accountId)
+          .collection('games')
+          .doc(gameId)
+          .collection('assignments')
+          .doc(a.id)
+          .delete();
+      }
+      await ref.delete();
+      return true;
+    }
+
+    const games = this.memGames.get(accountId);
+    if (!games?.has(gameId)) return false;
+    games.delete(gameId);
+    // Also clean up in-memory assignments
+    const key = this.assignmentKey(accountId, gameId);
+    this.memAssignments.delete(key);
+    return true;
+  }
+
+  /**
+   * List games across all accounts where a given agent has one of the
+   * specified statuses (e.g. SPOTTER with ['done']).
+   */
+  async listGamesByAgentStatus(
+    agentName: import('@apron/types').AgentName,
+    statuses: AgentAssignment['status'][],
+  ): Promise<Game[]> {
+    const results: Game[] = [];
+    const accounts = await this.listAccounts();
+    for (const acct of accounts) {
+      const games = await this.listGames(acct.id);
+      for (const g of games) {
+        const entry = g.agents?.[agentName];
+        if (entry && statuses.includes(entry.status)) {
+          results.push({ ...g, accountId: acct.id });
+        }
+      }
+    }
+    return results;
+  }
+
+  // -------------------------------------------------------------------
+  // Agent records (subcollection per game)
+  // Path: accounts/{acctId}/games/{gameId}/agents/{agentName}
+  // -------------------------------------------------------------------
+
+  /**
+   * Get or create an agent record for a game. Each agent gets one
+   * document keyed by its name (SPOTTER, TRAFFIC, etc.) with
+   * agent-specific fields.
+   */
+  async getAgentRecord(
+    accountId: string,
+    gameId: string,
+    agentName: string,
+  ): Promise<Record<string, unknown> | null> {
+    const db = await this.ready();
+    if (db) {
+      const doc = await db
+        .collection('accounts').doc(accountId)
+        .collection('games').doc(gameId)
+        .collection('agents').doc(agentName)
+        .get();
+      return doc.exists ? docToRecord(doc) : null;
+    }
+    const key = `${accountId}:${gameId}`;
+    return this.memAgentRecords.get(key)?.get(agentName) ?? null;
+  }
+
+  /**
+   * Write (upsert) an agent record. Merges with existing data.
+   */
+  async setAgentRecord(
+    accountId: string,
+    gameId: string,
+    agentName: string,
+    data: Record<string, unknown>,
+  ): Promise<void> {
+    const db = await this.ready();
+    if (db) {
+      const ref = db
+        .collection('accounts').doc(accountId)
+        .collection('games').doc(gameId)
+        .collection('agents').doc(agentName);
+      await ref.set({ ...data, agent: agentName, updatedAt: serverTimestamp() }, { merge: true });
+      return;
+    }
+    const key = `${accountId}:${gameId}`;
+    if (!this.memAgentRecords.has(key)) {
+      this.memAgentRecords.set(key, new Map());
+    }
+    const existing = this.memAgentRecords.get(key)!.get(agentName) ?? {};
+    this.memAgentRecords.get(key)!.set(agentName, { ...existing, ...data, agent: agentName });
+  }
+
+  /**
+   * List all agent records for a game.
+   */
+  async listAgentRecords(
+    accountId: string,
+    gameId: string,
+  ): Promise<Array<Record<string, unknown>>> {
+    const db = await this.ready();
+    if (db) {
+      const snap = await db
+        .collection('accounts').doc(accountId)
+        .collection('games').doc(gameId)
+        .collection('agents')
+        .get();
+      return snap.docs.map(d => docToRecord(d));
+    }
+    const key = `${accountId}:${gameId}`;
+    return [...(this.memAgentRecords.get(key)?.values() ?? [])];
+  }
+
   // -------------------------------------------------------------------
   // Crew
   // -------------------------------------------------------------------
@@ -496,9 +722,10 @@ export class AdminStore {
       department: string;
       homeMarket: string;
       tier?: string;
+      id?: string;
     },
   ): Promise<CrewRecord> {
-    const id = randomUUID();
+    const id = data.id ?? randomUUID();
     const now = new Date().toISOString();
 
     const db = await this.ready();

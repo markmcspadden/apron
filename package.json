@@ -7,7 +7,7 @@
   "scripts": {
     "build": "tsc -b",
     "demo": "tsx packages/server/src/demo.ts",
-    "dev": "tsx watch packages/server/src/index.ts",
+    "dev": "set -a && . ./.env 2>/dev/null; set +a && tsx watch packages/server/src/index.ts",
     "lint": "eslint . --ext .ts",
     "typecheck": "tsc --noEmit"
   },

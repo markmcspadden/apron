@@ -1,0 +1,288 @@
+<svg viewBox="0 0 940 1080" xmlns="http://www.w3.org/2000/svg" role="img" style="max-width:940px;width:100%">
+  <title>Apron Architecture Overview</title>
+  <desc>10,000-foot view of the Apron monorepo: UI layer, server, agents, integrations, and data stores.</desc>
+
+  <style>
+    @media (prefers-color-scheme: light) {
+      :root { --bg: #f5f4f0; --bg2: #eae8e3; --fg: #2c2a26; --fg2: #6b6860; --border: #d4d1ca; --accent-blue: #2563eb; --accent-amber: #b45309; --accent-green: #16a34a; --accent-purple: #7c3aed; --accent-red: #dc2626; --accent-blue-bg: #eff6ff; --accent-amber-bg: #fffbeb; --accent-green-bg: #f0fdf4; --accent-purple-bg: #f5f3ff; --accent-red-bg: #fef2f2; --accent-gray-bg: #f8f7f5; --flow: #94a3b8; --flow-text: #64748b; }
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #16181d; --bg2: #1e2028; --fg: #e2e0dc; --fg2: #8a8780; --border: #2e3038; --accent-blue: #60a5fa; --accent-amber: #fbbf24; --accent-green: #4ade80; --accent-purple: #a78bfa; --accent-red: #f87171; --accent-blue-bg: #1a2332; --accent-amber-bg: #261f10; --accent-green-bg: #12261a; --accent-purple-bg: #1e1832; --accent-red-bg: #261616; --accent-gray-bg: #1c1e24; --flow: #475569; --flow-text: #64748b; }
+    }
+    :root[data-theme="light"] { --bg: #f5f4f0; --bg2: #eae8e3; --fg: #2c2a26; --fg2: #6b6860; --border: #d4d1ca; --accent-blue: #2563eb; --accent-amber: #b45309; --accent-green: #16a34a; --accent-purple: #7c3aed; --accent-red: #dc2626; --accent-blue-bg: #eff6ff; --accent-amber-bg: #fffbeb; --accent-green-bg: #f0fdf4; --accent-purple-bg: #f5f3ff; --accent-red-bg: #fef2f2; --accent-gray-bg: #f8f7f5; --flow: #94a3b8; --flow-text: #64748b; }
+    :root[data-theme="dark"] { --bg: #16181d; --bg2: #1e2028; --fg: #e2e0dc; --fg2: #8a8780; --border: #2e3038; --accent-blue: #60a5fa; --accent-amber: #fbbf24; --accent-green: #4ade80; --accent-purple: #a78bfa; --accent-red: #f87171; --accent-blue-bg: #1a2332; --accent-amber-bg: #261f10; --accent-green-bg: #12261a; --accent-purple-bg: #1e1832; --accent-red-bg: #261616; --accent-gray-bg: #1c1e24; --flow: #475569; --flow-text: #64748b; }
+
+    text { font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace; }
+    .title { font-size: 15px; font-weight: 700; fill: var(--fg); letter-spacing: 0.04em; }
+    .subtitle { font-size: 10px; fill: var(--fg2); letter-spacing: 0.02em; }
+    .label { font-size: 11px; font-weight: 600; fill: var(--fg); }
+    .label-sm { font-size: 9.5px; fill: var(--fg2); }
+    .label-xs { font-size: 8.5px; fill: var(--fg2); letter-spacing: 0.03em; }
+    .pkg { font-size: 9px; fill: var(--fg2); }
+    .tag { font-size: 8px; letter-spacing: 0.06em; text-transform: uppercase; font-weight: 600; }
+    .flow-label { font-size: 8.5px; fill: var(--flow-text); font-style: italic; }
+  </style>
+
+  <!-- Background -->
+  <rect width="940" height="1080" rx="8" fill="var(--bg)"/>
+
+  <!-- Title -->
+  <text x="470" y="36" text-anchor="middle" class="title">APRON — ARCHITECTURE</text>
+  <text x="470" y="52" text-anchor="middle" class="subtitle">pnpm monorepo · TypeScript ESM · Node 20</text>
+
+  <!-- UI LAYER -->
+  <rect x="20" y="70" width="900" height="120" rx="6" fill="var(--accent-blue-bg)" stroke="var(--accent-blue)" stroke-width="1" stroke-opacity="0.4"/>
+  <text x="36" y="88" class="tag" fill="var(--accent-blue)">UI · packages/board + site/</text>
+
+  <rect x="36" y="98" width="130" height="42" rx="4" fill="var(--bg)" stroke="var(--border)" stroke-width="0.75"/>
+  <text x="101" y="116" text-anchor="middle" class="label">board</text>
+  <text x="101" y="130" text-anchor="middle" class="label-xs">index.html · ops dashboard</text>
+
+  <rect x="178" y="98" width="130" height="42" rx="4" fill="var(--bg)" stroke="var(--border)" stroke-width="0.75"/>
+  <text x="243" y="116" text-anchor="middle" class="label">admin</text>
+  <text x="243" y="130" text-anchor="middle" class="label-xs">admin.html · CRUD console</text>
+
+  <rect x="320" y="98" width="130" height="42" rx="4" fill="var(--bg)" stroke="var(--border)" stroke-width="0.75"/>
+  <text x="385" y="116" text-anchor="middle" class="label">demo</text>
+  <text x="385" y="130" text-anchor="middle" class="label-xs">/demo · fixture auto-play</text>
+
+  <rect x="462" y="98" width="130" height="42" rx="4" fill="var(--bg)" stroke="var(--border)" stroke-width="0.75"/>
+  <text x="527" y="116" text-anchor="middle" class="label">login</text>
+  <text x="527" y="130" text-anchor="middle" class="label-xs">Firebase Auth · Google SSO</text>
+
+  <rect x="604" y="98" width="130" height="42" rx="4" fill="var(--bg)" stroke="var(--border)" stroke-width="0.75"/>
+  <text x="669" y="116" text-anchor="middle" class="label">dashboard</text>
+  <text x="669" y="130" text-anchor="middle" class="label-xs">/me identity · role-based</text>
+
+  <rect x="746" y="98" width="162" height="42" rx="4" fill="var(--bg)" stroke="var(--border)" stroke-width="0.75"/>
+  <text x="827" y="116" text-anchor="middle" class="label">marketing</text>
+  <text x="827" y="130" text-anchor="middle" class="label-xs">site/ · static landing page</text>
+
+  <text x="470" y="176" text-anchor="middle" class="label-xs">vanilla HTML/CSS/JS · no build step · no framework</text>
+
+  <line x1="243" y1="190" x2="243" y2="218" stroke="var(--flow)" stroke-width="1.5" stroke-dasharray="4 3"/>
+  <text x="256" y="210" class="flow-label">fetch /api/*</text>
+  <line x1="101" y1="190" x2="101" y2="218" stroke="var(--flow)" stroke-width="1.5" stroke-dasharray="4 3"/>
+  <text x="114" y="210" class="flow-label">WebSocket</text>
+
+  <!-- SERVER LAYER -->
+  <rect x="20" y="218" width="900" height="148" rx="6" fill="var(--accent-amber-bg)" stroke="var(--accent-amber)" stroke-width="1" stroke-opacity="0.4"/>
+  <text x="36" y="236" class="tag" fill="var(--accent-amber)">SERVER · packages/server/</text>
+
+  <rect x="36" y="246" width="200" height="52" rx="4" fill="var(--bg)" stroke="var(--border)" stroke-width="0.75"/>
+  <text x="136" y="264" text-anchor="middle" class="label">server.ts</text>
+  <text x="136" y="278" text-anchor="middle" class="label-xs">HTTP + WebSocket · static files</text>
+  <text x="136" y="290" text-anchor="middle" class="label-xs">CORS · auth · event pipeline</text>
+
+  <rect x="250" y="246" width="200" height="52" rx="4" fill="var(--bg)" stroke="var(--border)" stroke-width="0.75"/>
+  <text x="350" y="264" text-anchor="middle" class="label">admin-api.ts</text>
+  <text x="350" y="278" text-anchor="middle" class="label-xs">/api/admin/* · 18 REST routes</text>
+  <text x="350" y="290" text-anchor="middle" class="label-xs">accounts/games/crew/assignments</text>
+
+  <rect x="464" y="246" width="200" height="52" rx="4" fill="var(--bg)" stroke="var(--border)" stroke-width="0.75"/>
+  <text x="564" y="264" text-anchor="middle" class="label">admin-store.ts</text>
+  <text x="564" y="278" text-anchor="middle" class="label-xs">Firestore ↔ in-memory dual path</text>
+  <text x="564" y="290" text-anchor="middle" class="label-xs">game timing · chain computation</text>
+
+  <rect x="678" y="246" width="230" height="52" rx="4" fill="var(--bg)" stroke="var(--border)" stroke-width="0.75"/>
+  <text x="793" y="264" text-anchor="middle" class="label">audit.ts</text>
+  <text x="793" y="278" text-anchor="middle" class="label-xs">sequential append · event fan-out</text>
+  <text x="793" y="290" text-anchor="middle" class="label-xs">→ Grafana · Clickhouse · Firestore</text>
+
+  <rect x="36" y="310" width="140" height="32" rx="4" fill="var(--bg)" stroke="var(--accent-amber)" stroke-width="0.75" stroke-opacity="0.5"/>
+  <text x="106" y="330" text-anchor="middle" class="label-sm">index.ts — pnpm dev</text>
+
+  <rect x="190" y="310" width="170" height="32" rx="4" fill="var(--bg)" stroke="var(--accent-amber)" stroke-width="0.75" stroke-opacity="0.5"/>
+  <text x="275" y="330" text-anchor="middle" class="label-sm">demo.ts — pnpm demo</text>
+
+  <text x="470" y="355" text-anchor="middle" class="label-xs">Express-free raw node:http · ws library · no build step</text>
+
+  <line x1="200" y1="366" x2="200" y2="395" stroke="var(--flow)" stroke-width="1.5" stroke-dasharray="4 3"/>
+  <text x="213" y="386" class="flow-label">dispatch(agent, step)</text>
+
+  <line x1="700" y1="366" x2="700" y2="395" stroke="var(--flow)" stroke-width="1.5" stroke-dasharray="4 3"/>
+  <text x="713" y="386" class="flow-label">event fan-out</text>
+
+  <!-- ORCHESTRATOR + AGENTS -->
+  <rect x="20" y="395" width="430" height="260" rx="6" fill="var(--accent-green-bg)" stroke="var(--accent-green)" stroke-width="1" stroke-opacity="0.4"/>
+  <text x="36" y="413" class="tag" fill="var(--accent-green)">ORCHESTRATOR + AGENTS</text>
+
+  <rect x="36" y="423" width="195" height="70" rx="4" fill="var(--bg)" stroke="var(--border)" stroke-width="0.75"/>
+  <text x="133" y="441" text-anchor="middle" class="label">orchestrator/</text>
+  <text x="133" y="455" text-anchor="middle" class="label-xs">MessageBus · EventEmitter</text>
+  <text x="133" y="467" text-anchor="middle" class="label-xs">AgentRuntime · BaseAgent</text>
+  <text x="133" y="479" text-anchor="middle" class="label-xs">scenario playback · 2.9s interval</text>
+
+  <rect x="243" y="423" width="195" height="70" rx="4" fill="var(--bg)" stroke="var(--border)" stroke-width="0.75"/>
+  <text x="340" y="441" text-anchor="middle" class="label">credentials/</text>
+  <text x="340" y="455" text-anchor="middle" class="label-xs">CredentialBroker · 24h TTL</text>
+  <text x="340" y="467" text-anchor="middle" class="label-xs">CAPABILITY_MATRIX</text>
+  <text x="340" y="479" text-anchor="middle" class="label-xs">21 capabilities · 3 roles</text>
+
+  <text x="36" y="510" class="label-xs" fill="var(--accent-green)">READERS — observe, never act</text>
+
+  <rect x="36" y="516" width="94" height="38" rx="3" fill="var(--bg)" stroke="var(--accent-green)" stroke-width="0.75" stroke-opacity="0.5"/>
+  <text x="83" y="531" text-anchor="middle" class="label" font-size="10">SPOTTER</text>
+  <text x="83" y="543" text-anchor="middle" class="label-xs">game + weather</text>
+
+  <rect x="138" y="516" width="94" height="38" rx="3" fill="var(--bg)" stroke="var(--accent-green)" stroke-width="0.75" stroke-opacity="0.5"/>
+  <text x="185" y="531" text-anchor="middle" class="label" font-size="10">TRAFFIC</text>
+  <text x="185" y="543" text-anchor="middle" class="label-xs">carrier + ground</text>
+
+  <rect x="240" y="516" width="94" height="38" rx="3" fill="var(--bg)" stroke="var(--accent-green)" stroke-width="0.75" stroke-opacity="0.5"/>
+  <text x="287" y="531" text-anchor="middle" class="label" font-size="10">CUSTOMS</text>
+  <text x="287" y="543" text-anchor="middle" class="label-xs">border + carnet</text>
+
+  <text x="36" y="572" class="label-xs" fill="var(--accent-green)">STATE — read + write constraints</text>
+
+  <rect x="36" y="578" width="94" height="38" rx="3" fill="var(--bg)" stroke="var(--accent-green)" stroke-width="0.75" stroke-opacity="0.5"/>
+  <text x="83" y="593" text-anchor="middle" class="label" font-size="10">ADVANCE</text>
+  <text x="83" y="605" text-anchor="middle" class="label-xs">roster + provenance</text>
+
+  <rect x="138" y="578" width="94" height="38" rx="3" fill="var(--bg)" stroke="var(--accent-green)" stroke-width="0.75" stroke-opacity="0.5"/>
+  <text x="185" y="593" text-anchor="middle" class="label" font-size="10">WRANGLER</text>
+  <text x="185" y="605" text-anchor="middle" class="label-xs">crew confirmation</text>
+
+  <rect x="240" y="578" width="94" height="38" rx="3" fill="var(--bg)" stroke="var(--accent-green)" stroke-width="0.75" stroke-opacity="0.5"/>
+  <text x="287" y="593" text-anchor="middle" class="label" font-size="10">STEWARD</text>
+  <text x="287" y="605" text-anchor="middle" class="label-xs">rules + rest checks</text>
+
+  <text x="36" y="634" class="label-xs" fill="var(--accent-green)">ACTORS — take action (human-gated)</text>
+
+  <rect x="36" y="640" width="145" height="38" rx="3" fill="var(--bg)" stroke="var(--accent-green)" stroke-width="0.75" stroke-opacity="0.5"/>
+  <text x="108" y="655" text-anchor="middle" class="label" font-size="10">FIXER</text>
+  <text x="108" y="667" text-anchor="middle" class="label-xs">options · tokenized travelers</text>
+
+  <rect x="189" y="640" width="145" height="38" rx="3" fill="var(--bg)" stroke="var(--accent-green)" stroke-width="0.75" stroke-opacity="0.5"/>
+  <text x="261" y="655" text-anchor="middle" class="label" font-size="10">RUNNER</text>
+  <text x="261" y="667" text-anchor="middle" class="label-xs">handoff · desk instruction</text>
+
+  <!-- INTEGRATIONS -->
+  <rect x="470" y="395" width="450" height="260" rx="6" fill="var(--accent-purple-bg)" stroke="var(--accent-purple)" stroke-width="1" stroke-opacity="0.4"/>
+  <text x="486" y="413" class="tag" fill="var(--accent-purple)">INTEGRATIONS</text>
+
+  <rect x="486" y="423" width="200" height="52" rx="4" fill="var(--bg)" stroke="var(--border)" stroke-width="0.75"/>
+  <text x="586" y="441" text-anchor="middle" class="label">google-cloud/</text>
+  <text x="586" y="455" text-anchor="middle" class="label-xs">GeminiClient · Vertex AI</text>
+  <text x="586" y="467" text-anchor="middle" class="label-xs">gemini-2.0-flash · raw fetch()</text>
+
+  <rect x="700" y="423" width="200" height="52" rx="4" fill="var(--bg)" stroke="var(--border)" stroke-width="0.75"/>
+  <text x="800" y="441" text-anchor="middle" class="label">firebase/</text>
+  <text x="800" y="455" text-anchor="middle" class="label-xs">FirestoreStore · Auth</text>
+  <text x="800" y="467" text-anchor="middle" class="label-xs">firebase-admin (hoisted here)</text>
+
+  <rect x="486" y="487" width="200" height="52" rx="4" fill="var(--bg)" stroke="var(--border)" stroke-width="0.75"/>
+  <text x="586" y="505" text-anchor="middle" class="label">grafana/</text>
+  <text x="586" y="519" text-anchor="middle" class="label-xs">Prometheus push · 5 metrics</text>
+  <text x="586" y="531" text-anchor="middle" class="label-xs">dashboard definition</text>
+
+  <rect x="700" y="487" width="200" height="52" rx="4" fill="var(--bg)" stroke="var(--border)" stroke-width="0.75"/>
+  <text x="800" y="505" text-anchor="middle" class="label">clickhouse/</text>
+  <text x="800" y="519" text-anchor="middle" class="label-xs">append-only audit log</text>
+  <text x="800" y="531" text-anchor="middle" class="label-xs">3 tables · 90-day TTL</text>
+
+  <text x="486" y="560" class="label-xs" fill="var(--accent-purple)">SUPPORTING PACKAGES</text>
+
+  <rect x="486" y="568" width="140" height="38" rx="3" fill="var(--bg)" stroke="var(--accent-purple)" stroke-width="0.75" stroke-opacity="0.5"/>
+  <text x="556" y="583" text-anchor="middle" class="label" font-size="10">types/</text>
+  <text x="556" y="595" text-anchor="middle" class="label-xs">domain · events · models</text>
+
+  <rect x="634" y="568" width="140" height="38" rx="3" fill="var(--bg)" stroke="var(--accent-purple)" stroke-width="0.75" stroke-opacity="0.5"/>
+  <text x="704" y="583" text-anchor="middle" class="label" font-size="10">provenance/</text>
+  <text x="704" y="595" text-anchor="middle" class="label-xs">envelopes · visibility</text>
+
+  <rect x="782" y="568" width="120" height="38" rx="3" fill="var(--bg)" stroke="var(--accent-purple)" stroke-width="0.75" stroke-opacity="0.5"/>
+  <text x="842" y="583" text-anchor="middle" class="label" font-size="10">rules/engine</text>
+  <text x="842" y="595" text-anchor="middle" class="label-xs">NABET Art. 8.3</text>
+
+  <rect x="486" y="614" width="140" height="38" rx="3" fill="var(--bg)" stroke="var(--accent-purple)" stroke-width="0.75" stroke-opacity="0.5"/>
+  <text x="556" y="629" text-anchor="middle" class="label" font-size="10">tmc/mock/</text>
+  <text x="556" y="641" text-anchor="middle" class="label-xs">stub only · .gitkeep</text>
+
+  <!-- DATA LAYER -->
+  <line x1="350" y1="680" x2="350" y2="700" stroke="var(--flow)" stroke-width="1.5" stroke-dasharray="4 3"/>
+  <line x1="700" y1="680" x2="700" y2="700" stroke="var(--flow)" stroke-width="1.5" stroke-dasharray="4 3"/>
+
+  <rect x="20" y="700" width="900" height="130" rx="6" fill="var(--accent-red-bg)" stroke="var(--accent-red)" stroke-width="1" stroke-opacity="0.4"/>
+  <text x="36" y="718" class="tag" fill="var(--accent-red)">DATA</text>
+
+  <rect x="36" y="728" width="280" height="88" rx="4" fill="var(--bg)" stroke="var(--border)" stroke-width="0.75"/>
+  <text x="176" y="746" text-anchor="middle" class="label">Firestore (apron-dev-504523)</text>
+  <text x="46" y="762" class="label-xs">accounts/{id}</text>
+  <text x="46" y="774" class="label-xs">  /entities · /members · /crew</text>
+  <text x="46" y="786" class="label-xs">  /games/{id}/assignments/{id}</text>
+  <text x="46" y="800" class="label-xs">audit_events/{id}</text>
+
+  <rect x="332" y="728" width="260" height="88" rx="4" fill="var(--bg)" stroke="var(--border)" stroke-width="0.75"/>
+  <text x="462" y="746" text-anchor="middle" class="label">Fixture Scenario</text>
+  <text x="342" y="762" class="label-xs">fixtures/alcs-gm4/scenario.ts</text>
+  <text x="342" y="774" class="label-xs">6 shows · 14 crew · 5-node chain</text>
+  <text x="342" y="786" class="label-xs">2 option groups · 16 steps</text>
+  <text x="342" y="800" class="label-xs">ALCS Gm 4 twelve-inning night</text>
+
+  <rect x="608" y="728" width="300" height="88" rx="4" fill="var(--bg)" stroke="var(--border)" stroke-width="0.75" stroke-dasharray="4 2"/>
+  <text x="758" y="746" text-anchor="middle" class="label" fill="var(--fg2)">External Data (planned)</text>
+  <text x="618" y="762" class="label-xs">ESPN public API → live scores</text>
+  <text x="618" y="774" class="label-xs">Weather.gov → delay conditions</text>
+  <text x="618" y="786" class="label-xs">Gemini → end-time prediction</text>
+  <text x="618" y="800" class="label-xs">↑ SPOTTER agent's real data sources</text>
+
+  <!-- EVENT FLOW -->
+  <rect x="20" y="855" width="900" height="210" rx="6" fill="var(--accent-gray-bg)" stroke="var(--border)" stroke-width="1"/>
+  <text x="36" y="873" class="tag" fill="var(--fg2)">EVENT FLOW — HOW DATA MOVES AT RUNTIME</text>
+
+  <rect x="36" y="893" width="120" height="46" rx="4" fill="var(--accent-red-bg)" stroke="var(--accent-red)" stroke-width="0.75" stroke-opacity="0.6"/>
+  <text x="96" y="912" text-anchor="middle" class="label" font-size="10">Data Source</text>
+  <text x="96" y="926" text-anchor="middle" class="label-xs">Firestore / ESPN</text>
+
+  <line x1="156" y1="916" x2="174" y2="916" stroke="var(--flow)" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <rect x="174" y="893" width="110" height="46" rx="4" fill="var(--accent-green-bg)" stroke="var(--accent-green)" stroke-width="0.75" stroke-opacity="0.6"/>
+  <text x="229" y="912" text-anchor="middle" class="label" font-size="10">Agent</text>
+  <text x="229" y="926" text-anchor="middle" class="label-xs">process() → emit()</text>
+
+  <line x1="284" y1="916" x2="302" y2="916" stroke="var(--flow)" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <rect x="302" y="893" width="110" height="46" rx="4" fill="var(--accent-green-bg)" stroke="var(--accent-green)" stroke-width="0.75" stroke-opacity="0.6"/>
+  <text x="357" y="912" text-anchor="middle" class="label" font-size="10">MessageBus</text>
+  <text x="357" y="926" text-anchor="middle" class="label-xs">EventEmitter</text>
+
+  <line x1="412" y1="916" x2="430" y2="916" stroke="var(--flow)" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <rect x="430" y="893" width="110" height="46" rx="4" fill="var(--accent-amber-bg)" stroke="var(--accent-amber)" stroke-width="0.75" stroke-opacity="0.6"/>
+  <text x="485" y="912" text-anchor="middle" class="label" font-size="10">Server</text>
+  <text x="485" y="926" text-anchor="middle" class="label-xs">onEvent() fan-out</text>
+
+  <line x1="540" y1="905" x2="570" y2="895" stroke="var(--flow)" stroke-width="1" marker-end="url(#arrow)"/>
+  <line x1="540" y1="916" x2="570" y2="916" stroke="var(--flow)" stroke-width="1" marker-end="url(#arrow)"/>
+  <line x1="540" y1="927" x2="570" y2="937" stroke="var(--flow)" stroke-width="1" marker-end="url(#arrow)"/>
+
+  <rect x="570" y="883" width="115" height="24" rx="3" fill="var(--accent-blue-bg)" stroke="var(--accent-blue)" stroke-width="0.75" stroke-opacity="0.5"/>
+  <text x="627" y="899" text-anchor="middle" class="label-xs">WebSocket → Board</text>
+
+  <rect x="570" y="910" width="115" height="24" rx="3" fill="var(--accent-purple-bg)" stroke="var(--accent-purple)" stroke-width="0.75" stroke-opacity="0.5"/>
+  <text x="627" y="926" text-anchor="middle" class="label-xs">Grafana metrics</text>
+
+  <rect x="570" y="937" width="115" height="24" rx="3" fill="var(--accent-purple-bg)" stroke="var(--accent-purple)" stroke-width="0.75" stroke-opacity="0.5"/>
+  <text x="627" y="953" text-anchor="middle" class="label-xs">Clickhouse audit</text>
+
+  <rect x="700" y="910" width="115" height="24" rx="3" fill="var(--accent-red-bg)" stroke="var(--accent-red)" stroke-width="0.75" stroke-opacity="0.5"/>
+  <text x="757" y="926" text-anchor="middle" class="label-xs">Firestore audit</text>
+
+  <line x1="685" y1="922" x2="700" y2="922" stroke="var(--flow)" stroke-width="1" marker-end="url(#arrow)"/>
+
+  <text x="36" y="968" class="label-sm" fill="var(--fg2)">Agent pipeline (fixture mode):</text>
+  <text x="36" y="984" class="label-xs">SPOTTER / TRAFFIC / CUSTOMS  →  ADVANCE / STEWARD / WRANGLER  →  FIXER  →  ⊘ HUMAN GATE  →  RUNNER</text>
+  <text x="36" y="998" class="label-xs" fill="var(--fg2)">readers observe the world           state agents track constraints          actors generate options      approval required     desk handoff</text>
+
+  <line x1="36" y1="1012" x2="904" y2="1012" stroke="var(--border)" stroke-width="0.5"/>
+  <text x="36" y="1028" class="label-xs" fill="var(--accent-green)">● REAL: orchestrator, bus, credentials, provenance, rules engine, audit pipeline, Firestore, server, board, WebSocket</text>
+  <text x="36" y="1044" class="label-xs" fill="var(--accent-amber)">● WIRED BUT UNUSED: GeminiClient (instantiated, never called by agents), credential check() enforcement</text>
+  <text x="36" y="1060" class="label-xs" fill="var(--accent-red)">● STUB: all 8 agents are fixture-replay shims — SPOTTER is the first to go live</text>
+
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--flow)"/>
+    </marker>
+  </defs>
+</svg>

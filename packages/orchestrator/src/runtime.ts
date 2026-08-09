@@ -41,6 +41,10 @@ export class AgentRuntime {
     return [...this.agents.keys()];
   }
 
+  getBus(): MessageBus {
+    return this.bus;
+  }
+
   async dispatch(agentName: AgentName, input: Record<string, unknown>): Promise<void> {
     const agent = this.agents.get(agentName);
     if (!agent) {

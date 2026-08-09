@@ -181,6 +181,9 @@ tbody tr.sel{background:var(--panel-2);box-shadow:inset 3px 0 0 var(--live)}
     <button class="nav-item" data-section="games"><span class="nav-icon">&#9654;</span><span>Games</span></button>
     <button class="nav-item" data-section="crew"><span class="nav-icon">&#9679;</span><span>Crew</span></button>
     <button class="nav-item" data-section="members"><span class="nav-icon">&#9733;</span><span>Members</span></button>
+    <div style="border-top:1px solid var(--line);margin:8px 0"></div>
+    <a href="/spotter" class="nav-item" style="text-decoration:none"><span class="nav-icon">📡</span><span>SPOTTER</span></a>
+    <a href="/board" class="nav-item" style="text-decoration:none"><span class="nav-icon">📋</span><span>Board</span></a>
   </div>
   <div class="sidebar-foot">ADMIN CONSOLE</div>
 </nav>
@@ -286,6 +289,18 @@ tbody tr.sel{background:var(--panel-2);box-shadow:inset 3px 0 0 var(--live)}
     <div class="form-title">New Game</div>
     <div class="form-row">
       <div class="form-group">
+        <label>Game Type</label>
+        <select id="game-type">
+          <option value="">Select...</option>
+          <option value="baseball">Baseball (3h / 75m strike)</option>
+          <option value="hockey">Hockey (2.5h / 60m strike)</option>
+          <option value="football">Football (3.5h / 90m strike)</option>
+          <option value="basketball">Basketball (2.5h / 45m strike)</option>
+          <option value="soccer">Soccer (2h / 45m strike)</option>
+          <option value="entertainment">Entertainment (3h / 90m strike)</option>
+        </select>
+      </div>
+      <div class="form-group">
         <label>Network</label>
         <select id="game-network">
           <option value="">Select...</option>
@@ -304,12 +319,12 @@ tbody tr.sel{background:var(--panel-2);box-shadow:inset 3px 0 0 var(--live)}
         <label>Title</label>
         <input type="text" id="game-title" placeholder="e.g. ALCS Gm 4 - Rangers @ Guardians">
       </div>
+    </div>
+    <div class="form-row">
       <div class="form-group">
         <label>Venue</label>
         <input type="text" id="game-venue" placeholder="e.g. Progressive Field, Cleveland">
       </div>
-    </div>
-    <div class="form-row">
       <div class="form-group">
         <label>Date</label>
         <input type="date" id="game-date">
@@ -317,6 +332,62 @@ tbody tr.sel{background:var(--panel-2);box-shadow:inset 3px 0 0 var(--live)}
       <div class="form-group">
         <label>Call Time</label>
         <input type="time" id="game-calltime">
+      </div>
+    </div>
+
+    <div style="border-top:1px solid var(--line);margin:14px 0;padding-top:14px">
+      <div class="form-title" style="margin-bottom:10px">Timing &amp; Chain</div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>Start Time</label>
+        <input type="time" id="game-starttime" placeholder="19:00">
+      </div>
+      <div class="form-group">
+        <label>Expected End Time</label>
+        <input type="time" id="game-endtime" placeholder="Override or leave blank">
+      </div>
+      <div class="form-group">
+        <label>Expected Duration (min)</label>
+        <input type="number" id="game-duration" placeholder="auto from type" min="30" max="600">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Strike / Load-out (min)</label>
+        <input type="number" id="game-strike" placeholder="auto from type" min="10" max="300">
+      </div>
+      <div class="form-group">
+        <label>Venue → Transport (min)</label>
+        <input type="number" id="game-v2t" placeholder="15" min="1" max="120">
+      </div>
+      <div class="form-group">
+        <label>Transport → Overnight (min)</label>
+        <input type="number" id="game-t2o" placeholder="27" min="1" max="180">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Departure Airport</label>
+        <input type="text" id="game-airport" placeholder="e.g. CLE" maxlength="4" style="text-transform:uppercase;width:80px;flex:none">
+      </div>
+      <div class="form-group">
+        <label>Overnight Label</label>
+        <input type="text" id="game-overnight" placeholder="e.g. Airport hotel">
+      </div>
+      <div class="form-group">
+        <label>Lobby Call Time</label>
+        <input type="time" id="game-lobby">
+      </div>
+      <div class="form-group">
+        <label>Min Rest (hours)</label>
+        <input type="number" id="game-minrest" placeholder="8" min="1" max="24" step="0.5">
+      </div>
+      <h4 style="margin:12px 0 6px">Live Monitoring</h4>
+      <div class="form-group">
+        <label>ESPN Event ID</label>
+        <input type="text" id="game-espn" placeholder="e.g. 401585678" style="width:140px;flex:none">
       </div>
       <div class="form-actions">
         <button class="btn pri sm" id="btn-save-game">Create</button>
@@ -333,6 +404,7 @@ tbody tr.sel{background:var(--panel-2);box-shadow:inset 3px 0 0 var(--live)}
         <tr>
           <th>Network</th>
           <th>Title</th>
+          <th>Type</th>
           <th>Venue</th>
           <th>Date</th>
           <th>Crew</th>
@@ -340,6 +412,123 @@ tbody tr.sel{background:var(--panel-2);box-shadow:inset 3px 0 0 var(--live)}
       </thead>
       <tbody id="games-body"></tbody>
     </table>
+  </div>
+
+  <!-- edit game panel -->
+  <div class="inline-form" id="form-edit-game" style="border-top:2px solid var(--live)">
+    <div class="form-title" style="display:flex;align-items:center;gap:12px">
+      Edit Game <span class="sub" id="edit-game-id" style="font-weight:400;font-size:11px;color:var(--ink-3);font-family:var(--m)"></span>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Game Type</label>
+        <select id="eg-type">
+          <option value="">None</option>
+          <option value="baseball">Baseball</option>
+          <option value="hockey">Hockey</option>
+          <option value="football">Football</option>
+          <option value="basketball">Basketball</option>
+          <option value="soccer">Soccer</option>
+          <option value="entertainment">Entertainment</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Network</label>
+        <select id="eg-network">
+          <option value="">Select...</option>
+          <option value="FOX">FOX</option><option value="NBC">NBC</option>
+          <option value="ESPN">ESPN</option><option value="CBS">CBS</option>
+          <option value="ABC">ABC</option><option value="TNT">TNT</option>
+          <option value="NFL Network">NFL Network</option>
+          <option value="MLB Network">MLB Network</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Title</label>
+        <input type="text" id="eg-title">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Venue</label>
+        <input type="text" id="eg-venue">
+      </div>
+      <div class="form-group">
+        <label>Date</label>
+        <input type="date" id="eg-date">
+      </div>
+      <div class="form-group">
+        <label>Call Time</label>
+        <input type="time" id="eg-calltime">
+      </div>
+    </div>
+
+    <div style="border-top:1px solid var(--line);margin:14px 0;padding-top:14px">
+      <div class="form-title" style="margin-bottom:10px">Timing &amp; Chain</div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label>Start Time</label>
+        <input type="time" id="eg-starttime">
+      </div>
+      <div class="form-group">
+        <label>Expected End Time</label>
+        <input type="time" id="eg-endtime">
+      </div>
+      <div class="form-group">
+        <label>Expected Duration (min)</label>
+        <input type="number" id="eg-duration" min="30" max="600">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Strike / Load-out (min)</label>
+        <input type="number" id="eg-strike" min="10" max="300">
+      </div>
+      <div class="form-group">
+        <label>Venue → Transport (min)</label>
+        <input type="number" id="eg-v2t" min="1" max="120">
+      </div>
+      <div class="form-group">
+        <label>Transport → Overnight (min)</label>
+        <input type="number" id="eg-t2o" min="1" max="180">
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Departure Airport</label>
+        <input type="text" id="eg-airport" maxlength="4" style="text-transform:uppercase;width:80px;flex:none">
+      </div>
+      <div class="form-group">
+        <label>Overnight Label</label>
+        <input type="text" id="eg-overnight">
+      </div>
+      <div class="form-group">
+        <label>Lobby Call Time</label>
+        <input type="time" id="eg-lobby">
+      </div>
+      <div class="form-group">
+        <label>Min Rest (hours)</label>
+        <input type="number" id="eg-minrest" min="1" max="24" step="0.5">
+      </div>
+    </div>
+    <h4 style="margin:12px 0 6px">Live Monitoring</h4>
+    <div class="form-row">
+      <div class="form-group">
+        <label>ESPN Event ID</label>
+        <input type="text" id="eg-espn" placeholder="e.g. 401585678" style="width:140px;flex:none">
+      </div>
+      <div class="form-group" style="flex:none;align-self:flex-end">
+        <button class="btn sm" id="btn-start-watch" title="Start live SPOTTER monitoring">▶ Watch</button>
+        <button class="btn sm" id="btn-stop-watch" title="Stop live SPOTTER monitoring" style="display:none">⏹ Stop</button>
+      </div>
+      <div class="form-actions">
+        <button class="btn pri sm" id="btn-update-game">Save</button>
+        <button class="btn sm" id="btn-close-edit">Close</button>
+      </div>
+    </div>
   </div>
 
   <!-- assignments panel -->
@@ -734,9 +923,11 @@ async function loadGames(){
     }
     $('games-body').innerHTML = games.map(function(g){
       var sel = g.id === selectedGameId ? ' sel' : '';
+      var typeLabel = g.gameType ? g.gameType.charAt(0).toUpperCase() + g.gameType.slice(1) : '';
       return '<tr class="clickable' + sel + '" data-id="' + g.id + '">'
         + '<td><span class="tag pos">' + esc(g.network || '') + '</span></td>'
         + '<td style="font-weight:600">' + esc(g.title || '') + '</td>'
+        + '<td>' + esc(typeLabel) + '</td>'
         + '<td>' + esc(g.venue || '') + '</td>'
         + '<td class="mono" style="font-size:12px">' + esc(g.date || '') + (g.callTime ? ' ' + esc(g.callTime) : '') + '</td>'
         + '<td class="mono">' + (g.crewCount != null ? g.crewCount : '--') + '</td></tr>';
@@ -749,6 +940,7 @@ async function loadGames(){
         row.classList.add('sel');
         selectedGameId = row.dataset.id;
         var game = games.find(function(g){ return g.id === row.dataset.id; });
+        openEditGame(game);
         openAssignments(game);
       });
     });
@@ -768,6 +960,28 @@ $('btn-new-game').addEventListener('click', function(){
 $('btn-cancel-game').addEventListener('click', function(){
   $('form-new-game').classList.remove('open');
 });
+/* Auto-fill defaults when game type changes */
+var GAME_TYPE_DEFAULTS = {
+  baseball:      { duration: 180, strike: 75 },
+  hockey:        { duration: 150, strike: 60 },
+  football:      { duration: 210, strike: 90 },
+  basketball:    { duration: 150, strike: 45 },
+  soccer:        { duration: 120, strike: 45 },
+  entertainment: { duration: 180, strike: 90 }
+};
+$('game-type').addEventListener('change', function(){
+  var defs = GAME_TYPE_DEFAULTS[this.value];
+  if(defs){
+    if(!$('game-duration').value) $('game-duration').value = defs.duration;
+    if(!$('game-strike').value)   $('game-strike').value = defs.strike;
+    $('game-duration').placeholder = defs.duration + ' (default)';
+    $('game-strike').placeholder   = defs.strike + ' (default)';
+  } else {
+    $('game-duration').placeholder = 'minutes';
+    $('game-strike').placeholder   = 'minutes';
+  }
+});
+
 $('btn-save-game').addEventListener('click', async function(){
   var network = $('game-network').value;
   var title = $('game-title').value.trim();
@@ -776,19 +990,143 @@ $('btn-save-game').addEventListener('click', async function(){
   var callTime = $('game-calltime').value;
   if(!title){ showErr('err-games', 'Title is required.'); return; }
   clearErr('err-games');
+
+  var gameType = $('game-type').value || undefined;
+  var startTime = $('game-starttime').value || undefined;
+  var expectedEndTime = $('game-endtime').value || undefined;
+  var expectedDuration = $('game-duration').value ? Number($('game-duration').value) : undefined;
+  var strikeDuration = $('game-strike').value ? Number($('game-strike').value) : undefined;
+  var venueToTransport = $('game-v2t').value ? Number($('game-v2t').value) : undefined;
+  var transportDuration = $('game-t2o').value ? Number($('game-t2o').value) : undefined;
+  var departureAirport = $('game-airport').value.trim().toUpperCase() || undefined;
+  var overnightLabel = $('game-overnight').value.trim() || undefined;
+  var lobbyCallTime = $('game-lobby').value || undefined;
+  var minRestHours = $('game-minrest').value ? Number($('game-minrest').value) : undefined;
+  var espnEventId = $('game-espn').value.trim() || undefined;
+
   try{
     await api('POST', '/api/admin/accounts/' + selectedAccountId + '/games', {
-      network: network, title: title, venue: venue, date: date, callTime: callTime
+      network: network, title: title, venue: venue, date: date, callTime: callTime,
+      gameType: gameType, startTime: startTime, expectedEndTime: expectedEndTime,
+      expectedDuration: expectedDuration, strikeDuration: strikeDuration,
+      venueToTransport: venueToTransport, transportDuration: transportDuration,
+      departureAirport: departureAirport, overnightLabel: overnightLabel,
+      lobbyCallTime: lobbyCallTime, minRestHours: minRestHours,
+      espnEventId: espnEventId
     });
     $('form-new-game').classList.remove('open');
-    $('game-title').value = '';
-    $('game-venue').value = '';
-    $('game-date').value = '';
-    $('game-calltime').value = '';
-    $('game-network').value = '';
+    /* Reset all fields */
+    ['game-type','game-network','game-title','game-venue','game-date','game-calltime',
+     'game-starttime','game-endtime','game-duration','game-strike','game-v2t','game-t2o',
+     'game-airport','game-overnight','game-lobby','game-minrest','game-espn'].forEach(function(id){
+      $(id).value = '';
+    });
     loadGames();
   }catch(e){
     showErr('err-games', 'Failed to create game: ' + e.message);
+  }
+});
+
+/* ============ EDIT GAME ============ */
+var editingGame = null;
+
+function openEditGame(game){
+  editingGame = game;
+  $('form-edit-game').classList.add('open');
+  $('edit-game-id').textContent = game.id;
+  /* Populate fields */
+  $('eg-type').value = game.gameType || '';
+  $('eg-network').value = game.network || '';
+  $('eg-title').value = game.title || '';
+  $('eg-venue').value = game.venue || '';
+  $('eg-date').value = game.date || '';
+  $('eg-calltime').value = game.callTime || '';
+  $('eg-starttime').value = game.startTime || '';
+  $('eg-endtime').value = game.expectedEndTime || '';
+  $('eg-duration').value = game.expectedDuration != null ? game.expectedDuration : '';
+  $('eg-strike').value = game.strikeDuration != null ? game.strikeDuration : '';
+  $('eg-v2t').value = game.venueToTransport != null ? game.venueToTransport : '';
+  $('eg-t2o').value = game.transportDuration != null ? game.transportDuration : '';
+  $('eg-airport').value = game.departureAirport || '';
+  $('eg-overnight').value = game.overnightLabel || '';
+  $('eg-lobby').value = game.lobbyCallTime || '';
+  $('eg-minrest').value = game.minRestHours != null ? game.minRestHours : '';
+  $('eg-espn').value = game.espnEventId || '';
+}
+
+$('btn-close-edit').addEventListener('click', function(){
+  $('form-edit-game').classList.remove('open');
+  editingGame = null;
+});
+
+$('btn-update-game').addEventListener('click', async function(){
+  if(!editingGame) return;
+  clearErr('err-games');
+
+  var patch = {};
+  /* String fields */
+  patch.gameType = $('eg-type').value || undefined;
+  patch.network = $('eg-network').value || undefined;
+  patch.title = $('eg-title').value.trim();
+  patch.venue = $('eg-venue').value.trim();
+  patch.date = $('eg-date').value || undefined;
+  patch.callTime = $('eg-calltime').value || undefined;
+  patch.startTime = $('eg-starttime').value || undefined;
+  patch.expectedEndTime = $('eg-endtime').value || undefined;
+  patch.departureAirport = $('eg-airport').value.trim().toUpperCase() || undefined;
+  patch.overnightLabel = $('eg-overnight').value.trim() || undefined;
+  patch.lobbyCallTime = $('eg-lobby').value || undefined;
+  /* Number fields */
+  patch.expectedDuration = $('eg-duration').value ? Number($('eg-duration').value) : undefined;
+  patch.strikeDuration = $('eg-strike').value ? Number($('eg-strike').value) : undefined;
+  patch.venueToTransport = $('eg-v2t').value ? Number($('eg-v2t').value) : undefined;
+  patch.transportDuration = $('eg-t2o').value ? Number($('eg-t2o').value) : undefined;
+  patch.minRestHours = $('eg-minrest').value ? Number($('eg-minrest').value) : undefined;
+  patch.espnEventId = $('eg-espn').value.trim() || undefined;
+
+  if(!patch.title){ showErr('err-games', 'Title is required.'); return; }
+
+  try{
+    await api('PATCH', '/api/admin/accounts/' + selectedAccountId + '/games/' + editingGame.id, patch);
+    $('form-edit-game').classList.remove('open');
+    editingGame = null;
+    loadGames();
+  }catch(e){
+    showErr('err-games', 'Failed to update game: ' + e.message);
+  }
+});
+
+/* ============ SPOTTER WATCH ============ */
+$('btn-start-watch').addEventListener('click', async function(){
+  if(!editingGame) return;
+  var espn = $('eg-espn').value.trim();
+  if(!espn){ showErr('err-games', 'Set an ESPN Event ID first.'); return; }
+  clearErr('err-games');
+  try{
+    // Save the ESPN ID first if changed
+    await api('PATCH', '/api/admin/accounts/' + selectedAccountId + '/games/' + editingGame.id, { espnEventId: espn });
+    // Start watching
+    var res = await api('POST', '/api/admin/accounts/' + selectedAccountId + '/games/' + editingGame.id + '/watch');
+    if(res.watching){
+      $('btn-start-watch').style.display = 'none';
+      $('btn-stop-watch').style.display = '';
+      showErr('err-games', ''); // clear
+      alert('SPOTTER live monitoring started for ' + (res.game || editingGame.title) + ' (ESPN ' + espn + ')');
+    }
+  }catch(e){
+    showErr('err-games', 'Failed to start watch: ' + e.message);
+  }
+});
+
+$('btn-stop-watch').addEventListener('click', async function(){
+  if(!editingGame) return;
+  try{
+    await api('POST', '/api/admin/accounts/' + selectedAccountId + '/games/' + editingGame.id + '/unwatch');
+    $('btn-start-watch').style.display = '';
+    $('btn-stop-watch').style.display = 'none';
+    alert('SPOTTER monitoring stopped.');
+  }catch(e){
+    showErr('err-games', 'Failed to stop watch: ' + e.message);
   }
 });
 

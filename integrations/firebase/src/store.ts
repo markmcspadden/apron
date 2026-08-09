@@ -33,6 +33,12 @@ export class FirestoreStore {
     return this.db !== null;
   }
 
+  /** Await initialization and return whether Firestore connected. */
+  async waitReady(): Promise<boolean> {
+    const db = await this.dbReady;
+    return db !== null;
+  }
+
   /** Returns the underlying Firestore instance, or null if not connected. */
   async getDb(): Promise<Firestore | null> {
     return this.db ?? this.dbReady;

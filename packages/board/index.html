@@ -254,7 +254,7 @@ tbody tr.t2{box-shadow:inset 3px 0 0 var(--line-2)}
 <div class="top">
   <div class="top-in">
     <div class="logo"><b>APRON</b><span>Crew Integrity</span></div>
-    <div class="desk">Sports &amp; Entertainment Desk · <b>CTM Entertainment</b></div>
+    <div class="desk" id="desk-label">Sports &amp; Entertainment Desk · <b>CTM Entertainment</b></div>
     <div class="top-right">
       <div class="seatsw">
         <button id="sw-tmc" class="on">TMC DESK</button>
@@ -350,11 +350,11 @@ tbody tr.t2{box-shadow:inset 3px 0 0 var(--line-2)}
 
   <div class="prod-head">
     <div>
-      <div class="prod-net">FOX SPORTS · PRODUCTION SEAT</div>
-      <h2>ALCS Gm 4 · Rangers @ Guardians</h2>
-      <div class="prod-sub">Progressive Field, Cleveland · 22 traveling crew · truck compound, gate 4</div>
+      <div class="prod-net" id="prod-net">FOX SPORTS · PRODUCTION SEAT</div>
+      <h2 id="prod-title">ALCS Gm 4 · Rangers @ Guardians</h2>
+      <div class="prod-sub" id="prod-sub">Progressive Field, Cleveland · 22 traveling crew · truck compound, gate 4</div>
     </div>
-    <div class="prov-by">Travel desk · <b>CTM Entertainment</b><br>
+    <div class="prov-by">Travel desk · <b id="prod-tmc-name">CTM Entertainment</b><br>
       <span>Seat provided by your travel management company</span></div>
   </div>
 
@@ -366,14 +366,21 @@ tbody tr.t2{box-shadow:inset 3px 0 0 var(--line-2)}
       <div class="v" id="p-pf" style="font-size:19px">22:58</div>
       <div class="s" id="p-pf-s">On schedule</div></div>
     <div class="cell"><div class="k">Traveling crew</div>
-      <div class="v" style="font-size:19px">22</div>
-      <div class="s">6 hold a next call</div></div>
+      <div class="v" id="p-crew" style="font-size:19px">22</div>
+      <div class="s" id="p-crew-s">6 hold a next call</div></div>
+  </div>
+
+  <div class="pcard" id="pchain-card" style="margin-bottom:16px;display:none">
+    <div class="pcard-h">Wrap-to-gate chain <span class="cnt" id="pchain-note">Projected from game timing model</span></div>
+    <div style="padding:16px 20px">
+      <div class="rail" id="prail"></div>
+    </div>
   </div>
 
   <div class="pstate calm" id="pstate"><span class="pi">✓</span><span id="pstate-t">Nothing open. 22 crew routed as booked.</span></div>
 
   <div class="pcard" style="margin-bottom:16px">
-    <div class="pcard-h">Agent crew <span class="cnt">CTM Entertainment · sports desk</span></div>
+    <div class="pcard-h">Agent crew <span class="cnt" id="prod-desk-label">CTM Entertainment · sports desk</span></div>
     <div style="padding:14px 18px 16px">
       <div class="crewbar" id="pcrewbar"></div>
       <div class="log" id="plog" style="max-height:300px"></div>
@@ -472,7 +479,9 @@ var ws = null;
 /* ============ WEBSOCKET ============ */
 function connect() {
   var proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  ws = new WebSocket(proto + '//' + location.host);
+  var isDemo = location.pathname === '/demo' || location.pathname === '/demo.html';
+  var wsUrl = proto + '//' + location.host + (isDemo ? '?demo=1' : '');
+  ws = new WebSocket(wsUrl);
 
   ws.onopen = function() {
     console.log('[ws] Connected');
@@ -480,7 +489,6 @@ function connect() {
 
   ws.onmessage = function(e) {
     var msg = JSON.parse(e.data);
-
     if (msg.type === 'init') {
       loadScenario(msg.scenario);
       if (msg.currentStep >= 0) {
@@ -514,6 +522,14 @@ function connect() {
     if (msg.type === 'reset') {
       loadScenario(msg.scenario);
     }
+
+    // Live agent events — update board when a SPOTTER (or other agent) reports
+    if (msg.type === 'agent-event' && msg.event && gameParam) {
+      var ev = msg.event;
+      // Only process events for the selected game
+      if (ev.showId !== gameParam) return;
+      applyAgentEvent(ev);
+    }
   };
 
   ws.onclose = function() {
@@ -526,6 +542,107 @@ function send(action) {
   if (ws && ws.readyState === 1) {
     ws.send(JSON.stringify({action: action}));
   }
+}
+
+/* ============ LIVE AGENT EVENT HANDLER ============ */
+// Applies real-time agent events to the board when a ?game= is selected.
+// This runs alongside (not instead of) fixture playback — live SPOTTER data
+// overwrites the relevant production-seat cells.
+
+function applyAgentEvent(ev) {
+  var venue = boardGameData ? (boardGameData.venue || '') : (activeGame ? (activeGame.venue || '') : '');
+
+  if (ev.type === 'game-state') {
+    // Update GAME STATE card on production seat — include score if available
+    var liveIcon = ev.live ? '<span style="color:var(--live)">● </span>' : '';
+    var scoreText = ev.score ? ' · ' + esc(ev.score) : '';
+    $('p-gs').innerHTML = liveIcon + esc(ev.gameState) + scoreText;
+    $('p-gs').className = 'v';
+    $('p-gs-s').textContent = venue + (ev.live ? ' · live' : ' · wrapped');
+
+    // Also update TMC show card if SHOWS is populated
+    if (SHOWS.length > 0) {
+      SHOWS[0].gs = ev.gameState + (ev.score ? ' · ' + ev.score : '');
+      SHOWS[0].live = ev.live;
+      SHOWS[0].gsNote = ev.live ? 'live' : 'wrapped';
+    }
+
+    logEvent({ ts: ev.timestamp, who: ev.agent, msg: ev.message });
+  }
+
+  if (ev.type === 'chain-update') {
+    // Update PROJECTED FINAL from the first chain node's revised time
+    if (ev.nodes && ev.nodes.length > 0) {
+      var finalTime = ev.nodes[0].revisedTime || ev.nodes[0].baseTime;
+      $('p-pf').textContent = finalTime;
+      $('p-pf').className = 'v' + (ev.level >= 1 ? ' watch' : '');
+
+      // Compute delta from base time for subtitle
+      var baseTime = ev.nodes[0].baseTime;
+      if (baseTime && finalTime !== baseTime) {
+        var pfDelta = diffMin(baseTime, finalTime);
+        if (pfDelta === 0) {
+          $('p-pf-s').textContent = 'On schedule';
+        } else {
+          var sign = pfDelta >= 0 ? '+' : '−';
+          $('p-pf-s').textContent = sign + Math.abs(pfDelta) + 'm from scheduled';
+        }
+      } else {
+        $('p-pf-s').textContent = ev.level === 0 ? 'On schedule' : (ev.level >= 2 ? 'Significant delay' : 'Slight delay');
+      }
+
+      // Update the production-seat chain rail
+      $('pchain-card').style.display = '';
+      $('pchain-note').textContent = 'Projected from game timing · ' + venue;
+      $('prail').innerHTML = ev.nodes.map(function(n, i) {
+        var cls = i === 0 ? 'now' : (ev.level >= 1 ? 'shift' : 'done');
+        var time = n.revisedTime || n.baseTime;
+        var diff = '';
+        if (i > 0 && n.baseTime && n.revisedTime && n.baseTime !== n.revisedTime) {
+          var delta = diffMin(n.baseTime, n.revisedTime);
+          diff = (delta >= 0 ? '+' : '−') + Math.abs(delta) + 'm';
+        }
+        if (n.isDuration) {
+          // Check against 8h minimum rest
+          var mins = parseChainMinutes(n.revisedTime || n.baseTime);
+          if (mins > 0 && mins < 480) { cls = 'bad'; diff = 'below 8h minimum'; }
+        }
+        return '<div class="node ' + cls + '">'
+          + '<div class="bar"><span class="dot"></span></div>'
+          + '<div class="lb">' + esc(n.label) + '</div>'
+          + '<div class="tm">' + time + '</div>'
+          + (diff ? '<div class="df">' + diff + '</div>' : '')
+          + '</div>';
+      }).join('');
+    }
+
+    chainLevel = ev.level;
+    logEvent({ ts: ev.timestamp, who: ev.agent, msg: ev.message });
+  }
+
+  if (ev.type === 'show-state') {
+    if (SHOWS.length > 0) {
+      SHOWS[0].state = ev.state;
+      SHOWS[0].alert = ev.alert;
+    }
+    logEvent({ ts: ev.timestamp, who: ev.agent, msg: ev.message });
+  }
+
+  if (ev.type === 'agent-status') {
+    renderCrewbar(ev.agentStates);
+    $('pcrewbar').innerHTML = $('crewbar').innerHTML;
+    logEvent({ ts: ev.timestamp, who: ev.agent, msg: ev.message });
+  }
+
+  // Re-render production seat to pick up changes
+  if (seatActive()) renderProd();
+}
+
+// Parse "HH:MM" chain time to total minutes (for rest-duration checks)
+function parseChainMinutes(s) {
+  if (!s) return 0;
+  var parts = s.split(':').map(Number);
+  return (parts[0] || 0) * 60 + (parts[1] || 0);
 }
 
 /* ============ LOAD SCENARIO ============ */
@@ -637,7 +754,13 @@ function renderChain(level) {
 
 function diffMin(a,b) {
   function p(s) { var parts = s.split(':').map(Number); return parts[0]*60 + parts[1]; }
-  var d = p(b) - p(a); if(d < 0) d += 1440; return d;
+  var d = p(b) - p(a);
+  // Normalize to [-720, +720) so we handle midnight wrapping correctly.
+  // Chain deltas are always within a few hours — a raw delta > 12h means
+  // the times crossed midnight in the wrong direction.
+  if (d > 720) d -= 1440;
+  if (d < -720) d += 1440;
+  return d;
 }
 
 function renderRoster() {
@@ -764,43 +887,73 @@ function openDetail() {
 /* ============ PRODUCTION SEAT ============ */
 function seatActive() { return document.getElementById('seat-prod').style.display !== 'none'; }
 
+// Admin-loaded game roster (set by /api/admin/board fetch)
+var GAME_ROSTER = null;
+
 function renderProd() {
-  var broken = CREW.filter(function(c,i) { return ['BROKEN','RISK'].indexOf(crewState[i].st) > -1; }).length;
+  var crewCount = GAME_ROSTER ? GAME_ROSTER.length : CREW.length;
+  var broken = CREW.filter(function(c,i) { return crewState[i] && ['BROKEN','RISK'].indexOf(crewState[i].st) > -1; }).length;
   var hot = step >= 3 && step < SCRIPT.length - 1;
   var ps = $('pstate'), pt = $('pstate-t');
-  if (step >= SCRIPT.length - 1) {
+  if (step >= SCRIPT.length - 1 && SCRIPT.length > 0) {
     ps.className = 'pstate calm';
-    pt.innerHTML = '<b>Closed.</b> 22 of 22 hold a confirmed forward itinerary that clears their next call.';
+    pt.innerHTML = '<b>Closed.</b> ' + crewCount + ' of ' + crewCount + ' hold a confirmed forward itinerary that clears their next call.';
   } else if (hot) {
     ps.className = 'pstate hot';
     pt.innerHTML = '<b>' + (broken||14) + ' crew will not make their departures.</b> Desk is working it.';
   } else {
     ps.className = 'pstate calm';
-    pt.innerHTML = '<b>Nothing open.</b> 22 crew routed as booked.';
+    pt.innerHTML = '<b>Nothing open.</b> ' + crewCount + ' crew routed as booked.';
   }
-  $('proster').innerHTML = CREW.map(function(c,i) {
-    var st = crewState[i].st;
-    var brokerable = c.pv[2].indexOf('BROKERABLE') > -1 && c.pv[2].indexOf('NOT BROKERABLE') === -1;
-    var callCell = (c.ext && !brokerable)
-      ? 'External call · <span class="redact">withheld</span><div class="sub2">Arr MCI by Mon 13:00 CT</div>'
-      : c.call;
-    return '<tr class="' + (c.ext?'t1':'t2') + '">'
-      + '<td><span class="pos ' + (c.key?'key':'') + '">' + c.pos + '</span></td>'
-      + '<td><div class="nm">' + c.nm + '</div><div class="sub2">' + c.hm + '</div></td>'
-      + '<td style="font-size:12px">' + callCell + '</td>'
-      + '<td><div class="mono" style="font-size:11.5px">' + c.route + '</div><div class="sub2">' + c.arr + '</div></td>'
-      + '<td><span class="st ' + st + '">' + st + '</span></td>'
-      + '</tr>';
-  }).join('');
-  var sh = SHOWS[0];
-  $('p-gs').innerHTML = (sh.live ? '<span style="color:var(--live)">● </span>' : '') + sh.gs;
-  $('p-gs').className = 'v';
-  $('p-gs-s').textContent = sh.live ? 'Progressive Field · live' : 'Progressive Field · ' + (sh.gsNote || 'wrapped');
-  var pf = chainLevel >= 2 ? '01:05' : chainLevel === 1 ? '00:35' : '22:58';
-  $('p-pf').textContent = pf;
-  $('p-pf').className = 'v' + (chainLevel >= 1 ? ' watch' : '');
-  $('p-pf-s').textContent = chainLevel >= 2 ? '+2h07 from scheduled'
-    : chainLevel === 1 ? '+1h37 from scheduled' : 'On schedule';
+
+  // Use admin game roster if available, otherwise fall back to fixture CREW
+  if (GAME_ROSTER) {
+    var tierMap = { 'A-list': 'T1', 'B-list': 'T2' };
+    $('proster').innerHTML = GAME_ROSTER.map(function(c) {
+      var tierCls = tierMap[c.tier] || 'T2';
+      var rowCls = tierCls === 'T1' ? 't1' : 't2';
+      return '<tr class="' + rowCls + '">'
+        + '<td><span class="pos' + (tierCls === 'T1' ? ' key' : '') + '">' + esc(c.position) + '</span></td>'
+        + '<td><div class="nm">' + esc(c.name) + '</div><div class="sub2">' + esc(c.homeMarket) + '</div></td>'
+        + '<td style="font-size:12px">' + esc(c.callTime || '') + '</td>'
+        + '<td>—</td>'
+        + '<td><span class="st CLEAR">CLEAR</span></td>'
+        + '</tr>';
+    }).join('');
+  } else {
+    $('proster').innerHTML = CREW.map(function(c,i) {
+      var st = crewState[i].st;
+      var brokerable = c.pv[2].indexOf('BROKERABLE') > -1 && c.pv[2].indexOf('NOT BROKERABLE') === -1;
+      var callCell = (c.ext && !brokerable)
+        ? 'External call · <span class="redact">withheld</span><div class="sub2">Arr MCI by Mon 13:00 CT</div>'
+        : c.call;
+      return '<tr class="' + (c.ext?'t1':'t2') + '">'
+        + '<td><span class="pos ' + (c.key?'key':'') + '">' + c.pos + '</span></td>'
+        + '<td><div class="nm">' + c.nm + '</div><div class="sub2">' + c.hm + '</div></td>'
+        + '<td style="font-size:12px">' + callCell + '</td>'
+        + '<td><div class="mono" style="font-size:11.5px">' + c.route + '</div><div class="sub2">' + c.arr + '</div></td>'
+        + '<td><span class="st ' + st + '">' + st + '</span></td>'
+        + '</tr>';
+    }).join('');
+  }
+  // Update traveling crew stat
+  $('p-crew').textContent = String(crewCount);
+  $('p-crew-s').textContent = crewCount + ' hold a next call';
+
+  // Update game-state stats (guard against SHOWS being empty before loadScenario)
+  // Skip when a live game is selected — applyAgentEvent manages these cells
+  // with real data; the hardcodes below are fixture-only.
+  if (SHOWS.length > 0 && !gameParam) {
+    var sh = SHOWS[0];
+    $('p-gs').innerHTML = (sh.live ? '<span style="color:var(--live)">● </span>' : '') + sh.gs;
+    $('p-gs').className = 'v';
+    $('p-gs-s').textContent = sh.live ? 'Progressive Field · live' : 'Progressive Field · ' + (sh.gsNote || 'wrapped');
+    var pf = chainLevel >= 2 ? '01:05' : chainLevel === 1 ? '00:35' : '22:58';
+    $('p-pf').textContent = pf;
+    $('p-pf').className = 'v' + (chainLevel >= 1 ? ' watch' : '');
+    $('p-pf-s').textContent = chainLevel >= 2 ? '+2h07 from scheduled'
+      : chainLevel === 1 ? '+1h37 from scheduled' : 'On schedule';
+  }
 
   $('pcrewbar').innerHTML = $('crewbar').innerHTML;
   $('plog').innerHTML = $('log').innerHTML;
@@ -859,7 +1012,149 @@ $('btn-reset').addEventListener('click', function() {
   send('reset');
 });
 
-/* boot */
+/* boot — read query params and session context */
+var params = new URLSearchParams(location.search);
+var seatParam = params.get('seat');
+var gameParam = params.get('game');
+
+// Read session data for context-aware board
+var sessionRaw = sessionStorage.getItem('apron_user');
+var sessionData = null;
+var activeGame = null;
+try { sessionData = sessionRaw ? JSON.parse(sessionRaw) : null; } catch(e) { /* ignore */ }
+
+if (sessionData && gameParam) {
+  // Find the matching game from user's game list
+  var games = sessionData.games || [];
+  activeGame = games.find(function(g) { return g.id === gameParam; }) || null;
+}
+
+// Apply session context to board chrome
+if (sessionData) {
+  var acctName = sessionData.account ? sessionData.account.name : 'CTM Entertainment';
+  var entityName = sessionData.entity ? sessionData.entity.name : 'Sports Desk';
+  $('desk-label').innerHTML = entityName + ' · <b>' + acctName + '</b>';
+  $('prod-tmc-name').textContent = acctName;
+  $('prod-desk-label').textContent = acctName + ' · ' + entityName.toLowerCase();
+}
+
+// Apply game-specific data to board
+if (activeGame) {
+  var net = (activeGame.network || 'FOX').toUpperCase();
+  document.title = 'APRON — ' + activeGame.title;
+
+  // Production seat header
+  $('prod-net').textContent = net + ' · PRODUCTION SEAT';
+  $('prod-title').textContent = activeGame.title;
+  $('prod-sub').textContent = (activeGame.venue || '')
+    + (activeGame.crewCount ? ' · ' + activeGame.crewCount + ' traveling crew' : '');
+
+  // Detail panel title (TMC desk drills into this)
+  // Override openDetail to use game data
+  var _origOpenDetail = openDetail;
+  openDetail = function() {
+    _origOpenDetail();
+    $('d-title').textContent = activeGame.title;
+    $('d-sub').innerHTML = net + ' · ' + (activeGame.venue || '')
+      + (activeGame.crewCount ? ' · <b>' + activeGame.crewCount + ' crew assigned</b>' : '');
+  };
+}
+
+// Fetch game-specific crew roster + chain from admin API BEFORE setSeat
+// (sync XHR so GAME_ROSTER is populated before the first renderProd call)
+var GAME_CHAIN = null;
+var boardGameData = null; // game metadata from the board API (used by applyAgentEvent)
+if (gameParam) {
+  try {
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', '/api/admin/board/' + encodeURIComponent(gameParam), false);
+    xhr.send();
+    if (xhr.status === 200) {
+      var boardData = JSON.parse(xhr.responseText);
+      boardGameData = boardData.game || null;
+
+      // Populate header from board API data when sessionStorage is unavailable
+      if (!activeGame && boardGameData) {
+        var net = (boardGameData.network || 'FOX').toUpperCase();
+        document.title = 'APRON — ' + boardGameData.title;
+        $('prod-net').textContent = net + ' · PRODUCTION SEAT';
+        $('prod-title').textContent = boardGameData.title;
+        $('prod-sub').textContent = (boardGameData.venue || '')
+          + (boardGameData.crewCount ? ' · ' + boardGameData.crewCount + ' traveling crew' : '');
+      }
+
+      // Clear hardcoded fixture defaults from the HTML template —
+      // live SPOTTER events will populate these with real data.
+      $('p-gs').innerHTML = '<span style="color:var(--ink-3)">Waiting for data…</span>';
+      $('p-gs-s').textContent = (boardGameData ? boardGameData.venue : '') || '';
+      // Set PROJECTED FINAL from chain baseline (first node = expected final out)
+      if (boardData.chain && boardData.chain.length > 0) {
+        $('p-pf').textContent = boardData.chain[0].time;
+      } else {
+        $('p-pf').textContent = '—';
+      }
+      $('p-pf-s').textContent = 'Scheduled';
+
+      if (boardData && boardData.roster && boardData.roster.length > 0) {
+        boardData.roster.forEach(function(c) { c.callTime = boardGameData.callTime || ''; });
+        GAME_ROSTER = boardData.roster;
+
+        // Update crew count in production header
+        $('prod-sub').textContent = (boardGameData.venue || '')
+          + ' · ' + boardData.roster.length + ' traveling crew';
+      }
+
+      // Render the wrap-to-gate chain if timing data is available
+      if (boardData.chain && boardData.chain.length > 0) {
+        GAME_CHAIN = boardData.chain;
+        var minRest = (boardGameData.minRestHours || 8) * 60;
+        var airport = boardGameData.departureAirport || '';
+
+        $('pchain-card').style.display = '';
+        $('pchain-note').textContent = 'Projected from game timing · '
+          + (boardGameData.venue || '') + (airport ? ', gate ' + airport : '');
+
+        $('prail').innerHTML = GAME_CHAIN.map(function(n, i) {
+          var cls = 'done'; // default to done (projected)
+          if (i === 0) cls = 'now';
+          // Flag rest node if under minimum
+          if (n.isDuration && n.minutesMark < minRest) cls = 'bad';
+
+          var diff = '';
+          if (n.isDuration && n.minutesMark < minRest) {
+            diff = 'below ' + Math.floor(minRest / 60) + 'h minimum';
+          }
+
+          return '<div class="node ' + cls + '">'
+            + '<div class="bar"><span class="dot"></span></div>'
+            + '<div class="lb">' + esc(n.label) + '</div>'
+            + '<div class="tm">' + esc(n.time) + '</div>'
+            + (diff ? '<div class="df">' + diff + '</div>' : '')
+            + '</div>';
+        }).join('');
+      }
+
+      // Update projected final from game timing
+      if (boardGameData.expectedEndTime) {
+        $('p-pf').textContent = boardGameData.expectedEndTime;
+      }
+    }
+  } catch(e) { /* board API not available */ }
+}
+
+if (seatParam === 'prod' || seatParam === 'production') {
+  setSeat('prod');
+} else if (seatParam === 'tmc') {
+  setSeat('tmc');
+}
+
+function esc(s) {
+  if (!s) return '';
+  var d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
 connect();
 
 })();

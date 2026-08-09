@@ -8,13 +8,27 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { FirestoreStore } from '@apron/integration-firebase';
-import { AdminStore } from './admin-store.js';
+import { AdminStore, GAME_TYPE_DEFAULTS } from './admin-store.js';
+import type { Game, GameType } from './admin-store.js';
 
 // ---------------------------------------------------------------------------
 // Module-level singleton — created on first request
 // ---------------------------------------------------------------------------
 
 let store: AdminStore | null = null;
+
+/** Initialize the store singleton eagerly (called from server.ts at startup). */
+export function initAdminStore(firestoreStore: FirestoreStore | null): AdminStore {
+  if (!store) {
+    store = new AdminStore(firestoreStore);
+  }
+  return store;
+}
+
+/** Expose the store singleton for other modules (e.g. SPOTTER watch). */
+export function getAdminStore(): AdminStore | null {
+  return store;
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -90,6 +104,36 @@ export async function handleAdminRoutes(
     store = new AdminStore(firestoreStore);
   }
 
+  // GET /api/admin/me — identify current user across all accounts
+  if (segments.length === 1 && segments[0] === 'me') {
+    try {
+      return await routeMe(req, res, method, url);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Internal server error';
+      return json(res, 500, { error: message });
+    }
+  }
+
+  // POST /api/admin/seed — bootstrap demo data
+  if (segments.length === 1 && segments[0] === 'seed') {
+    try {
+      return await routeSeed(req, res, method);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Internal server error';
+      return json(res, 500, { error: message });
+    }
+  }
+
+  // GET /api/admin/board/:gameId — board data for a specific game
+  if (segments.length === 2 && segments[0] === 'board') {
+    try {
+      return await routeBoard(req, res, method, segments[1]!);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Internal server error';
+      return json(res, 500, { error: message });
+    }
+  }
+
   // All admin routes live under /api/admin/accounts/...
   if (segments.length === 0 || segments[0] !== 'accounts') {
     return false;
@@ -101,6 +145,109 @@ export async function handleAdminRoutes(
     const message = err instanceof Error ? err.message : 'Internal server error';
     return json(res, 500, { error: message });
   }
+}
+
+// ---------------------------------------------------------------------------
+// /api/admin/me — identify current user across all accounts
+// ---------------------------------------------------------------------------
+
+/**
+ * Dynamic module specifiers — using variables prevents TypeScript from
+ * attempting static module resolution against firebase-admin.
+ */
+const AUTH_MOD = 'firebase-admin/auth';
+const ME_APP_MOD = 'firebase-admin/app';
+
+async function routeMe(
+  _req: IncomingMessage,
+  res: ServerResponse,
+  method: string,
+  url: URL,
+): Promise<boolean> {
+  if (method !== 'GET') return methodNotAllowed(res);
+
+  // Extract email from query param (demo mode) or Bearer token (Firebase auth)
+  let email = url.searchParams.get('email');
+
+  if (!email) {
+    const authHeader = _req.headers['authorization'];
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.slice(7);
+      try {
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
+        const { getAuth } = await import(AUTH_MOD);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call
+        const { getApp } = await import(ME_APP_MOD);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access
+        const decoded = await getAuth(getApp()).verifyIdToken(token);
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+        email = (decoded.email as string) ?? null;
+      } catch {
+        // Firebase auth not available or token invalid — fall through
+      }
+    }
+  }
+
+  if (!email) {
+    return json(res, 401, {
+      error: 'Missing email query parameter or Authorization Bearer token',
+    });
+  }
+
+  const emailLower = email.toLowerCase();
+
+  // Search all accounts for a member whose email matches (case-insensitive)
+  const accounts = await store!.listAccounts();
+
+  for (const account of accounts) {
+    const members = await store!.listMembers(account.id);
+    const member = members.find(m => m.email.toLowerCase() === emailLower);
+
+    if (member) {
+      // Found — enrich with account, entity, and games + assignment counts
+      const [entities, games] = await Promise.all([
+        store!.listEntities(account.id),
+        store!.listGames(account.id),
+      ]);
+
+      const entity = entities.find(e => e.id === member.entityId);
+
+      const gamesWithCounts = await Promise.all(
+        games.map(async g => {
+          const assignments = await store!.listAssignments(account.id, g.id);
+          return {
+            id: g.id,
+            title: g.title,
+            network: g.network,
+            venue: g.venue,
+            date: g.date,
+            callTime: g.callTime,
+            crewCount: assignments.length,
+          };
+        }),
+      );
+
+      return json(res, 200, {
+        member: {
+          id: member.id,
+          name: member.name,
+          email: member.email,
+          role: member.role,
+        },
+        account: {
+          id: account.id,
+          name: account.name,
+          type: account.type,
+        },
+        entity: entity
+          ? { id: entity.id, name: entity.name, type: entity.type }
+          : { id: member.entityId, name: member.entityId, type: 'unknown' },
+        games: gamesWithCounts,
+      });
+    }
+  }
+
+  return notFound(res, 'No member found for this email');
 }
 
 // ---------------------------------------------------------------------------
@@ -284,6 +431,18 @@ async function routeGames(
         date: body['date'] as string,
         callTime: typeof body['callTime'] === 'string' ? body['callTime'] : undefined,
         crewCount: typeof body['crewCount'] === 'number' ? body['crewCount'] : undefined,
+        gameType: typeof body['gameType'] === 'string' ? body['gameType'] as GameType : undefined,
+        startTime: typeof body['startTime'] === 'string' ? body['startTime'] : undefined,
+        expectedEndTime: typeof body['expectedEndTime'] === 'string' ? body['expectedEndTime'] : undefined,
+        expectedDuration: typeof body['expectedDuration'] === 'number' ? body['expectedDuration'] : undefined,
+        strikeDuration: typeof body['strikeDuration'] === 'number' ? body['strikeDuration'] : undefined,
+        venueToTransport: typeof body['venueToTransport'] === 'number' ? body['venueToTransport'] : undefined,
+        transportDuration: typeof body['transportDuration'] === 'number' ? body['transportDuration'] : undefined,
+        departureAirport: typeof body['departureAirport'] === 'string' ? body['departureAirport'] : undefined,
+        overnightLabel: typeof body['overnightLabel'] === 'string' ? body['overnightLabel'] : undefined,
+        lobbyCallTime: typeof body['lobbyCallTime'] === 'string' ? body['lobbyCallTime'] : undefined,
+        minRestHours: typeof body['minRestHours'] === 'number' ? body['minRestHours'] : undefined,
+        espnEventId: typeof body['espnEventId'] === 'string' ? body['espnEventId'] : undefined,
       });
       return json(res, 201, game);
     }
@@ -292,20 +451,36 @@ async function routeGames(
 
   const gameId = segments[3]!;
 
-  // GET/PATCH /api/admin/accounts/:id/games/:gameId
+  // GET/PATCH/DELETE /api/admin/accounts/:id/games/:gameId
   if (segments.length === 4) {
     if (method === 'GET') {
       const game = await store!.getGame(accountId, gameId);
       if (!game) return notFound(res, 'Game not found');
       return json(res, 200, game);
     }
+    if (method === 'DELETE') {
+      const deleted = await store!.deleteGame(accountId, gameId);
+      if (!deleted) return notFound(res, 'Game not found');
+      return json(res, 200, { ok: true });
+    }
     if (method === 'PATCH') {
       const body = await readBody(req);
       const patch: Record<string, unknown> = {};
-      for (const field of ['network', 'title', 'venue', 'date', 'callTime'] as const) {
+      const strFields = [
+        'network', 'title', 'venue', 'date', 'callTime',
+        'gameType', 'startTime', 'expectedEndTime', 'departureAirport',
+        'overnightLabel', 'lobbyCallTime', 'espnEventId',
+      ] as const;
+      for (const field of strFields) {
         if (typeof body[field] === 'string') patch[field] = body[field];
       }
-      if (typeof body['crewCount'] === 'number') patch['crewCount'] = body['crewCount'];
+      const numFields = [
+        'crewCount', 'expectedDuration', 'strikeDuration',
+        'venueToTransport', 'transportDuration', 'minRestHours',
+      ] as const;
+      for (const field of numFields) {
+        if (typeof body[field] === 'number') patch[field] = body[field];
+      }
       const game = await store!.updateGame(accountId, gameId, patch);
       if (!game) return notFound(res, 'Game not found');
       return json(res, 200, game);
@@ -432,4 +607,271 @@ async function routeAssignments(
   }
 
   return false;
+}
+
+// ---------------------------------------------------------------------------
+// Seed — bootstrap demo data
+// ---------------------------------------------------------------------------
+
+async function routeSeed(
+  _req: IncomingMessage,
+  res: ServerResponse,
+  method: string,
+): Promise<boolean> {
+  if (method !== 'POST') return methodNotAllowed(res);
+
+  // Check if data already exists
+  const existing = await store!.listAccounts();
+  if (existing.length > 0) {
+    return json(res, 200, { seeded: false, message: 'Data already exists', accounts: existing.length });
+  }
+
+  // Deterministic IDs so game URLs survive server restarts
+  const ACCT_ID = 'acct-ctm-entertainment';
+  const TMC_ID = 'entity-sports-travel-desk';
+  const PROD_ID = 'entity-production-coordination';
+  const GAME_ID = 'alcs-gm4-rangers-guardians';
+
+  // 1. Account
+  const acct = await store!.createAccount({ id: ACCT_ID, name: 'CTM Entertainment', type: 'hybrid' });
+
+  // 2. Entities
+  const tmcEntity = await store!.createEntity(acct.id, { id: TMC_ID, type: 'tmc', name: 'Sports Travel Desk' });
+  const prodEntity = await store!.createEntity(acct.id, { id: PROD_ID, type: 'production', name: 'Production Coordination' });
+
+  // 3. Members (Gmail plus addressing)
+  await store!.createMember(acct.id, {
+    id: 'member-coordinator',
+    entityId: prodEntity.id,
+    role: 'coordinator',
+    email: 'markmcspadden+coordinator@gmail.com',
+    name: 'Mark McSpadden',
+  });
+  await store!.createMember(acct.id, {
+    id: 'member-agent',
+    entityId: tmcEntity.id,
+    role: 'desk_agent',
+    email: 'markmcspadden+agent@gmail.com',
+    name: 'Mark McSpadden',
+  });
+  await store!.createMember(acct.id, {
+    id: 'member-lead',
+    entityId: tmcEntity.id,
+    role: 'desk_lead',
+    email: 'markmcspadden+lead@gmail.com',
+    name: 'Mark McSpadden',
+  });
+
+  // 4. Crew
+  const crewData = [
+    { id: 'crew-callahan', name: 'Mike Callahan', position: 'TD', department: 'Truck', homeMarket: 'New York, NY', tier: 'A-list' },
+    { id: 'crew-vasquez', name: 'Sarah Vasquez', position: 'DIR', department: 'Truck', homeMarket: 'Los Angeles, CA', tier: 'A-list' },
+    { id: 'crew-kessler', name: 'Dave Kessler', position: 'A1', department: 'Audio booth', homeMarket: 'Chicago, IL', tier: 'A-list' },
+    { id: 'crew-rinaldi', name: 'Tony Rinaldi', position: 'EIC', department: 'Engineering', homeMarket: 'New York, NY', tier: 'A-list' },
+    { id: 'crew-nguyen', name: 'Beth Nguyen', position: 'GFX', department: 'Graphics', homeMarket: 'Atlanta, GA', tier: 'B-list' },
+    { id: 'crew-wright', name: 'James Wright', position: 'LEAD EVS', department: 'Tape room', homeMarket: 'Dallas, TX', tier: 'A-list' },
+  ] as const;
+
+  const crew = [];
+  for (const c of crewData) {
+    crew.push(await store!.createCrew(acct.id, { ...c }));
+  }
+
+  // 5. Game (with full timing model)
+  const game = await store!.createGame(acct.id, {
+    id: GAME_ID,
+    network: 'FOX',
+    title: 'ALCS Gm 4 - Rangers @ Guardians',
+    venue: 'Progressive Field, Cleveland',
+    date: '2026-10-17',
+    callTime: '14:00',
+    gameType: 'baseball',
+    startTime: '19:08',
+    expectedEndTime: '22:58',        // can be overridden live
+    strikeDuration: 75,               // 75min load-out at Progressive Field
+    venueToTransport: 15,             // 15min venue → shuttle
+    transportDuration: 27,            // 27min shuttle → airport hotel
+    departureAirport: 'CLE',
+    overnightLabel: 'Airport hotel',
+    lobbyCallTime: '04:30',           // next morning lobby
+    minRestHours: 8,                  // NABET Art. 8.3
+  });
+
+  // 6. Assignments
+  for (const c of crew) {
+    await store!.createAssignment(acct.id, game.id, {
+      crewId: c.id,
+      position: c.position,
+    });
+  }
+
+  return json(res, 201, {
+    seeded: true,
+    account: acct.id,
+    entities: [tmcEntity.id, prodEntity.id],
+    members: 3,
+    crew: crew.length,
+    games: 1,
+    assignments: crew.length,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Chain computation — wrap-to-gate timing from game data
+// ---------------------------------------------------------------------------
+
+/** Parse "HH:MM" into total minutes since midnight. */
+function parseHM(hm: string): number {
+  const [h, m] = hm.split(':').map(Number) as [number, number];
+  return h * 60 + m;
+}
+
+/** Format total minutes as "HH:MM". Wraps past midnight. */
+function fmtHM(totalMin: number): string {
+  const wrapped = ((totalMin % 1440) + 1440) % 1440;
+  const h = Math.floor(wrapped / 60);
+  const m = wrapped % 60;
+  return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0');
+}
+
+/** Format a minute count as "Xh YYm". */
+function fmtDuration(mins: number): string {
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return h > 0 ? `${h}h${String(m).padStart(2, '0')}m` : `${m}m`;
+}
+
+interface ChainNode {
+  label: string;
+  time: string;          // "HH:MM" or "XhYYm" for durations
+  isDuration?: boolean;
+  minutesMark: number;   // minutes since midnight (for diff calculations)
+}
+
+/**
+ * Compute the wrap-to-gate chain from a Game's timing fields.
+ * Returns null if insufficient timing data is configured.
+ */
+function computeChain(game: Game): ChainNode[] | null {
+  // Need at least an end time to build a chain
+  let endMin: number;
+
+  if (game.expectedEndTime) {
+    endMin = parseHM(game.expectedEndTime);
+  } else if (game.startTime) {
+    const defaults = game.gameType ? GAME_TYPE_DEFAULTS[game.gameType] : null;
+    const dur = game.expectedDuration ?? defaults?.duration ?? 180;
+    endMin = parseHM(game.startTime) + dur;
+  } else {
+    return null; // not enough data
+  }
+
+  const defaults = game.gameType ? GAME_TYPE_DEFAULTS[game.gameType] : null;
+  const strikeMins = game.strikeDuration ?? defaults?.strike ?? 75;
+  const venueToTransport = game.venueToTransport ?? 15;
+  const transportDur = game.transportDuration ?? 27;
+  const minRest = (game.minRestHours ?? 8) * 60;
+
+  const strikeEnd = endMin + strikeMins;
+  const shuttleRolls = strikeEnd + venueToTransport;
+  const overnightArr = shuttleRolls + transportDur;
+
+  const chain: ChainNode[] = [
+    { label: 'Final out', time: fmtHM(endMin), minutesMark: endMin },
+    { label: 'Strike complete', time: fmtHM(strikeEnd), minutesMark: strikeEnd },
+    { label: 'Shuttle rolls', time: fmtHM(shuttleRolls), minutesMark: shuttleRolls },
+    { label: game.overnightLabel ?? 'Airport hotel', time: fmtHM(overnightArr), minutesMark: overnightArr },
+  ];
+
+  // Add rest duration node if we have a lobby call time
+  if (game.lobbyCallTime) {
+    const lobbyMin = parseHM(game.lobbyCallTime);
+    // Rest = lobby - overnight arrival (may wrap past midnight)
+    let restMins = lobbyMin - (overnightArr % 1440);
+    if (restMins < 0) restMins += 1440;
+
+    chain.push({
+      label: `Rest before ${game.lobbyCallTime} lobby`,
+      time: fmtDuration(restMins),
+      isDuration: true,
+      minutesMark: restMins,
+    });
+  }
+
+  return chain;
+}
+
+// ---------------------------------------------------------------------------
+// /api/admin/board/:gameId — full board data for a game
+// ---------------------------------------------------------------------------
+
+async function routeBoard(
+  _req: IncomingMessage,
+  res: ServerResponse,
+  method: string,
+  gameId: string,
+): Promise<boolean> {
+  if (method !== 'GET') return methodNotAllowed(res);
+
+  // Search all accounts for the game
+  const accounts = await store!.listAccounts();
+
+  for (const account of accounts) {
+    const game = await store!.getGame(account.id, gameId);
+    if (!game) continue;
+
+    // Found the game — load assignments, crew, and entities
+    const [assignments, allCrew, entities] = await Promise.all([
+      store!.listAssignments(account.id, gameId),
+      store!.listCrew(account.id),
+      store!.listEntities(account.id),
+    ]);
+
+    const crewMap = new Map(allCrew.map(c => [c.id, c]));
+
+    // Build enriched roster: join assignments with crew records
+    const roster = assignments.map(a => {
+      const crew = crewMap.get(a.crewId);
+      return {
+        assignmentId: a.id,
+        crewId: a.crewId,
+        position: a.position ?? crew?.position ?? '',
+        name: crew?.name ?? a.crewId,
+        department: crew?.department ?? '',
+        homeMarket: crew?.homeMarket ?? '',
+        tier: crew?.tier ?? '',
+        notes: a.notes ?? '',
+      };
+    });
+
+    // Compute the wrap-to-gate chain from game timing data
+    const chain = computeChain(game);
+
+    return json(res, 200, {
+      game: {
+        id: game.id,
+        title: game.title,
+        network: game.network,
+        venue: game.venue,
+        date: game.date,
+        callTime: game.callTime,
+        gameType: game.gameType,
+        startTime: game.startTime,
+        expectedEndTime: game.expectedEndTime,
+        strikeDuration: game.strikeDuration,
+        departureAirport: game.departureAirport,
+        lobbyCallTime: game.lobbyCallTime,
+        minRestHours: game.minRestHours ?? 8,
+      },
+      account: {
+        id: account.id,
+        name: account.name,
+      },
+      entities: entities.map(e => ({ id: e.id, name: e.name, type: e.type })),
+      roster,
+      chain,
+    });
+  }
+
+  return notFound(res, 'Game not found');
 }

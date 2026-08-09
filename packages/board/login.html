@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>APRON — Sign In</title>
+<style>
+:root{
+  --bg:#0B0B0C; --panel:#141416; --panel-2:#1B1B1E; --line:#2A2A2E; --line-2:#3A3A40;
+  --ink:#F2F1EE; --ink-2:#A9A69E; --ink-3:#6E6B65;
+  --live:#5DA9E9;
+  --f:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --m:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f);font-size:14px;
+  line-height:1.45;-webkit-font-smoothing:antialiased;
+  display:flex;align-items:center;justify-content:center;min-height:100vh}
+
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;
+  padding:40px 36px;width:100%;max-width:420px;text-align:center}
+.brand{font-size:22px;font-weight:750;letter-spacing:.15em;margin-bottom:4px}
+.sub{font-size:11px;letter-spacing:.16em;color:var(--ink-3);text-transform:uppercase;margin-bottom:32px}
+
+.divider{display:flex;align-items:center;gap:12px;margin:24px 0;color:var(--ink-3);font-size:11px;
+  letter-spacing:.1em;text-transform:uppercase}
+.divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--line)}
+
+/* Google sign-in button */
+.btn-google{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;
+  padding:12px 20px;border-radius:8px;border:1px solid var(--line-2);background:var(--panel-2);
+  color:var(--ink);font:inherit;font-size:14px;font-weight:600;cursor:pointer;
+  transition:border-color .15s,background .15s}
+.btn-google:hover{border-color:var(--ink-3);background:#1E1E22}
+.btn-google:disabled{opacity:.4;cursor:default}
+.btn-google svg{width:20px;height:20px;flex-shrink:0}
+
+/* Demo login */
+.demo-section{text-align:left}
+.demo-section label{display:block;font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--ink-3);font-weight:640;margin-bottom:6px}
+.demo-input{width:100%;padding:11px 14px;background:var(--bg);border:1px solid var(--line-2);
+  border-radius:7px;color:var(--ink);font:inherit;font-size:13px;outline:none;
+  transition:border-color .15s;font-family:var(--m)}
+.demo-input:focus{border-color:var(--live)}
+.demo-input::placeholder{color:var(--ink-3)}
+
+.btn{font:inherit;font-size:13px;font-weight:600;padding:11px 20px;border-radius:8px;cursor:pointer;
+  border:1px solid var(--live);background:#1A3654;color:var(--ink);transition:.15s;width:100%;
+  margin-top:12px}
+.btn:hover{background:#234770;border-color:#7ABFEE}
+.btn:disabled{opacity:.4;cursor:default}
+
+.roles{margin-top:16px;text-align:left}
+.roles h4{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);
+  font-weight:640;margin-bottom:8px}
+.role-btn{display:block;width:100%;text-align:left;padding:10px 14px;background:var(--bg);
+  border:1px solid var(--line);border-radius:7px;margin-bottom:6px;cursor:pointer;
+  font:inherit;font-size:12px;color:var(--ink-2);transition:.12s}
+.role-btn:hover{border-color:var(--line-2);color:var(--ink);background:var(--panel-2)}
+.role-btn .role-name{font-weight:600;color:var(--ink);display:block;margin-bottom:2px;font-size:13px}
+.role-btn .role-email{font-family:var(--m);font-size:11px;color:var(--ink-3)}
+
+.err{background:#33100F;border:1px solid #4A1A18;border-radius:7px;padding:10px 14px;
+  font-size:12px;color:#F09B98;margin-top:12px;display:none}
+.err.show{display:block}
+
+.loading{display:none;margin-top:12px;color:var(--ink-3);font-size:12px;font-family:var(--m)}
+.loading.show{display:block}
+
+.note{margin-top:20px;font-size:11px;color:var(--ink-3);line-height:1.5}
+.note a{color:var(--live);text-decoration:none}
+.note a:hover{text-decoration:underline}
+
+/* Firebase not configured banner */
+.fb-status{font-family:var(--m);font-size:10px;letter-spacing:.08em;padding:6px 12px;
+  border-radius:5px;display:inline-block;margin-bottom:20px}
+.fb-status.ok{background:#0E2A16;border:1px solid #1A4423;color:#6DC98B}
+.fb-status.off{background:#2E2308;border:1px solid #4A3B12;color:#D4A843}
+</style>
+</head>
+<body>
+
+<div class="card">
+  <div class="brand">APRON</div>
+  <div class="sub">Crew Integrity Board</div>
+
+  <div id="fb-status" class="fb-status off">CHECKING AUTH...</div>
+
+  <!-- Google Sign-In (shown when Firebase is configured) -->
+  <div id="google-section" style="display:none">
+    <button class="btn-google" id="btn-google" disabled>
+      <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.27-4.74 3.27-8.1z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18A10.97 10.97 0 0 0 1 12c0 1.77.42 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+      Sign in with Google
+    </button>
+  </div>
+
+  <!-- Demo login (always shown, primary when Firebase not configured) -->
+  <div id="demo-divider" class="divider" style="display:none">or sign in with email</div>
+
+  <div class="demo-section">
+    <label>Email address</label>
+    <input type="email" class="demo-input" id="demo-email" placeholder="markmcspadden+coordinator@gmail.com">
+  </div>
+  <button class="btn" id="btn-demo">Sign In</button>
+
+  <div class="roles" id="quick-roles">
+    <h4>Quick access</h4>
+    <button class="role-btn" data-email="markmcspadden+coordinator@gmail.com">
+      <span class="role-name">Production Coordinator</span>
+      <span class="role-email">markmcspadden+coordinator@gmail.com</span>
+    </button>
+    <button class="role-btn" data-email="markmcspadden+agent@gmail.com">
+      <span class="role-name">TMC Desk Agent</span>
+      <span class="role-email">markmcspadden+agent@gmail.com</span>
+    </button>
+    <button class="role-btn" data-email="markmcspadden+lead@gmail.com">
+      <span class="role-name">Desk Lead</span>
+      <span class="role-email">markmcspadden+lead@gmail.com</span>
+    </button>
+  </div>
+
+  <div id="err" class="err"></div>
+  <div id="loading" class="loading">Signing in...</div>
+
+  <div class="note">
+    <a href="/admin">Admin Console</a> · <a href="/board">Demo Board</a>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+var $ = function(id){ return document.getElementById(id); };
+var firebaseApp = null;
+var firebaseAuth = null;
+
+// ---- Check Firebase config ----
+fetch('/api/auth/config')
+  .then(function(r){ return r.json(); })
+  .then(function(data){
+    if(data.config && data.config.apiKey){
+      $('fb-status').textContent = 'FIREBASE AUTH READY';
+      $('fb-status').className = 'fb-status ok';
+      initFirebase(data.config);
+    } else {
+      $('fb-status').textContent = 'DEMO MODE — NO FIREBASE';
+      $('fb-status').className = 'fb-status off';
+    }
+  })
+  .catch(function(){
+    $('fb-status').textContent = 'DEMO MODE — NO FIREBASE';
+    $('fb-status').className = 'fb-status off';
+  });
+
+function initFirebase(config){
+  // Load Firebase client SDK from CDN — self-contained approach
+  // For the hackathon we'll use the compat library loaded inline
+  $('google-section').style.display = '';
+  $('demo-divider').style.display = '';
+  $('btn-google').disabled = false;
+
+  // Dynamic Firebase SDK load
+  var script1 = document.createElement('script');
+  script1.src = 'https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js';
+  script1.onload = function(){
+    var script2 = document.createElement('script');
+    script2.src = 'https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js';
+    script2.onload = function(){
+      /* global firebase */
+      firebaseApp = firebase.initializeApp(config);
+      firebaseAuth = firebase.auth();
+      $('btn-google').disabled = false;
+    };
+    document.head.appendChild(script2);
+  };
+  document.head.appendChild(script1);
+}
+
+// ---- Google sign-in ----
+$('btn-google').addEventListener('click', function(){
+  if(!firebaseAuth) return;
+  $('loading').classList.add('show');
+  $('err').classList.remove('show');
+
+  var provider = new firebase.auth.GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: 'select_account' });
+
+  firebaseAuth.signInWithPopup(provider)
+    .then(function(result){
+      var token = result.user.getIdToken();
+      return token;
+    })
+    .then(function(token){
+      return fetch('/api/admin/me', {
+        headers: { 'Authorization': 'Bearer ' + token }
+      });
+    })
+    .then(function(r){
+      if(!r.ok) throw new Error('No member found for this Google account');
+      return r.json();
+    })
+    .then(function(data){
+      // Store user data and redirect to dashboard
+      sessionStorage.setItem('apron_user', JSON.stringify(data));
+      sessionStorage.setItem('apron_auth', 'firebase');
+      window.location.href = '/dashboard';
+    })
+    .catch(function(e){
+      $('loading').classList.remove('show');
+      $('err').textContent = e.message;
+      $('err').classList.add('show');
+    });
+});
+
+// ---- Demo sign-in ----
+function demoLogin(email){
+  if(!email){
+    $('err').textContent = 'Enter an email address.';
+    $('err').classList.add('show');
+    return;
+  }
+  $('loading').classList.add('show');
+  $('err').classList.remove('show');
+
+  fetch('/api/admin/me?email=' + encodeURIComponent(email))
+    .then(function(r){
+      if(!r.ok) throw new Error('No member found for ' + email);
+      return r.json();
+    })
+    .then(function(data){
+      sessionStorage.setItem('apron_user', JSON.stringify(data));
+      sessionStorage.setItem('apron_auth', 'demo');
+      sessionStorage.setItem('apron_email', email);
+      window.location.href = '/dashboard';
+    })
+    .catch(function(e){
+      $('loading').classList.remove('show');
+      $('err').textContent = e.message;
+      $('err').classList.add('show');
+    });
+}
+
+$('btn-demo').addEventListener('click', function(){
+  demoLogin($('demo-email').value.trim());
+});
+
+$('demo-email').addEventListener('keydown', function(e){
+  if(e.key === 'Enter') demoLogin($('demo-email').value.trim());
+});
+
+// ---- Quick role buttons ----
+document.querySelectorAll('.role-btn').forEach(function(btn){
+  btn.addEventListener('click', function(){
+    var email = btn.dataset.email;
+    $('demo-email').value = email;
+    demoLogin(email);
+  });
+});
+
+// ---- Check if already logged in ----
+var existing = sessionStorage.getItem('apron_user');
+if(existing){
+  try{
+    var user = JSON.parse(existing);
+    if(user.member) window.location.href = '/dashboard';
+  }catch(e){ /* ignore */ }
+}
+
+})();
+</script>
+</body>
+</html>

@@ -3,18 +3,43 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Shows — authenticated users can read; only the server (admin SDK) writes
-    match /shows/{showId} {
+    // Accounts — authenticated users can read; server (Admin SDK) writes
+    match /accounts/{accountId} {
       allow read: if request.auth != null;
       allow write: if false; // server-side only via Admin SDK
 
-      match /decisions/{decisionId} {
+      // Entities (TMC desk, production coordination)
+      match /entities/{entityId} {
         allow read: if request.auth != null;
         allow write: if false;
       }
+
+      // Members (people with login access)
+      match /members/{memberId} {
+        allow read: if request.auth != null;
+        allow write: if false;
+      }
+
+      // Crew (production crew assigned to games)
+      match /crew/{crewId} {
+        allow read: if request.auth != null;
+        allow write: if false;
+      }
+
+      // Games
+      match /games/{gameId} {
+        allow read: if request.auth != null;
+        allow write: if false;
+
+        // Assignments (crew assigned to a game)
+        match /assignments/{assignmentId} {
+          allow read: if request.auth != null;
+          allow write: if false;
+        }
+      }
     }
 
-    // Audit events — authenticated users can read; only the server writes
+    // Audit events — authenticated users can read; server writes
     match /audit_events/{eventId} {
       allow read: if request.auth != null;
       allow write: if false;
@@ -23,13 +48,6 @@ service cloud.firestore {
     // User profiles — users can read/write their own
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
-    }
-
-    // TMC accounts — only members can read
-    match /tmc_accounts/{accountId} {
-      allow read: if request.auth != null
-        && request.auth.uid in resource.data.memberUids;
-      allow write: if false;
     }
 
     // Deny everything else

@@ -62,7 +62,7 @@ export interface ShowClosed extends BaseEvent {
 
 export interface AgentStatusChange extends BaseEvent {
   type: 'agent-status';
-  agentStates: Partial<Record<AgentName, 'on' | 'hot' | 'off'>>;
+  agentStates: Partial<Record<AgentName, 'on' | 'hot' | 'off' | 'done'>>;
 }
 
 export interface ShowStateChange extends BaseEvent {

@@ -2,9 +2,15 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "apron-dev",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "cd /Users/mark/Development/personal/apron/apron-starter && set -a && . ./.env 2>/dev/null; set +a && npx tsx packages/server/src/index.ts"],
+      "port": 3000
+    },
+    {
       "name": "apron-demo",
-      "runtimeExecutable": "npx",
-      "runtimeArgs": ["tsx", "packages/server/src/demo.ts"],
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "cd /Users/mark/Development/personal/apron/apron-starter && npx tsx packages/server/src/demo.ts"],
       "port": 3000
     }
   ]

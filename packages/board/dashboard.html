@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>APRON — Dashboard</title>
+<style>
+:root{
+  --bg:#0B0B0C; --panel:#141416; --panel-2:#1B1B1E; --line:#2A2A2E; --line-2:#3A3A40;
+  --ink:#F2F1EE; --ink-2:#A9A69E; --ink-3:#6E6B65;
+  --clear:#25B04B; --clear-bg:#0E2A16;
+  --watch:#E8A81C; --watch-bg:#2E2308;
+  --live:#5DA9E9;
+  --f:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --m:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f);font-size:14px;
+  line-height:1.45;-webkit-font-smoothing:antialiased}
+
+/* ---- header ---- */
+.header{background:var(--panel);border-bottom:1px solid var(--line);padding:0 28px;
+  height:56px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:90;
+  backdrop-filter:blur(10px)}
+.header-brand{font-size:17px;font-weight:750;letter-spacing:.13em}
+.header-tag{font-family:var(--m);font-size:10px;letter-spacing:.1em;padding:4px 8px;
+  border-radius:4px;text-transform:uppercase}
+.header-tag.tmc{background:#12212E;border:1px solid #25405A;color:#9CC6EA}
+.header-tag.production{background:#1E1428;border:1px solid #3A2658;color:#B89BDB}
+.header-tag.coordinator{background:#2E2308;border:1px solid #4A3B12;color:#D4A843}
+.header-tag.desk_agent{background:#12212E;border:1px solid #25405A;color:#9CC6EA}
+.header-tag.desk_lead{background:#0E2A16;border:1px solid #1A4423;color:#6DC98B}
+.header-tag.admin{background:#31190A;border:1px solid #4A2B14;color:#E8A060}
+.header-right{margin-left:auto;display:flex;align-items:center;gap:14px}
+.header-user{font-size:13px;font-weight:600}
+.header-email{font-family:var(--m);font-size:11px;color:var(--ink-3)}
+.btn-signout{font:inherit;font-size:11px;font-weight:600;padding:6px 12px;border-radius:6px;
+  cursor:pointer;border:1px solid var(--line-2);background:var(--panel-2);color:var(--ink-2);
+  transition:.12s}
+.btn-signout:hover{border-color:var(--ink-3);color:var(--ink)}
+
+/* ---- main ---- */
+.main{max-width:960px;margin:0 auto;padding:32px 28px 80px}
+
+/* ---- welcome card ---- */
+.welcome{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  padding:24px 28px;margin-bottom:28px}
+.welcome h1{font-size:20px;font-weight:700;letter-spacing:-.01em;margin-bottom:6px}
+.welcome-meta{display:flex;flex-wrap:wrap;gap:16px;font-size:13px;color:var(--ink-2)}
+.welcome-meta .label{color:var(--ink-3);font-size:10px;letter-spacing:.1em;
+  text-transform:uppercase;margin-right:4px}
+
+/* ---- games ---- */
+.sec-h{display:flex;align-items:center;gap:12px;margin:0 0 16px}
+.sec-h h2{font-size:12px;letter-spacing:.15em;text-transform:uppercase;color:var(--ink-2);font-weight:640}
+.sec-h .n{font-family:var(--m);font-size:11px;color:var(--ink-3)}
+
+.game-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px}
+
+.game-card{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  padding:20px 22px;transition:border-color .15s,transform .12s;cursor:pointer;
+  display:flex;flex-direction:column;gap:12px}
+.game-card:hover{border-color:var(--line-2);transform:translateY(-2px)}
+.game-top{display:flex;align-items:center;gap:10px}
+.game-network{font-family:var(--m);font-size:10px;letter-spacing:.1em;padding:4px 8px;
+  border-radius:4px;background:#12212E;border:1px solid #25405A;color:#9CC6EA;text-transform:uppercase}
+.game-title{font-size:16px;font-weight:650;letter-spacing:-.01em;flex:1}
+.game-details{display:flex;flex-wrap:wrap;gap:16px;font-size:12px;color:var(--ink-2)}
+.game-details .detail{display:flex;align-items:center;gap:5px}
+.game-details .icon{font-size:13px;opacity:.5}
+.game-bottom{display:flex;align-items:center;gap:10px;padding-top:12px;border-top:1px solid var(--line)}
+.game-crew{font-family:var(--m);font-size:11px;color:var(--ink-3)}
+.game-action{margin-left:auto}
+.btn-board{font:inherit;font-size:12px;font-weight:600;padding:8px 16px;border-radius:7px;
+  cursor:pointer;border:1px solid var(--live);background:#1A3654;color:var(--ink);
+  transition:.14s;display:inline-flex;align-items:center;gap:6px}
+.btn-board:hover{background:#234770;border-color:#7ABFEE}
+.btn-board .arrow{font-size:14px}
+
+/* ---- empty state ---- */
+.empty{padding:48px 20px;text-align:center;color:var(--ink-3);font-size:14px;
+  border:1px dashed var(--line-2);border-radius:12px}
+.empty b{display:block;font-size:16px;color:var(--ink-2);margin-bottom:8px;font-weight:600}
+.empty .note{margin-top:12px;font-size:12px}
+
+/* ---- seat indicator ---- */
+.seat-badge{display:inline-flex;align-items:center;gap:6px;font-family:var(--m);
+  font-size:10px;letter-spacing:.08em;padding:4px 10px;border-radius:5px;text-transform:uppercase}
+.seat-badge.tmc{background:#12212E;border:1px solid #25405A;color:#9CC6EA}
+.seat-badge.production{background:#1E1428;border:1px solid #3A2658;color:#B89BDB}
+.seat-badge .dot{width:6px;height:6px;border-radius:99px}
+.seat-badge.tmc .dot{background:#5DA9E9}
+.seat-badge.production .dot{background:#B89BDB}
+
+/* ---- responsive ---- */
+@media(max-width:600px){
+  .header{padding:0 16px}
+  .main{padding:20px 16px 60px}
+  .game-grid{grid-template-columns:1fr}
+  .welcome-meta{flex-direction:column;gap:8px}
+  .header-email{display:none}
+}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <span class="header-brand">APRON</span>
+  <span class="header-tag" id="role-tag"></span>
+  <div class="header-right">
+    <span class="header-user" id="user-name"></span>
+    <span class="header-email" id="user-email"></span>
+    <button class="btn-signout" id="btn-signout">Sign out</button>
+  </div>
+</div>
+
+<div class="main">
+  <div class="welcome" id="welcome">
+    <h1 id="welcome-title">Welcome back</h1>
+    <div class="welcome-meta">
+      <span><span class="label">Account</span> <span id="acct-name"></span></span>
+      <span><span class="label">Entity</span> <span id="entity-name"></span></span>
+      <span><span class="label">Seat</span> <span class="seat-badge" id="seat-badge"><span class="dot"></span> <span id="seat-label"></span></span></span>
+    </div>
+  </div>
+
+  <div class="sec-h">
+    <h2>Your Games</h2>
+    <span class="n" id="games-count"></span>
+  </div>
+
+  <div id="games-grid" class="game-grid"></div>
+  <div id="games-empty" class="empty" style="display:none">
+    <b>No games scheduled</b>
+    Your admin hasn't added any games to this account yet.
+    <div class="note">Contact your admin or visit the <a href="/admin" style="color:var(--live)">Admin Console</a>.</div>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+var $ = function(id){ return document.getElementById(id); };
+
+// ---- Load user from session ----
+var raw = sessionStorage.getItem('apron_user');
+if(!raw){
+  window.location.href = '/login';
+  return;
+}
+
+var data;
+try{ data = JSON.parse(raw); }catch(e){
+  sessionStorage.removeItem('apron_user');
+  window.location.href = '/login';
+  return;
+}
+
+var member = data.member;
+var account = data.account;
+var entity = data.entity;
+var games = data.games || [];
+
+// ---- Populate header ----
+$('user-name').textContent = member.name;
+$('user-email').textContent = member.email;
+
+var roleTag = $('role-tag');
+roleTag.textContent = member.role.replace(/_/g, ' ');
+roleTag.classList.add(member.role);
+
+// ---- Welcome card ----
+$('welcome-title').textContent = 'Welcome, ' + member.name.split(' ')[0];
+$('acct-name').textContent = account.name;
+$('entity-name').textContent = entity.name;
+
+var seatType = entity.type === 'tmc' ? 'tmc' : 'production';
+var seatBadge = $('seat-badge');
+seatBadge.classList.add(seatType);
+$('seat-label').textContent = seatType === 'tmc' ? 'TMC Desk' : 'Production';
+
+// ---- Games ----
+$('games-count').textContent = games.length + ' game' + (games.length !== 1 ? 's' : '');
+
+if(games.length === 0){
+  $('games-empty').style.display = '';
+} else {
+  $('games-grid').innerHTML = games.map(function(g){
+    var dateStr = g.date || '';
+    if(g.callTime) dateStr += ' · Call ' + g.callTime;
+    var seatParam = seatType === 'tmc' ? 'tmc' : 'prod';
+
+    return '<div class="game-card" data-game-id="' + esc(g.id) + '">'
+      + '<div class="game-top">'
+      + '<span class="game-network">' + esc(g.network || '') + '</span>'
+      + '<span class="game-title">' + esc(g.title || '') + '</span>'
+      + '</div>'
+      + '<div class="game-details">'
+      + '<span class="detail"><span class="icon">📍</span> ' + esc(g.venue || '') + '</span>'
+      + '<span class="detail"><span class="icon">📅</span> ' + esc(dateStr) + '</span>'
+      + '</div>'
+      + '<div class="game-bottom">'
+      + '<span class="game-crew">' + (g.crewCount || 0) + ' crew assigned</span>'
+      + '<div class="game-action">'
+      + '<a href="/board?seat=' + seatParam + '&game=' + encodeURIComponent(g.id) + '" class="btn-board">Open Board <span class="arrow">→</span></a>'
+      + '</div>'
+      + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+// ---- Sign out ----
+$('btn-signout').addEventListener('click', function(){
+  sessionStorage.removeItem('apron_user');
+  sessionStorage.removeItem('apron_auth');
+  sessionStorage.removeItem('apron_email');
+  window.location.href = '/login';
+});
+
+function esc(s){
+  if(!s) return '';
+  var d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+})();
+</script>
+</body>
+</html>

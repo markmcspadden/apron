@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>APRON — SPOTTER Dashboard</title>
+<style>
+:root{
+  --bg:#0B0B0C; --panel:#141416; --panel-2:#1B1B1E; --line:#2A2A2E; --line-2:#3A3A40;
+  --ink:#F2F1EE; --ink-2:#A9A69E; --ink-3:#6E6B65;
+  --clear:#25B04B; --clear-bg:#0E2A16;
+  --watch:#E8A81C; --watch-bg:#2E2308;
+  --risk:#EE7A3C; --risk-bg:#31190A;
+  --down:#E0403C; --down-bg:#33100F;
+  --live:#5DA9E9;
+  --f:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --m:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f);font-size:14px;
+  line-height:1.45;-webkit-font-smoothing:antialiased;display:flex;min-height:100vh}
+.mono{font-family:var(--m);font-variant-numeric:tabular-nums}
+
+/* ---------- sidebar ---------- */
+.sidebar{width:220px;min-height:100vh;background:var(--panel);border-right:1px solid var(--line);
+  position:fixed;top:0;left:0;bottom:0;z-index:90;display:flex;flex-direction:column}
+.sidebar-brand{padding:18px 20px 16px;border-bottom:1px solid var(--line)}
+.sidebar-brand b{font-size:16px;font-weight:750;letter-spacing:.13em}
+.sidebar-brand span{font-size:10px;letter-spacing:.16em;color:var(--ink-3);text-transform:uppercase;
+  margin-left:9px}
+.sidebar-nav{padding:12px 0;flex:1}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 20px;font-size:13px;font-weight:600;
+  color:var(--ink-3);cursor:pointer;transition:background .12s,color .12s;border:none;background:none;
+  width:100%;text-align:left;font-family:var(--f);letter-spacing:.02em;text-decoration:none}
+.nav-item:hover{background:var(--panel-2);color:var(--ink-2)}
+.nav-item.active{color:var(--ink);background:var(--panel-2);border-right:2px solid var(--live)}
+.nav-icon{font-size:15px;width:22px;text-align:center;opacity:.6}
+.nav-item.active .nav-icon{opacity:1}
+.sidebar-foot{padding:14px 20px;border-top:1px solid var(--line);font-size:10px;color:var(--ink-3);
+  letter-spacing:.08em;font-family:var(--m)}
+
+/* ---------- top bar ---------- */
+.topbar{position:fixed;top:0;left:220px;right:0;z-index:80;background:#0B0B0Cf2;
+  backdrop-filter:blur(10px);border-bottom:1px solid var(--line);height:52px;
+  display:flex;align-items:center;padding:0 24px;gap:16px}
+.topbar-title{font-size:12px;letter-spacing:.15em;text-transform:uppercase;color:var(--ink-2);
+  font-weight:640}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:12px}
+.topbar-pill{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  padding:3px 10px;border-radius:99px;font-family:var(--m)}
+.topbar-pill.on{background:var(--clear-bg);color:var(--clear);border:1px solid var(--clear)}
+.topbar-pill.off{background:var(--panel-2);color:var(--ink-3);border:1px solid var(--line)}
+.refresh-label{font-size:11px;color:var(--ink-3);font-family:var(--m)}
+
+/* ---------- main ---------- */
+.main{margin-left:220px;padding:68px 28px 40px;flex:1;min-width:0}
+
+/* ---------- status cards ---------- */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px;margin-bottom:24px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.card-header{padding:14px 18px 10px;border-bottom:1px solid var(--line);display:flex;
+  align-items:center;gap:10px}
+.card-title{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink-2)}
+.card-icon{font-size:14px;opacity:.7}
+.card-body{padding:14px 18px 16px}
+
+/* score card */
+.score-matchup{font-size:22px;font-weight:750;letter-spacing:.02em;margin-bottom:4px;
+  font-family:var(--m);font-variant-numeric:tabular-nums}
+.score-detail{font-size:13px;color:var(--ink-2);margin-bottom:10px}
+.score-venue{font-size:12px;color:var(--ink-3)}
+.state-badge{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;padding:2px 8px;border-radius:4px;margin-left:8px;font-family:var(--m)}
+.state-badge.pre{background:var(--panel-2);color:var(--ink-3)}
+.state-badge.in{background:#152A42;color:var(--live);border:1px solid #1C3D5E}
+.state-badge.post{background:var(--clear-bg);color:var(--clear)}
+
+/* weather card */
+.wx-temp{font-size:28px;font-weight:750;font-family:var(--m)}
+.wx-temp small{font-size:14px;color:var(--ink-3);font-weight:500}
+.wx-forecast{font-size:13px;color:var(--ink-2);margin:4px 0}
+.wx-detail{font-size:12px;color:var(--ink-3);font-family:var(--m)}
+.wx-risk{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;padding:2px 8px;border-radius:4px;margin-top:8px;font-family:var(--m)}
+.wx-risk.none{background:var(--clear-bg);color:var(--clear)}
+.wx-risk.low{background:var(--watch-bg);color:var(--watch)}
+.wx-risk.moderate{background:var(--risk-bg);color:var(--risk)}
+.wx-risk.high{background:var(--down-bg);color:var(--down)}
+
+/* prediction card */
+.pred-time{font-size:24px;font-weight:750;font-family:var(--m);font-variant-numeric:tabular-nums}
+.pred-label{font-size:11px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.1em;
+  margin-bottom:2px}
+.pred-state{margin-top:8px}
+
+/* config card */
+.cfg-row{display:flex;gap:8px;margin-bottom:4px;font-size:12px}
+.cfg-label{color:var(--ink-3);min-width:100px;flex:none}
+.cfg-val{color:var(--ink);font-family:var(--m)}
+
+/* show state pills */
+.show-pill{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.08em;
+  text-transform:uppercase;padding:3px 10px;border-radius:4px;font-family:var(--m)}
+.show-pill.clear{background:var(--clear-bg);color:var(--clear)}
+.show-pill.watch{background:var(--watch-bg);color:var(--watch)}
+.show-pill.risk{background:var(--risk-bg);color:var(--risk)}
+.show-pill.down{background:var(--down-bg);color:var(--down)}
+
+/* ---------- log table ---------- */
+.log-section{margin-top:8px}
+.log-header{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+.log-title{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink-2)}
+.log-count{font-size:11px;color:var(--ink-3);font-family:var(--m)}
+.log-actions{margin-left:auto;display:flex;gap:8px}
+.log-filter{background:var(--panel-2);border:1px solid var(--line);color:var(--ink-2);
+  font-size:11px;font-family:var(--m);padding:4px 10px;border-radius:4px;cursor:pointer;
+  transition:border-color .15s,color .15s}
+.log-filter:hover,.log-filter.active{border-color:var(--live);color:var(--ink)}
+
+.log-wrap{background:var(--panel);border:1px solid var(--line);border-radius:8px;
+  overflow:hidden;max-height:600px;overflow-y:auto}
+.log-table{width:100%;border-collapse:collapse;font-size:12px;font-family:var(--m);
+  font-variant-numeric:tabular-nums}
+.log-table th{position:sticky;top:0;background:var(--panel);border-bottom:1px solid var(--line);
+  padding:8px 12px;text-align:left;font-size:10px;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--ink-3);z-index:2}
+.log-table td{padding:6px 12px;border-bottom:1px solid var(--line);vertical-align:top;
+  white-space:nowrap}
+.log-table tr:last-child td{border-bottom:none}
+.log-table tr:hover{background:var(--panel-2)}
+
+.log-ts{color:var(--ink-3);width:90px}
+.log-level{width:80px}
+.log-msg{white-space:normal;word-break:break-word;color:var(--ink-2);max-width:0;width:100%}
+.log-data{color:var(--ink-3);max-width:300px;overflow:hidden;text-overflow:ellipsis;font-size:11px}
+
+.lvl{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.08em;
+  text-transform:uppercase;padding:1px 6px;border-radius:3px}
+.lvl-info{background:var(--panel-2);color:var(--ink-3)}
+.lvl-score{background:#152A42;color:var(--live)}
+.lvl-weather{background:#1A2E1A;color:#6BC86B}
+.lvl-prediction{background:#2A1A3A;color:#B48CE0}
+.lvl-alert{background:var(--watch-bg);color:var(--watch)}
+.lvl-error{background:var(--down-bg);color:var(--down)}
+
+/* spotter instances */
+.spotter-instance{margin-bottom:32px;padding-bottom:24px;border-bottom:1px solid var(--line)}
+.spotter-instance:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
+.instance-header{display:flex;align-items:center;gap:10px;margin-bottom:14px;padding:10px 16px;
+  background:var(--panel);border:1px solid var(--line);border-radius:8px}
+.instance-icon{font-size:18px}
+.instance-label{font-size:14px;font-weight:700;letter-spacing:.03em;flex:1}
+.instance-uptime{font-size:11px;color:var(--ink-3)}
+
+/* completed/stopped watchers */
+.completed-section{margin-top:40px;border-top:1px solid var(--line);padding-top:24px}
+.completed-heading{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink-3);margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.completed-heading::before{content:'';flex:none;width:8px;height:8px;border-radius:50%;
+  background:var(--ink-3);opacity:.4}
+.completed-list{display:flex;flex-direction:column;gap:8px}
+.completed-card{background:var(--panel);border:1px solid var(--line);border-radius:8px;
+  padding:14px 18px;display:grid;grid-template-columns:auto 1fr auto auto auto;
+  gap:12px;align-items:center;opacity:.7;transition:opacity .15s}
+.completed-card:hover{opacity:1}
+.completed-icon{font-size:16px;opacity:.5}
+.completed-title{font-size:13px;font-weight:600}
+.completed-score{font-size:12px;color:var(--ink-2);font-family:var(--m);font-variant-numeric:tabular-nums}
+.completed-detail{font-size:11px;color:var(--ink-3);font-family:var(--m)}
+.completed-badge{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;padding:2px 8px;border-radius:4px;font-family:var(--m)}
+.completed-badge.done{background:var(--clear-bg);color:var(--clear)}
+.completed-badge.stopped{background:var(--panel-2);color:var(--ink-3);border:1px solid var(--line)}
+.completed-time{font-size:11px;color:var(--ink-3);font-family:var(--m);text-align:right}
+
+/* empty state */
+.empty{text-align:center;padding:60px 20px}
+.empty-icon{font-size:48px;margin-bottom:16px;opacity:.3}
+.empty-text{font-size:14px;color:var(--ink-3);margin-bottom:6px}
+.empty-sub{font-size:12px;color:var(--ink-3);opacity:.7}
+
+/* full log modal */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:100;display:none;
+  align-items:center;justify-content:center;padding:24px}
+.modal-bg.open{display:flex}
+.modal{background:var(--bg);border:1px solid var(--line);border-radius:10px;width:100%;
+  max-width:960px;max-height:90vh;display:flex;flex-direction:column}
+.modal-head{padding:16px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px}
+.modal-title{font-size:13px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2)}
+.modal-close{margin-left:auto;background:none;border:1px solid var(--line);color:var(--ink-3);
+  font-size:12px;padding:4px 12px;border-radius:4px;cursor:pointer;font-family:var(--f)}
+.modal-close:hover{border-color:var(--ink-3);color:var(--ink)}
+.modal-body{overflow-y:auto;flex:1;min-height:0}
+</style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sidebar-brand"><b>APRON</b><span>Admin</span></div>
+  <nav class="sidebar-nav">
+    <a href="/admin" class="nav-item"><span class="nav-icon">⚙</span>Console</a>
+    <a href="/spotter" class="nav-item active"><span class="nav-icon">📡</span>SPOTTER</a>
+    <a href="/board" class="nav-item"><span class="nav-icon">📋</span>Board</a>
+    <a href="/demo" class="nav-item"><span class="nav-icon">▶</span>Demo</a>
+  </nav>
+  <div class="sidebar-foot">apron.show</div>
+</aside>
+
+<header class="topbar">
+  <span class="topbar-title">SPOTTER Dashboard</span>
+  <div class="topbar-right">
+    <span id="status-pill" class="topbar-pill off">IDLE</span>
+    <span id="refresh-ts" class="refresh-label"></span>
+  </div>
+</header>
+
+<main class="main">
+  <!-- empty state -->
+  <div id="empty-state" class="empty">
+    <div class="empty-icon">📡</div>
+    <div class="empty-text">No SPOTTER is currently watching a game</div>
+    <div class="empty-sub">Start a watch from the <a href="/admin" style="color:var(--live)">admin console</a> by setting an ESPN Event ID on a game and clicking ▶ Watch</div>
+  </div>
+
+  <!-- live state — dynamically populated per SPOTTER instance -->
+  <div id="live-state" style="display:none"></div>
+
+  <!-- completed/stopped watchers from Firestore -->
+  <div id="completed-state" style="display:none"></div>
+</main>
+
+<!-- Full log modal -->
+<div class="modal-bg" id="log-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <span class="modal-title">SPOTTER Full Log</span>
+      <span class="modal-title mono" id="modal-log-count" style="color:var(--ink-3)"></span>
+      <button class="modal-close" id="btn-close-modal">Close</button>
+    </div>
+    <div class="modal-body">
+      <table class="log-table" style="min-width:700px">
+        <thead><tr><th>Time</th><th>Level</th><th>Message</th><th>Data</th></tr></thead>
+        <tbody id="modal-log-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   SPOTTER Dashboard — multi-instance
+   Polls /api/spotter/status every 5s.
+   Renders a card block per active SPOTTER (one per game).
+   ============================================================ */
+
+var POLL_INTERVAL = 5000;
+var currentFilter = 'all';
+var pollTimer = null;
+var lastData = null; // cache for filter changes
+var modalGameId = null;
+
+function $(id){ return document.getElementById(id); }
+
+// ---- Format helpers ----
+function fmtTime(iso){
+  if(!iso) return '—';
+  var d = new Date(iso);
+  return d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
+}
+function fmtTimeShort(iso){
+  if(!iso) return '—';
+  var d = new Date(iso);
+  return d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true});
+}
+function fmtDuration(startIso){
+  if(!startIso) return '';
+  var ms = Date.now() - new Date(startIso).getTime();
+  var m = Math.floor(ms/60000);
+  if(m < 60) return m+'m';
+  return Math.floor(m/60)+'h '+m%60+'m';
+}
+
+function sportIcon(sport){
+  switch(sport){
+    case 'baseball': return '⚾';
+    case 'football': return '🏈';
+    case 'basketball': return '🏀';
+    case 'hockey': return '🏒';
+    default: return '📡';
+  }
+}
+
+function esc(s){
+  if(!s) return '';
+  var d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function cfgRow(label, val){
+  return '<div class="cfg-row"><span class="cfg-label">'+label+'</span><span class="cfg-val">'+val+'</span></div>';
+}
+
+// ---- Build HTML for one SPOTTER instance ----
+function buildInstanceHTML(gameId, data){
+  var icon = data.config ? sportIcon(data.config.sport) : '📡';
+  var showState = data.prediction ? data.prediction.showState : 'clear';
+
+  // Section header with game title + show state
+  var gameLabel = data.config ? (data.config.showId || gameId) : gameId;
+  if(data.game) gameLabel = data.game.awayTeam+' @ '+data.game.homeTeam;
+
+  var html = '<div class="spotter-instance" data-gameid="'+esc(gameId)+'">';
+
+  // Instance header
+  html += '<div class="instance-header">';
+  html += '<span class="instance-icon">'+icon+'</span>';
+  html += '<span class="instance-label">'+esc(gameLabel)+'</span>';
+  html += '<span class="show-pill '+showState+'">'+showState+'</span>';
+  if(data.startedAt) html += '<span class="instance-uptime mono">'+fmtDuration(data.startedAt)+'</span>';
+  html += '</div>';
+
+  // Status cards
+  html += '<div class="cards">';
+
+  // Score card
+  html += '<div class="card"><div class="card-header"><span class="card-icon">'+icon+'</span><span class="card-title">Game Score</span></div><div class="card-body">';
+  if(data.game){
+    var g = data.game;
+    html += '<div class="score-matchup"><span style="opacity:.6">'+esc(g.awayTeam)+'</span> '+g.awayScore+
+      '<span style="color:var(--ink-3);margin:0 6px">@</span>'+
+      g.homeScore+' <span style="opacity:.6">'+esc(g.homeTeam)+'</span>'+
+      '<span class="state-badge '+g.state+'">'+g.state.toUpperCase()+'</span></div>'+
+      '<div class="score-detail">'+esc(g.detail)+'</div>'+
+      '<div class="score-venue">'+esc(g.venue)+(g.indoor ? ' (indoor)' : ' (outdoor)')+'</div>';
+  } else {
+    html += '<div class="score-matchup">—</div><div class="score-detail">Waiting for first score poll…</div>';
+  }
+  html += '</div></div>';
+
+  // Weather card
+  html += '<div class="card"><div class="card-header"><span class="card-icon">🌤</span><span class="card-title">Weather</span></div><div class="card-body">';
+  if(data.weather){
+    var w = data.weather;
+    html += '<div class="wx-temp">'+w.temperatureF+'°<small>F · feels '+w.feelsLikeF+'°</small></div>'+
+      '<div class="wx-forecast">'+esc(w.shortForecast)+'</div>'+
+      '<div class="wx-detail">Wind '+w.windSpeedMph+' mph '+esc(w.windDirection)+' · Precip '+w.precipChance+'%</div>'+
+      '<span class="wx-risk '+w.delayRisk+'">'+w.delayRisk+' delay risk</span>'+
+      (w.delayRisk!=='none' ? '<div style="margin-top:6px;font-size:12px;color:var(--ink-2)">'+esc(w.delayDetail)+'</div>' : '');
+  } else {
+    html += '<div class="wx-temp">—</div><div class="wx-forecast">'+(data.game && data.game.indoor ? 'Indoor venue — no weather monitoring' : 'Awaiting weather data…')+'</div>';
+  }
+  html += '</div></div>';
+
+  // Prediction card
+  html += '<div class="card"><div class="card-header"><span class="card-icon">🔮</span><span class="card-title">End-Time Prediction</span></div><div class="card-body">';
+  html += '<div class="pred-label">Predicted end</div>';
+  if(data.prediction){
+    html += '<div class="pred-time">'+fmtTimeShort(data.prediction.predictedEnd)+'</div>';
+    html += '<div class="pred-state"><span class="show-pill '+data.prediction.showState+'">'+data.prediction.showState+'</span></div>';
+  } else {
+    html += '<div class="pred-time">—</div>';
+  }
+  html += '</div></div>';
+
+  // Config card
+  html += '<div class="card"><div class="card-header"><span class="card-icon">⚙</span><span class="card-title">Watch Config</span></div><div class="card-body">';
+  if(data.config){
+    var c = data.config;
+    html += cfgRow('Sport', c.sport)+
+      cfgRow('ESPN ID', c.espnEventId)+
+      cfgRow('Show ID', c.showId)+
+      cfgRow('Scheduled', fmtTimeShort(c.scheduledStart))+
+      cfgRow('Expected', c.expectedDurationMinutes+'m')+
+      cfgRow('Crew', c.crewCount)+
+      cfgRow('Gemini', c.geminiEnabled ? '<span style="color:var(--clear)">✓ enabled</span>' : '<span style="color:var(--ink-3)">✗ fixture mode</span>')+
+      cfgRow('Uptime', fmtDuration(data.startedAt));
+  } else {
+    html += '—';
+  }
+  html += '</div></div>';
+
+  html += '</div>'; // .cards
+
+  // Log for this instance
+  var log = data.log || [];
+  var total = data.logTotal || 0;
+  var filtered = currentFilter === 'all' ? log : log.filter(function(e){ return e.level === currentFilter; });
+  filtered = filtered.slice().reverse();
+
+  html += '<div class="log-section">';
+  html += '<div class="log-header">';
+  html += '<span class="log-title">Activity Log</span>';
+  html += '<span class="log-count">'+total+' entries</span>';
+  html += '<div class="log-actions">';
+  html += '<button class="log-filter'+(currentFilter==='all'?' active':'')+'" data-filter="all">All</button>';
+  html += '<button class="log-filter'+(currentFilter==='score'?' active':'')+'" data-filter="score">Score</button>';
+  html += '<button class="log-filter'+(currentFilter==='weather'?' active':'')+'" data-filter="weather">Weather</button>';
+  html += '<button class="log-filter'+(currentFilter==='prediction'?' active':'')+'" data-filter="prediction">Prediction</button>';
+  html += '<button class="log-filter'+(currentFilter==='alert'?' active':'')+'" data-filter="alert">Alert</button>';
+  html += '<button class="log-filter'+(currentFilter==='error'?' active':'')+'" data-filter="error">Error</button>';
+  html += '<button class="log-filter btn-full-log" data-gameid="'+esc(gameId)+'" style="border-color:var(--live);color:var(--live)">Full Log ↗</button>';
+  html += '</div></div>';
+
+  html += '<div class="log-wrap"><table class="log-table"><thead><tr><th>Time</th><th>Level</th><th>Message</th><th>Data</th></tr></thead><tbody>';
+  if(filtered.length === 0){
+    html += '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--ink-3)">'+
+      (currentFilter==='all' ? 'No log entries yet' : 'No '+currentFilter+' entries')+'</td></tr>';
+  } else {
+    for(var i=0; i<filtered.length; i++){
+      var e = filtered[i];
+      html += '<tr>'+
+        '<td class="log-ts">'+fmtTime(e.timestamp)+'</td>'+
+        '<td class="log-level"><span class="lvl lvl-'+e.level+'">'+e.level+'</span></td>'+
+        '<td class="log-msg">'+esc(e.message)+'</td>'+
+        '<td class="log-data">'+(e.data ? esc(JSON.stringify(e.data)) : '')+'</td>'+
+      '</tr>';
+    }
+  }
+  html += '</tbody></table></div>';
+  html += '</div>'; // .log-section
+
+  html += '</div>'; // .spotter-instance
+  return html;
+}
+
+// ---- Build HTML for one completed SPOTTER ----
+function buildCompletedHTML(item){
+  var a = item.agent;   // AgentAssignment (lifecycle)
+  var r = item.record || {};  // SPOTTER-specific detail
+  var isDone = a.status === 'done';
+  var html = '<div class="completed-card btn-completed-log" data-gameid="'+esc(item.gameId)+'" data-accountid="'+esc(item.accountId)+'" data-title="'+esc(item.title || item.gameId)+'" style="cursor:pointer">';
+  html += '<span class="completed-icon">'+(isDone ? '✅' : '⏹')+'</span>';
+  html += '<span class="completed-title">'+esc(item.title || item.gameId)+'</span>';
+  html += '<span class="completed-score">'+(r.lastScore ? esc(r.lastScore) : '—')+'</span>';
+  html += '<span class="completed-badge '+a.status+'">'+(isDone ? 'FINAL' : 'IDLE')+'</span>';
+
+  // Time info
+  var timeInfo = '';
+  if(a.stoppedAt) timeInfo = fmtTimeShort(a.stoppedAt);
+  if(r.lastDetail && isDone) timeInfo = esc(r.lastDetail);
+  html += '<span class="completed-time">'+timeInfo+'</span>';
+
+  html += '</div>';
+  return html;
+}
+
+// ---- Render all instances ----
+function render(response){
+  lastData = response;
+  $('refresh-ts').textContent = 'Updated ' + fmtTime(new Date().toISOString());
+
+  var watches = response.watches || [];
+  var completed = response.completed || [];
+
+  var hasActive = watches.length > 0;
+  var hasCompleted = completed.length > 0;
+
+  if(!hasActive && !hasCompleted){
+    $('empty-state').style.display = '';
+    $('live-state').style.display = 'none';
+    $('completed-state').style.display = 'none';
+    $('status-pill').className = 'topbar-pill off';
+    $('status-pill').textContent = 'IDLE';
+    return;
+  }
+
+  // Hide empty state if we have anything to show
+  $('empty-state').style.display = 'none';
+
+  // ---- Active watchers ----
+  if(hasActive){
+    $('live-state').style.display = '';
+
+    // Topbar pill: show worst state across all watchers
+    var worstOrder = { clear:0, watch:1, risk:2, down:3 };
+    var worst = 'clear';
+    for(var i=0; i<watches.length; i++){
+      var st = watches[i].status;
+      var s = st.prediction ? st.prediction.showState : 'clear';
+      if((worstOrder[s]||0) > (worstOrder[worst]||0)) worst = s;
+    }
+    var pillText = watches.length + ' WATCHING';
+    if(watches.length === 1) pillText = 'WATCHING';
+    if(worst === 'watch') pillText = watches.length > 1 ? watches.length+' · WATCH' : 'WATCH';
+    if(worst === 'risk') pillText = watches.length > 1 ? watches.length+' · RISK' : 'RISK';
+    if(worst === 'down') pillText = watches.length > 1 ? watches.length+' · DOWN' : 'DOWN';
+    $('status-pill').className = 'topbar-pill on';
+    $('status-pill').textContent = pillText;
+
+    // Build all instance blocks
+    var html = '';
+    for(var j=0; j<watches.length; j++){
+      html += buildInstanceHTML(watches[j].gameId, watches[j].status);
+    }
+    $('live-state').innerHTML = html;
+
+    // Bind filter buttons (delegated)
+    $('live-state').querySelectorAll('.log-filter[data-filter]').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        currentFilter = btn.dataset.filter;
+        if(lastData) render(lastData);
+      });
+    });
+
+    // Bind full-log buttons
+    $('live-state').querySelectorAll('.btn-full-log').forEach(function(btn){
+      btn.addEventListener('click', function(){
+        modalGameId = btn.dataset.gameid;
+        openFullLog(modalGameId);
+      });
+    });
+  } else {
+    $('live-state').style.display = 'none';
+    $('status-pill').className = 'topbar-pill off';
+    $('status-pill').textContent = 'IDLE';
+  }
+
+  // ---- Completed watchers ----
+  if(hasCompleted){
+    $('completed-state').style.display = '';
+    var chtml = '<div class="completed-section">';
+    chtml += '<div class="completed-heading">Completed Watches</div>';
+    chtml += '<div class="completed-list">';
+    // Sort: most recently stopped first
+    completed.sort(function(a,b){
+      var ta = a.agent.stoppedAt || ''; var tb = b.agent.stoppedAt || '';
+      return tb.localeCompare(ta);
+    });
+    for(var k=0; k<completed.length; k++){
+      chtml += buildCompletedHTML(completed[k]);
+    }
+    chtml += '</div></div>';
+    $('completed-state').innerHTML = chtml;
+  } else {
+    $('completed-state').style.display = 'none';
+  }
+}
+
+// ---- Full log modal ----
+async function openFullLog(gameId){
+  $('log-modal').classList.add('open');
+  $('modal-log-tbody').innerHTML = '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--ink-3)">Loading…</td></tr>';
+  try{
+    var url = '/api/spotter/log?n=200';
+    if(gameId) url += '&gameId='+encodeURIComponent(gameId);
+    var res = await fetch(url);
+    var data = await res.json();
+    $('modal-log-count').textContent = data.total+' entries';
+    var rev = data.entries.slice().reverse();
+    var html = '';
+    for(var i=0; i<rev.length; i++){
+      var e = rev[i];
+      html += '<tr>'+
+        '<td class="log-ts">'+fmtTime(e.timestamp)+'</td>'+
+        '<td class="log-level"><span class="lvl lvl-'+e.level+'">'+e.level+'</span></td>'+
+        '<td class="log-msg">'+esc(e.message)+'</td>'+
+        '<td class="log-data">'+(e.data ? esc(JSON.stringify(e.data)) : '')+'</td>'+
+      '</tr>';
+    }
+    $('modal-log-tbody').innerHTML = html || '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--ink-3)">No entries</td></tr>';
+  } catch(err){
+    $('modal-log-tbody').innerHTML = '<tr><td colspan="4" style="color:var(--down)">Failed to load log</td></tr>';
+  }
+}
+
+// ---- Persisted log (completed watches from Firestore) ----
+async function openPersistedLog(accountId, gameId, title){
+  $('log-modal').classList.add('open');
+  $('modal-log-count').textContent = '';
+  $('modal-log-tbody').innerHTML = '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--ink-3)">Loading…</td></tr>';
+  try{
+    var url = '/api/spotter/record?accountId='+encodeURIComponent(accountId)+'&gameId='+encodeURIComponent(gameId);
+    var res = await fetch(url);
+    var data = await res.json();
+    var log = (data.record && data.record.log) || [];
+    $('modal-log-count').textContent = log.length+' entries';
+    var rev = log.slice().reverse();
+    var html = '';
+    for(var i=0; i<rev.length; i++){
+      var e = rev[i];
+      html += '<tr>'+
+        '<td class="log-ts">'+fmtTime(e.timestamp)+'</td>'+
+        '<td class="log-level"><span class="lvl lvl-'+e.level+'">'+e.level+'</span></td>'+
+        '<td class="log-msg">'+esc(e.message)+'</td>'+
+        '<td class="log-data">'+(e.data ? esc(JSON.stringify(e.data)) : '')+'</td>'+
+      '</tr>';
+    }
+    $('modal-log-tbody').innerHTML = html || '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--ink-3)">No log entries persisted</td></tr>';
+  } catch(err){
+    $('modal-log-tbody').innerHTML = '<tr><td colspan="4" style="color:var(--down)">Failed to load persisted log</td></tr>';
+  }
+}
+
+$('btn-close-modal').addEventListener('click', function(){
+  $('log-modal').classList.remove('open');
+});
+$('log-modal').addEventListener('click', function(e){
+  if(e.target === $('log-modal')) $('log-modal').classList.remove('open');
+});
+document.addEventListener('keydown', function(e){
+  if(e.key === 'Escape') $('log-modal').classList.remove('open');
+});
+
+// ---- Delegated click for completed cards (survives innerHTML rebuilds) ----
+$('completed-state').addEventListener('click', function(e){
+  var card = e.target.closest('.btn-completed-log');
+  if(!card) return;
+  var aid = card.dataset.accountid;
+  var gid = card.dataset.gameid;
+  var t = card.dataset.title;
+  if(aid && gid) openPersistedLog(aid, gid, t);
+});
+
+// ---- Polling ----
+async function poll(){
+  try{
+    var res = await fetch('/api/spotter/status');
+    var data = await res.json();
+    render(data);
+  } catch(err){
+    console.warn('SPOTTER poll error:', err);
+  }
+}
+
+function startPolling(){
+  poll();
+  pollTimer = setInterval(poll, POLL_INTERVAL);
+}
+
+// ---- Boot ----
+startPolling();
+</script>
+</body>
+</html>
