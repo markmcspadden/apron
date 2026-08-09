@@ -20,6 +20,35 @@ Reserved: `apron.co` (not yet mapped)
 
 ## Revision History
 
+### apron-00003-jg6 — 2026-08-09
+
+**Entry point:** `index.ts` (full server — Firestore + Gemini + live SPOTTER)
+
+**Env vars:**
+- `GOOGLE_CLOUD_PROJECT=apron-dev-504523`
+- `FIREBASE_PROJECT_ID=apron-dev-504523`
+- `NODE_ENV=production`
+
+**Changes:**
+- Live SPOTTER agent: ESPN score polling, Weather.gov conditions, Gemini end-time predictions
+- Board ← SPOTTER integration: `/board?seat=prod&game=<id>` pulls live data via WebSocket
+- SPOTTER dashboard at `/spotter` with multi-game watch management
+- Login flow at `/login` with role-based quick-access
+- Game-specific wrap-to-gate chain (computed from game timing, not fixture)
+- Prediction guardrails: pace clamping, early-game baseline, prior-prediction anchoring
+- Proper Gemini SDK usage: `systemInstruction`, `responseMimeType: 'application/json'`
+- Fixed `diffMin()` midnight-wrap bug (+1409m → correct signed deltas)
+- Completed card click-through to persisted activity logs
+
+**New routes:**
+| Path | Description |
+|------|-------------|
+| `/spotter` | SPOTTER dashboard (watch games, view predictions) |
+| `/login` | Login with role-based quick-access buttons |
+| `/dashboard` | Account dashboard |
+
+---
+
 ### apron-00002-qdt — 2026-08-06
 
 **Entry point:** `index.ts` (full server — Firestore + /demo fixture route)
