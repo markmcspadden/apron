@@ -10,6 +10,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { FirestoreStore } from '@apron/integration-firebase';
 import { AdminStore, GAME_TYPE_DEFAULTS } from './admin-store.js';
 import type { Game, GameType } from './admin-store.js';
+import { generateCrewAssignments } from './crew-generator.js';
+import type { GeneratorOptions } from './crew-generator.js';
 
 // ---------------------------------------------------------------------------
 // Module-level singleton — created on first request
@@ -493,6 +495,11 @@ async function routeGames(
     return routeAssignments(req, res, method, accountId, gameId, segments);
   }
 
+  // Nested crew assignments: /api/admin/accounts/:id/games/:gameId/crewAssignments/...
+  if (segments.length >= 5 && segments[4] === 'crewAssignments') {
+    return routeCrewAssignments(req, res, method, accountId, gameId, segments);
+  }
+
   return false;
 }
 
@@ -604,6 +611,125 @@ async function routeAssignments(
     const deleted = await store!.deleteAssignment(accountId, gameId, assignmentId);
     if (!deleted) return notFound(res, 'Assignment not found');
     return json(res, 200, { ok: true });
+  }
+
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// Crew Game Assignments — rich per-crew-per-game state for agents
+// ---------------------------------------------------------------------------
+
+async function routeCrewAssignments(
+  req: IncomingMessage,
+  res: ServerResponse,
+  method: string,
+  accountId: string,
+  gameId: string,
+  segments: string[],
+): Promise<boolean> {
+  // POST /api/admin/accounts/:id/games/:gameId/crewAssignments/generate
+  // Generates crew assignments from the roster using the crew-generator
+  if (segments.length === 6 && segments[5] === 'generate') {
+    if (method !== 'POST') return methodNotAllowed(res);
+
+    const game = await store!.getGame(accountId, gameId);
+    if (!game) return notFound(res, 'Game not found');
+
+    // Get assigned crew for this game
+    const [assignments, allCrew] = await Promise.all([
+      store!.listAssignments(accountId, gameId),
+      store!.listCrew(accountId),
+    ]);
+
+    if (assignments.length === 0) {
+      return badRequest(res, 'No crew assigned to this game — assign crew first');
+    }
+
+    const crewMap = new Map(allCrew.map(c => [c.id, c]));
+    const assignedCrew = assignments
+      .map(a => crewMap.get(a.crewId))
+      .filter((c): c is NonNullable<typeof c> => c != null);
+
+    if (assignedCrew.length === 0) {
+      return badRequest(res, 'No matching crew records found');
+    }
+
+    // Parse optional generator options from request body
+    const body = await readBody(req);
+    const opts: GeneratorOptions = {};
+    if (typeof body['externalCallRate'] === 'number') opts.externalCallRate = body['externalCallRate'];
+    if (typeof body['disclosureRate'] === 'number') opts.disclosureRate = body['disclosureRate'];
+    if (typeof body['includeSameProduction'] === 'boolean') opts.includeSameProduction = body['includeSameProduction'];
+    if (body['nextShow'] && typeof body['nextShow'] === 'object') {
+      const ns = body['nextShow'] as Record<string, unknown>;
+      if (typeof ns['title'] === 'string' && typeof ns['airport'] === 'string') {
+        opts.nextShow = {
+          title: ns['title'] as string,
+          shortName: (ns['shortName'] as string) ?? ns['title'] as string,
+          venue: (ns['venue'] as string) ?? '',
+          airport: ns['airport'] as string,
+          callTime: (ns['callTime'] as string) ?? '13:00',
+          callDate: (ns['callDate'] as string) ?? game.date,
+          tz: (ns['tz'] as string) ?? 'ET',
+        };
+      }
+    }
+
+    const crewAssignments = generateCrewAssignments(assignedCrew, game, opts);
+
+    // Persist to Firestore
+    await store!.setCrewAssignmentsBatch(accountId, gameId, crewAssignments);
+
+    return json(res, 201, {
+      generated: crewAssignments.length,
+      assignments: crewAssignments,
+    });
+  }
+
+  // GET /api/admin/accounts/:id/games/:gameId/crewAssignments
+  if (segments.length === 5) {
+    if (method === 'GET') {
+      const crewAssignments = await store!.listCrewAssignments(accountId, gameId);
+      return json(res, 200, crewAssignments);
+    }
+    // DELETE all — clear crew assignments for this game
+    if (method === 'DELETE') {
+      const count = await store!.deleteAllCrewAssignments(accountId, gameId);
+      return json(res, 200, { deleted: count });
+    }
+    return methodNotAllowed(res);
+  }
+
+  // GET/PATCH/DELETE /api/admin/accounts/:id/games/:gameId/crewAssignments/:crewId
+  if (segments.length === 6) {
+    const crewId = segments[5]!;
+
+    if (method === 'GET') {
+      const assignment = await store!.getCrewAssignment(accountId, gameId, crewId);
+      if (!assignment) return notFound(res, 'Crew assignment not found');
+      return json(res, 200, assignment);
+    }
+
+    if (method === 'PATCH') {
+      const body = await readBody(req);
+      const patch: Record<string, unknown> = {};
+      // Allow updating status, routing, nextCall
+      if (body['status'] != null) patch['status'] = body['status'];
+      if (body['routing'] != null) patch['routing'] = body['routing'];
+      if (body['nextCall'] != null) patch['nextCall'] = body['nextCall'];
+      const updated = await store!.updateCrewAssignment(accountId, gameId, crewId, patch);
+      if (!updated) return notFound(res, 'Crew assignment not found');
+      return json(res, 200, updated);
+    }
+
+    if (method === 'DELETE') {
+      const deleted = await store!.deleteCrewAssignment(accountId, gameId, crewId);
+      if (!deleted) return notFound(res, 'Crew assignment not found');
+      return json(res, 200, { ok: true });
+    }
+
+    return methodNotAllowed(res);
   }
 
   return false;
@@ -820,11 +946,12 @@ async function routeBoard(
     const game = await store!.getGame(account.id, gameId);
     if (!game) continue;
 
-    // Found the game — load assignments, crew, and entities
-    const [assignments, allCrew, entities] = await Promise.all([
+    // Found the game — load assignments, crew, entities, and crew assignments
+    const [assignments, allCrew, entities, crewAssignments] = await Promise.all([
       store!.listAssignments(account.id, gameId),
       store!.listCrew(account.id),
       store!.listEntities(account.id),
+      store!.listCrewAssignments(account.id, gameId),
     ]);
 
     const crewMap = new Map(allCrew.map(c => [c.id, c]));
@@ -869,6 +996,7 @@ async function routeBoard(
       },
       entities: entities.map(e => ({ id: e.id, name: e.name, type: e.type })),
       roster,
+      crewAssignments,
       chain,
     });
   }

@@ -154,6 +154,54 @@ tbody tr.sel{background:var(--panel-2);box-shadow:inset 3px 0 0 var(--live)}
   background-repeat:no-repeat;background-position:right 10px center;padding-right:28px}
 .assign-add select:focus{border-color:var(--live)}
 
+/* ---------- itineraries panel ---------- */
+.itin-panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+  margin-bottom:16px;overflow:hidden}
+.itin-header{padding:14px 18px;background:var(--panel-2);border-bottom:1px solid var(--line);
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.itin-header h3{font-size:14px;font-weight:650;letter-spacing:-.01em}
+.itin-header .sub{font-size:11px;color:var(--ink-3);margin-left:auto}
+.itin-body{padding:14px 18px}
+.itin-gen{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;
+  padding:14px 16px;margin-bottom:14px}
+.itin-gen-title{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);
+  font-weight:640;margin-bottom:10px}
+.itin-gen-row{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end}
+.itin-gen-row .form-group{flex:1;min-width:110px}
+
+/* itinerary table tweaks */
+.itin-tbl td{font-size:12px;padding:9px 12px}
+.itin-tbl .nc-line1{font-weight:600;font-size:13px;white-space:nowrap}
+.itin-tbl .nc-line2{font-size:11px;color:var(--ink-2);white-space:nowrap}
+.itin-tbl .rt-line1{font-family:var(--m);font-size:11px;white-space:nowrap}
+.itin-tbl .rt-line2{font-size:11px;color:var(--ink-2);white-space:nowrap}
+.slack-ok{color:var(--clear)}
+.slack-warn{color:var(--watch)}
+.slack-bad{color:var(--down)}
+.slack-na{color:var(--ink-3)}
+.status-badge{font-family:var(--m);font-size:9.5px;letter-spacing:.1em;padding:3px 8px;
+  border-radius:4px;text-transform:uppercase;display:inline-block}
+.status-CLEAR{background:var(--clear-bg);color:var(--clear);border:1px solid #1A4A24}
+.status-WATCHING{background:var(--watch-bg);color:var(--watch);border:1px solid #4A3A10}
+.status-BROKEN{background:var(--down-bg);color:var(--down);border:1px solid #5A2220}
+.status-SOLVED{background:#0E2040;color:var(--live);border:1px solid #1A3A60}
+.prov-badge{font-size:10px;padding:2px 6px;border-radius:3px;font-family:var(--m)}
+.prov-confirmed{background:#0E2A16;color:#6BC67E}
+.prov-sheet{background:#1A1F2A;color:var(--ink-2)}
+.prov-external{background:#2A1A0A;color:#D4A052}
+.prov-inferred{background:#2A2308;color:var(--watch)}
+.prov-none{background:var(--panel-2);color:var(--ink-3)}
+
+/* edit itinerary panel */
+.itin-edit{background:var(--bg);border:1px solid var(--live);border-radius:10px;padding:16px 18px;
+  margin-bottom:14px;display:none}
+.itin-edit.open{display:block}
+.itin-edit-name{font-size:15px;font-weight:650;margin-bottom:12px;display:flex;align-items:center;gap:10px}
+.itin-edit-name .tag{margin-left:0}
+.itin-section-label{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);
+  font-weight:640;margin:14px 0 8px;padding-top:10px;border-top:1px solid var(--line)}
+.itin-section-label:first-of-type{margin-top:0;padding-top:0;border-top:none}
+
 /* ---------- sections ---------- */
 .section{display:none}
 .section.active{display:block}
@@ -565,6 +613,205 @@ tbody tr.sel{background:var(--panel-2);box-shadow:inset 3px 0 0 var(--live)}
       <div id="assign-empty" class="empty" style="display:none">No crew assigned to this game yet.</div>
     </div>
   </div>
+
+  <!-- crew itineraries panel -->
+  <div class="itin-panel" id="itin-panel" style="display:none">
+    <div class="itin-header">
+      <h3>Crew Itineraries</h3>
+      <span class="sub" id="itin-count"></span>
+    </div>
+    <div class="itin-body">
+      <div id="err-itin" class="err-msg"></div>
+
+      <!-- generate config -->
+      <div class="itin-gen">
+        <div class="itin-gen-title">Generate Itineraries</div>
+        <div class="itin-gen-row">
+          <div class="form-group" style="min-width:140px;flex:none">
+            <label>External Call Rate</label>
+            <input type="number" id="igen-ext-rate" value="0.2" step="0.05" min="0" max="1" style="width:70px">
+          </div>
+          <div class="form-group" style="min-width:140px;flex:none">
+            <label>Disclosure Rate</label>
+            <input type="number" id="igen-disc-rate" value="0.4" step="0.05" min="0" max="1" style="width:70px">
+          </div>
+        </div>
+        <div style="margin-top:10px;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);font-weight:640;margin-bottom:8px">Next Show (optional — enables same-production calls)</div>
+        <div class="itin-gen-row">
+          <div class="form-group">
+            <label>Title</label>
+            <input type="text" id="igen-ns-title" placeholder="e.g. PHI @ CHC">
+          </div>
+          <div class="form-group">
+            <label>Venue</label>
+            <input type="text" id="igen-ns-venue" placeholder="e.g. Wrigley Field">
+          </div>
+          <div class="form-group" style="flex:none;min-width:80px">
+            <label>Airport</label>
+            <input type="text" id="igen-ns-airport" placeholder="ORD" maxlength="4" style="text-transform:uppercase;width:60px">
+          </div>
+        </div>
+        <div class="itin-gen-row" style="margin-top:8px">
+          <div class="form-group" style="flex:none;min-width:120px">
+            <label>Call Date</label>
+            <input type="date" id="igen-ns-date">
+          </div>
+          <div class="form-group" style="flex:none;min-width:100px">
+            <label>Call Time</label>
+            <input type="time" id="igen-ns-time" value="13:00">
+          </div>
+          <div class="form-group" style="flex:none;min-width:70px">
+            <label>TZ</label>
+            <select id="igen-ns-tz" style="width:60px">
+              <option value="ET">ET</option><option value="CT" selected>CT</option>
+              <option value="MT">MT</option><option value="PT">PT</option>
+            </select>
+          </div>
+          <div class="form-actions">
+            <button class="btn pri sm" id="btn-gen-itin">⚡ Generate</button>
+            <button class="btn sm danger" id="btn-clear-itin" style="display:none">Clear All</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- edit single crew assignment -->
+      <div class="itin-edit" id="itin-edit">
+        <div class="itin-edit-name">
+          <span id="ie-name"></span>
+          <span class="tag pos" id="ie-pos"></span>
+          <button class="btn sm" id="btn-close-itin-edit" style="margin-left:auto">Close</button>
+        </div>
+
+        <div class="itin-section-label">Next Call</div>
+        <div class="form-row">
+          <div class="form-group" style="flex:none;min-width:160px">
+            <label>Type</label>
+            <select id="ie-nc-type">
+              <option value="same-production">Same Production</option>
+              <option value="external">External</option>
+              <option value="home">Home</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Destination Airport</label>
+            <input type="text" id="ie-nc-dest-apt" maxlength="4" style="text-transform:uppercase;width:60px;flex:none">
+          </div>
+          <div class="form-group">
+            <label>Destination City</label>
+            <input type="text" id="ie-nc-dest-city">
+          </div>
+        </div>
+        <div class="form-row" id="ie-prod-row">
+          <div class="form-group">
+            <label>Production Name</label>
+            <input type="text" id="ie-nc-prod-name" placeholder="e.g. Monday Night Football">
+          </div>
+          <div class="form-group" style="flex:none;min-width:100px">
+            <label>Short Name</label>
+            <input type="text" id="ie-nc-prod-short" placeholder="MNF" style="width:80px">
+          </div>
+          <div class="form-group" style="flex:none;min-width:100px">
+            <label>Network</label>
+            <input type="text" id="ie-nc-prod-network" placeholder="ESPN" style="width:80px">
+          </div>
+          <div class="form-group" style="flex:none;min-width:60px">
+            <label>Disclosed</label>
+            <select id="ie-nc-disclosed" style="width:70px">
+              <option value="true">Yes</option>
+              <option value="false">No</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group" style="flex:none;min-width:160px">
+            <label>Call Time Display</label>
+            <input type="text" id="ie-nc-calltime" placeholder="Mon 14:00 CT">
+          </div>
+          <div class="form-group" style="flex:none;min-width:160px">
+            <label>Arrival Deadline</label>
+            <input type="text" id="ie-nc-deadline" placeholder="Mon 13:00 CT">
+          </div>
+          <div class="form-group" style="flex:none;min-width:120px">
+            <label>Soft Hold</label>
+            <input type="text" id="ie-nc-softhold" placeholder="Thu 12:00 held">
+          </div>
+        </div>
+
+        <div class="itin-section-label">Travel Routing</div>
+        <div class="form-row">
+          <div class="form-group" style="flex:none;min-width:100px">
+            <label>Carrier</label>
+            <input type="text" id="ie-rt-carrier" placeholder="DL" maxlength="2" style="width:50px;text-transform:uppercase">
+          </div>
+          <div class="form-group" style="flex:none;min-width:100px">
+            <label>Flight #</label>
+            <input type="text" id="ie-rt-flight" placeholder="1140" style="width:70px">
+          </div>
+          <div class="form-group" style="flex:none;min-width:100px">
+            <label>Departure</label>
+            <input type="text" id="ie-rt-dep-time" placeholder="08:50" style="width:60px">
+          </div>
+          <div class="form-group">
+            <label>Route Summary</label>
+            <input type="text" id="ie-rt-route" placeholder="CLE→DTW→MCI">
+          </div>
+          <div class="form-group" style="flex:none;min-width:100px">
+            <label>Arrival</label>
+            <input type="text" id="ie-rt-arr-time" placeholder="12:40" style="width:60px">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group" style="flex:none;min-width:100px">
+            <label>Slack (min)</label>
+            <input type="number" id="ie-rt-slack" style="width:70px">
+          </div>
+          <div class="form-group" style="flex:none;min-width:130px">
+            <label>Status</label>
+            <select id="ie-rt-status" style="width:110px">
+              <option value="booked">Booked</option>
+              <option value="held">Held</option>
+              <option value="rebooked">Rebooked</option>
+              <option value="broken">Broken</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+          </div>
+          <div class="form-group" style="flex:none;min-width:130px">
+            <label>Board Status</label>
+            <select id="ie-board-status">
+              <option value="CLEAR">CLEAR</option>
+              <option value="WATCHING">WATCHING</option>
+              <option value="BROKEN">BROKEN</option>
+              <option value="SOLVED">SOLVED</option>
+            </select>
+          </div>
+          <div class="form-actions">
+            <button class="btn pri sm" id="btn-save-itin-edit">Save</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- itinerary table -->
+      <div class="tbl-wrap" id="itin-table-wrap" style="display:none">
+        <table class="itin-tbl">
+          <thead>
+            <tr>
+              <th>Crew</th>
+              <th>Next Call</th>
+              <th>Routing</th>
+              <th>Slack</th>
+              <th>Status</th>
+              <th>Prov</th>
+            </tr>
+          </thead>
+          <tbody id="itin-body"></tbody>
+        </table>
+      </div>
+      <div id="itin-empty" class="empty" style="display:none">
+        <b>No itineraries generated</b>
+        Assign crew above, then click Generate to create next-call and routing data.
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- ---- CREW ---- -->
@@ -832,6 +1079,8 @@ function selectAccount(id, name){
   // reset game selection
   selectedGameId = null;
   $('assign-panel').style.display = 'none';
+  $('itin-panel').style.display = 'none';
+  $('itin-edit').classList.remove('open');
 }
 
 // Toggle form
@@ -915,6 +1164,7 @@ async function loadGames(){
   try{
     var data = await api('GET', '/api/admin/accounts/' + selectedAccountId + '/games');
     var games = Array.isArray(data) ? data : (data.games || data.data || []);
+    games.sort(function(a, b){ return (b.date || '').localeCompare(a.date || ''); });
     $('games-count').textContent = games.length + ' game' + (games.length !== 1 ? 's' : '');
     if(games.length === 0){
       $('games-table-wrap').style.display = 'none';
@@ -1136,6 +1386,7 @@ async function openAssignments(game){
   $('assign-game-title').textContent = (game ? game.title : 'Game') + ' - Crew Assignments';
   loadAssignments();
   loadCrewForAssign();
+  openItineraries(game);
 }
 
 async function loadAssignments(){
@@ -1203,6 +1454,283 @@ $('btn-assign').addEventListener('click', async function(){
     loadGames();
   }catch(e){
     showErr('err-assign', 'Failed to assign: ' + e.message);
+  }
+});
+
+/* ============ CREW ITINERARIES ============ */
+var crewAssignmentsCache = [];
+var editingCrewAssignment = null;
+
+async function openItineraries(game) {
+  $('itin-panel').style.display = '';
+  loadCrewAssignments();
+}
+
+async function loadCrewAssignments() {
+  if (!selectedAccountId || !selectedGameId) return;
+  clearErr('err-itin');
+  try {
+    var data = await api('GET', '/api/admin/accounts/' + selectedAccountId + '/games/' + selectedGameId + '/crewAssignments');
+    crewAssignmentsCache = Array.isArray(data) ? data : [];
+    $('itin-count').textContent = crewAssignmentsCache.length + ' itinerar' + (crewAssignmentsCache.length !== 1 ? 'ies' : 'y');
+    if (crewAssignmentsCache.length === 0) {
+      $('itin-table-wrap').style.display = 'none';
+      $('itin-empty').style.display = '';
+      $('btn-clear-itin').style.display = 'none';
+    } else {
+      $('itin-empty').style.display = 'none';
+      $('btn-clear-itin').style.display = '';
+      renderItineraryTable();
+    }
+  } catch (e) {
+    showErr('err-itin', 'Failed to load itineraries: ' + e.message);
+  }
+}
+
+function renderItineraryTable() {
+  var rows = crewAssignmentsCache.map(function(a) {
+    var nc = a.nextCall || {};
+    var rt = a.routing || {};
+    var prod = nc.production || {};
+
+    // Next call display
+    var ncLine1, ncLine2;
+    if (nc.type === 'external' && !nc.disclosed) {
+      ncLine1 = 'External · withheld';
+      ncLine2 = nc.arrivalDeadline ? 'Arr ' + esc(nc.destinationAirport || '') + ' by ' + esc((nc.arrivalDeadline.display || '').split(' ').slice(1).join(' ')) : '';
+    } else if (nc.type === 'external' || nc.type === 'same-production') {
+      ncLine1 = esc(prod.shortName || '') + ' · ' + esc(nc.destinationCity || '');
+      ncLine2 = nc.callTime ? esc(nc.callTime.display || '') : '';
+    } else {
+      ncLine1 = 'Home · ' + esc(nc.destinationAirport || '');
+      ncLine2 = nc.softHold ? esc(nc.softHold.display || '') : 'No call held';
+    }
+
+    // Routing display
+    var rtLine1 = esc((rt.carrierDisplay || '') + ' · ' + (rt.departureTime || '') + ' ' + (rt.routeSummary || ''));
+    var rtLine2 = 'arr ' + esc(rt.arrivalTime || '');
+
+    // Slack
+    var slackVal = rt.slackMinutes;
+    var slackStr, slackCls;
+    if (slackVal == null) {
+      slackStr = 'n/a';
+      slackCls = 'slack-na';
+    } else if (slackVal >= 60) {
+      slackStr = '+' + slackVal + 'm';
+      slackCls = 'slack-ok';
+    } else if (slackVal >= 0) {
+      slackStr = '+' + slackVal + 'm';
+      slackCls = 'slack-warn';
+    } else {
+      slackStr = slackVal + 'm';
+      slackCls = 'slack-bad';
+    }
+
+    // Provenance
+    var prov = nc.provenance || {};
+    var provIcon = { confirmed: '✓', external: '⧉', sheet: '▪', inferred: '⚠', none: '—' }[prov.level] || '—';
+    var provCls = 'prov-' + (prov.level || 'none');
+
+    return '<tr class="clickable" data-crew-id="' + esc(a.crewId) + '">'
+      + '<td><span style="font-weight:600">' + esc(a.name || '') + '</span><br>'
+      + '<span class="tag pos" style="margin-top:3px">' + esc(a.position || '') + '</span>'
+      + ' <span class="tag tier">' + esc(a.tier || '') + '</span></td>'
+      + '<td><div class="nc-line1">' + ncLine1 + '</div><div class="nc-line2">' + ncLine2 + '</div></td>'
+      + '<td><div class="rt-line1">' + rtLine1 + '</div><div class="rt-line2">' + rtLine2 + '</div></td>'
+      + '<td class="mono" style="font-size:12px"><span class="' + slackCls + '">' + slackStr + '</span></td>'
+      + '<td><span class="status-badge status-' + esc(a.status || 'CLEAR') + '">' + esc(a.status || 'CLEAR') + '</span></td>'
+      + '<td><span class="prov-badge ' + provCls + '">' + provIcon + '</span></td>'
+      + '</tr>';
+  }).join('');
+
+  $('itin-body').innerHTML = rows;
+  $('itin-table-wrap').style.display = '';
+
+  // Click to edit
+  document.querySelectorAll('#itin-body tr').forEach(function(row) {
+    row.addEventListener('click', function() {
+      var crewId = row.dataset.crewId;
+      var a = crewAssignmentsCache.find(function(x) { return x.crewId === crewId; });
+      if (a) openItinEdit(a);
+    });
+  });
+}
+
+function openItinEdit(a) {
+  editingCrewAssignment = a;
+  var nc = a.nextCall || {};
+  var rt = a.routing || {};
+  var prod = nc.production || {};
+
+  $('ie-name').textContent = a.name || '';
+  $('ie-pos').textContent = a.position || '';
+  $('ie-nc-type').value = nc.type || 'home';
+  $('ie-nc-dest-apt').value = nc.destinationAirport || '';
+  $('ie-nc-dest-city').value = nc.destinationCity || '';
+  $('ie-nc-prod-name').value = prod.name || '';
+  $('ie-nc-prod-short').value = prod.shortName || '';
+  $('ie-nc-prod-network').value = prod.network || '';
+  $('ie-nc-disclosed').value = nc.disclosed ? 'true' : 'false';
+  $('ie-nc-calltime').value = nc.callTime ? (nc.callTime.display || '') : '';
+  $('ie-nc-deadline').value = nc.arrivalDeadline ? (nc.arrivalDeadline.display || '') : '';
+  $('ie-nc-softhold').value = nc.softHold ? (nc.softHold.display || '') : '';
+
+  $('ie-rt-carrier').value = rt.legs && rt.legs[0] ? rt.legs[0].carrier : '';
+  $('ie-rt-flight').value = rt.legs && rt.legs[0] ? rt.legs[0].flightNumber : '';
+  $('ie-rt-dep-time').value = rt.departureTime || '';
+  $('ie-rt-route').value = rt.routeSummary || '';
+  $('ie-rt-arr-time').value = rt.arrivalTime || '';
+  $('ie-rt-slack').value = rt.slackMinutes != null ? rt.slackMinutes : '';
+  $('ie-rt-status').value = rt.status || 'booked';
+  $('ie-board-status').value = a.status || 'CLEAR';
+
+  toggleProdRow();
+  $('itin-edit').classList.add('open');
+  $('itin-edit').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function toggleProdRow() {
+  var type = $('ie-nc-type').value;
+  $('ie-prod-row').style.display = (type === 'home') ? 'none' : '';
+}
+$('ie-nc-type').addEventListener('change', toggleProdRow);
+
+$('btn-close-itin-edit').addEventListener('click', function() {
+  $('itin-edit').classList.remove('open');
+  editingCrewAssignment = null;
+});
+
+$('btn-save-itin-edit').addEventListener('click', async function() {
+  if (!editingCrewAssignment) return;
+  clearErr('err-itin');
+
+  var ncType = $('ie-nc-type').value;
+  var destApt = $('ie-nc-dest-apt').value.trim().toUpperCase();
+  var destCity = $('ie-nc-dest-city').value.trim();
+
+  // Build the nextCall patch
+  var nextCall = {
+    type: ncType,
+    destinationAirport: destApt,
+    destinationCity: destCity,
+    disclosed: $('ie-nc-disclosed').value === 'true',
+    provenance: editingCrewAssignment.nextCall.provenance
+  };
+
+  if (ncType !== 'home') {
+    nextCall.production = {
+      name: $('ie-nc-prod-name').value.trim(),
+      shortName: $('ie-nc-prod-short').value.trim(),
+      network: $('ie-nc-prod-network').value.trim() || undefined
+    };
+  } else {
+    nextCall.production = null;
+  }
+
+  var callTimeDisplay = $('ie-nc-calltime').value.trim();
+  if (callTimeDisplay) {
+    nextCall.callTime = {
+      display: callTimeDisplay,
+      iso: editingCrewAssignment.nextCall.callTime ? editingCrewAssignment.nextCall.callTime.iso : '',
+      tz: callTimeDisplay.split(' ').pop() || 'ET'
+    };
+  }
+
+  var deadlineDisplay = $('ie-nc-deadline').value.trim();
+  if (deadlineDisplay) {
+    nextCall.arrivalDeadline = {
+      display: deadlineDisplay,
+      iso: editingCrewAssignment.nextCall.arrivalDeadline ? editingCrewAssignment.nextCall.arrivalDeadline.iso : ''
+    };
+  }
+
+  var softHoldDisplay = $('ie-nc-softhold').value.trim();
+  if (softHoldDisplay && ncType === 'home') {
+    nextCall.softHold = { display: softHoldDisplay };
+  }
+
+  // Build the routing patch — update display fields
+  var routing = JSON.parse(JSON.stringify(editingCrewAssignment.routing || {}));
+  routing.carrierDisplay = $('ie-rt-carrier').value.trim().toUpperCase() + ' ' + $('ie-rt-flight').value.trim();
+  routing.departureTime = $('ie-rt-dep-time').value.trim();
+  routing.routeSummary = $('ie-rt-route').value.trim();
+  routing.arrivalTime = $('ie-rt-arr-time').value.trim();
+  routing.slackMinutes = $('ie-rt-slack').value !== '' ? Number($('ie-rt-slack').value) : null;
+  routing.status = $('ie-rt-status').value;
+
+  // Update first leg if present
+  if (routing.legs && routing.legs[0]) {
+    routing.legs[0].carrier = $('ie-rt-carrier').value.trim().toUpperCase();
+    routing.legs[0].flightNumber = $('ie-rt-flight').value.trim();
+    routing.legs[0].departure.time = $('ie-rt-dep-time').value.trim();
+  }
+
+  var boardStatus = $('ie-board-status').value;
+
+  try {
+    await api('PATCH', '/api/admin/accounts/' + selectedAccountId + '/games/' + selectedGameId + '/crewAssignments/' + editingCrewAssignment.crewId, {
+      nextCall: nextCall,
+      routing: routing,
+      status: boardStatus
+    });
+    $('itin-edit').classList.remove('open');
+    editingCrewAssignment = null;
+    loadCrewAssignments();
+  } catch (e) {
+    showErr('err-itin', 'Failed to save: ' + e.message);
+  }
+});
+
+// Generate button
+$('btn-gen-itin').addEventListener('click', async function() {
+  if (!selectedAccountId || !selectedGameId) return;
+  clearErr('err-itin');
+
+  var body = {
+    externalCallRate: Number($('igen-ext-rate').value) || 0.2,
+    disclosureRate: Number($('igen-disc-rate').value) || 0.4
+  };
+
+  // Next show config
+  var nsTitle = $('igen-ns-title').value.trim();
+  var nsAirport = $('igen-ns-airport').value.trim().toUpperCase();
+  if (nsTitle && nsAirport) {
+    body.nextShow = {
+      title: nsTitle,
+      shortName: nsTitle,
+      venue: $('igen-ns-venue').value.trim() || nsTitle,
+      airport: nsAirport,
+      callDate: $('igen-ns-date').value || '',
+      callTime: $('igen-ns-time').value || '13:00',
+      tz: $('igen-ns-tz').value || 'CT'
+    };
+  }
+
+  $('btn-gen-itin').disabled = true;
+  $('btn-gen-itin').textContent = 'Generating...';
+  try {
+    var result = await api('POST', '/api/admin/accounts/' + selectedAccountId + '/games/' + selectedGameId + '/crewAssignments/generate', body);
+    loadCrewAssignments();
+  } catch (e) {
+    showErr('err-itin', 'Failed to generate: ' + e.message);
+  }
+  $('btn-gen-itin').disabled = false;
+  $('btn-gen-itin').textContent = '⚡ Generate';
+});
+
+// Clear all
+$('btn-clear-itin').addEventListener('click', async function() {
+  if (!selectedAccountId || !selectedGameId) return;
+  if (!confirm('Delete all crew itineraries for this game?')) return;
+  clearErr('err-itin');
+  try {
+    await api('DELETE', '/api/admin/accounts/' + selectedAccountId + '/games/' + selectedGameId + '/crewAssignments');
+    $('itin-edit').classList.remove('open');
+    editingCrewAssignment = null;
+    loadCrewAssignments();
+  } catch (e) {
+    showErr('err-itin', 'Failed to clear: ' + e.message);
   }
 });
 

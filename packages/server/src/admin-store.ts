@@ -8,6 +8,7 @@
 
 import { randomUUID } from 'node:crypto';
 import type { FirestoreStore } from '@apron/integration-firebase';
+import type { CrewGameAssignment } from '@apron/types';
 
 // ---------------------------------------------------------------------------
 // Minimal Firestore type surface — avoids a direct dependency on firebase-admin
@@ -196,6 +197,25 @@ function serverTimestamp(): string {
   return new Date().toISOString();
 }
 
+/**
+ * Deep-strip `undefined` values from an object — Firestore rejects them.
+ * Returns a new plain object safe for Firestore writes.
+ */
+function stripUndefined(obj: unknown): unknown {
+  if (obj === null || obj === undefined) return obj;
+  if (Array.isArray(obj)) return obj.map(stripUndefined);
+  if (typeof obj === 'object') {
+    const result: Record<string, unknown> = {};
+    for (const [key, value] of Object.entries(obj as Record<string, unknown>)) {
+      if (value !== undefined) {
+        result[key] = stripUndefined(value);
+      }
+    }
+    return result;
+  }
+  return obj;
+}
+
 // ---------------------------------------------------------------------------
 // AdminStore
 // ---------------------------------------------------------------------------
@@ -212,6 +232,8 @@ export class AdminStore {
   private readonly memCrew = new Map<string, Map<string, CrewRecord>>();
   // Assignments keyed by "accountId:gameId"
   private readonly memAssignments = new Map<string, Map<string, Assignment>>();
+  // Crew game assignments keyed by "accountId:gameId" → Map<crewId, CrewGameAssignment>
+  private readonly memCrewAssignments = new Map<string, Map<string, CrewGameAssignment>>();
   // Agent records keyed by "accountId:gameId" → Map<agentName, record>
   private readonly memAgentRecords = new Map<string, Map<string, Record<string, unknown>>>();
 
@@ -576,17 +598,14 @@ export class AdminStore {
         .doc(gameId);
       const doc = await ref.get();
       if (!doc.exists) return false;
-      // Delete assignments subcollection first
+      // Delete subcollections first
       const assignments = await ref.collection('assignments').get();
       for (const a of assignments.docs) {
-        await db
-          .collection('accounts')
-          .doc(accountId)
-          .collection('games')
-          .doc(gameId)
-          .collection('assignments')
-          .doc(a.id)
-          .delete();
+        await ref.collection('assignments').doc(a.id).delete();
+      }
+      const crewAssignments = await ref.collection('crewAssignments').get();
+      for (const ca of crewAssignments.docs) {
+        await ref.collection('crewAssignments').doc(ca.id).delete();
       }
       await ref.delete();
       return true;
@@ -598,6 +617,7 @@ export class AdminStore {
     // Also clean up in-memory assignments
     const key = this.assignmentKey(accountId, gameId);
     this.memAssignments.delete(key);
+    this.memCrewAssignments.delete(key);
     return true;
   }
 
@@ -884,5 +904,184 @@ export class AdminStore {
     if (!assignments?.has(assignmentId)) return false;
     assignments.delete(assignmentId);
     return true;
+  }
+
+  // -------------------------------------------------------------------
+  // Crew Game Assignments — rich per-crew-per-game state
+  // Path: accounts/{acctId}/games/{gameId}/crewAssignments/{crewId}
+  //
+  // These are the live documents agents read and update during a game.
+  // Each doc stores the full CrewGameAssignment: next call, routing,
+  // provenance, board status, etc.
+  // -------------------------------------------------------------------
+
+  private crewAssignmentKey(accountId: string, gameId: string): string {
+    return `${accountId}:${gameId}`;
+  }
+
+  private crewAssignmentRef(db: FirestoreDb, accountId: string, gameId: string) {
+    return db
+      .collection('accounts')
+      .doc(accountId)
+      .collection('games')
+      .doc(gameId)
+      .collection('crewAssignments');
+  }
+
+  async listCrewAssignments(
+    accountId: string,
+    gameId: string,
+  ): Promise<CrewGameAssignment[]> {
+    const db = await this.ready();
+    if (db) {
+      const snap = await this.crewAssignmentRef(db, accountId, gameId).get();
+      return snap.docs.map(d => docToRecord(d)) as unknown as CrewGameAssignment[];
+    }
+    const key = this.crewAssignmentKey(accountId, gameId);
+    return [...(this.memCrewAssignments.get(key)?.values() ?? [])];
+  }
+
+  async getCrewAssignment(
+    accountId: string,
+    gameId: string,
+    crewId: string,
+  ): Promise<CrewGameAssignment | null> {
+    const db = await this.ready();
+    if (db) {
+      const doc = await this.crewAssignmentRef(db, accountId, gameId).doc(crewId).get();
+      return doc.exists ? (docToRecord(doc) as unknown as CrewGameAssignment) : null;
+    }
+    const key = this.crewAssignmentKey(accountId, gameId);
+    return this.memCrewAssignments.get(key)?.get(crewId) ?? null;
+  }
+
+  /**
+   * Upsert a single crew game assignment. Keyed by crewId.
+   */
+  async setCrewAssignment(
+    accountId: string,
+    gameId: string,
+    assignment: CrewGameAssignment,
+  ): Promise<void> {
+    const db = await this.ready();
+    if (db) {
+      const ts = serverTimestamp();
+      const { crewId, ...rest } = assignment;
+      const record = stripUndefined({ ...rest, crewId, updatedAt: ts }) as Record<string, unknown>;
+      await this.crewAssignmentRef(db, accountId, gameId)
+        .doc(crewId)
+        .set(record, { merge: true });
+      return;
+    }
+    const key = this.crewAssignmentKey(accountId, gameId);
+    if (!this.memCrewAssignments.has(key)) {
+      this.memCrewAssignments.set(key, new Map());
+    }
+    this.memCrewAssignments.get(key)!.set(assignment.crewId, assignment);
+  }
+
+  /**
+   * Bulk-write crew game assignments (e.g. initial generation).
+   * Replaces any existing assignments for this game.
+   */
+  async setCrewAssignmentsBatch(
+    accountId: string,
+    gameId: string,
+    assignments: CrewGameAssignment[],
+  ): Promise<void> {
+    const db = await this.ready();
+    if (db) {
+      // Delete existing, then write new ones
+      const existing = await this.crewAssignmentRef(db, accountId, gameId).get();
+      for (const doc of existing.docs) {
+        await this.crewAssignmentRef(db, accountId, gameId).doc(doc.id).delete();
+      }
+      const ts = serverTimestamp();
+      for (const a of assignments) {
+        const { crewId, ...rest } = a;
+        const record = stripUndefined({ ...rest, crewId, createdAt: ts, updatedAt: ts }) as Record<string, unknown>;
+        await this.crewAssignmentRef(db, accountId, gameId)
+          .doc(crewId)
+          .set(record);
+      }
+      return;
+    }
+    const key = this.crewAssignmentKey(accountId, gameId);
+    const map = new Map<string, CrewGameAssignment>();
+    for (const a of assignments) {
+      map.set(a.crewId, a);
+    }
+    this.memCrewAssignments.set(key, map);
+  }
+
+  /**
+   * Partial update of a crew game assignment — used by agents to
+   * update routing, status, etc. without overwriting the full doc.
+   */
+  async updateCrewAssignment(
+    accountId: string,
+    gameId: string,
+    crewId: string,
+    data: Partial<Omit<CrewGameAssignment, 'crewId'>>,
+  ): Promise<CrewGameAssignment | null> {
+    const db = await this.ready();
+    if (db) {
+      const ref = this.crewAssignmentRef(db, accountId, gameId).doc(crewId);
+      const doc = await ref.get();
+      if (!doc.exists) return null;
+      const ts = serverTimestamp();
+      const record = stripUndefined({ ...data, updatedAt: ts }) as Record<string, unknown>;
+      await ref.update(record);
+      const updated = await ref.get();
+      return docToRecord(updated) as unknown as CrewGameAssignment;
+    }
+
+    const key = this.crewAssignmentKey(accountId, gameId);
+    const existing = this.memCrewAssignments.get(key)?.get(crewId);
+    if (!existing) return null;
+    const updated = { ...existing, ...data };
+    this.memCrewAssignments.get(key)!.set(crewId, updated);
+    return updated;
+  }
+
+  async deleteCrewAssignment(
+    accountId: string,
+    gameId: string,
+    crewId: string,
+  ): Promise<boolean> {
+    const db = await this.ready();
+    if (db) {
+      const ref = this.crewAssignmentRef(db, accountId, gameId).doc(crewId);
+      const doc = await ref.get();
+      if (!doc.exists) return false;
+      await ref.delete();
+      return true;
+    }
+
+    const key = this.crewAssignmentKey(accountId, gameId);
+    const map = this.memCrewAssignments.get(key);
+    if (!map?.has(crewId)) return false;
+    map.delete(crewId);
+    return true;
+  }
+
+  async deleteAllCrewAssignments(
+    accountId: string,
+    gameId: string,
+  ): Promise<number> {
+    const db = await this.ready();
+    if (db) {
+      const snap = await this.crewAssignmentRef(db, accountId, gameId).get();
+      for (const doc of snap.docs) {
+        await this.crewAssignmentRef(db, accountId, gameId).doc(doc.id).delete();
+      }
+      return snap.docs.length;
+    }
+
+    const key = this.crewAssignmentKey(accountId, gameId);
+    const map = this.memCrewAssignments.get(key);
+    const count = map?.size ?? 0;
+    this.memCrewAssignments.delete(key);
+    return count;
   }
 }

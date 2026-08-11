@@ -53,3 +53,13 @@ export type {
   FixtureScenario,
   FixtureStep,
 } from './fixtures.js';
+
+export type {
+  NextCallType,
+  NextCall,
+  NextCallProvenance,
+  TravelLeg,
+  TravelStatus,
+  TravelRouting,
+  CrewGameAssignment,
+} from './crew-itinerary.js';
