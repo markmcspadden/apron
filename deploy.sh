@@ -20,9 +20,10 @@ gcloud run deploy "${SERVICE_NAME}" \
   --port 8080 \
   --memory 512Mi \
   --cpu 1 \
+  --min-instances 1 \
   --max-instances 3 \
   --timeout 3600 \
-  --update-env-vars "NODE_ENV=production"
+  --update-env-vars "NODE_ENV=production,TZ=America/New_York"
 
 echo ""
 echo "Deployed! URL:"

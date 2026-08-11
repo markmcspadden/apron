@@ -155,6 +155,214 @@ export async function createServer(opts: ServerOptions = {}) {
     return auth.verifyToken(token);
   }
 
+  // ---------------------------------------------------------------------------
+  // startWatch() — shared logic used by both the HTTP endpoint and the
+  // auto-scheduler.  Returns { ok: true } on success, or { ok: false, error }.
+  // ---------------------------------------------------------------------------
+  type WatchableGame = import('./admin-store.js').Game;
+
+  function startWatch(
+    game: WatchableGame,
+    accountId: string,
+  ): { ok: true } | { ok: false; error: string } {
+    if (!game.espnEventId) {
+      return { ok: false, error: 'Game has no espnEventId — set it in the admin console first' };
+    }
+    if (!game.gameType || !['baseball', 'football', 'basketball', 'hockey'].includes(game.gameType)) {
+      return { ok: false, error: `gameType must be baseball, football, basketball, or hockey (got: ${game.gameType})` };
+    }
+
+    const defaults = GAME_TYPE_DEFAULTS[game.gameType as GameType];
+    const gameChain = buildGameChain(game, defaults);
+
+    const config: SpotterWatchConfig = {
+      showId: game.id,
+      sport: game.gameType as 'baseball' | 'football' | 'basketball' | 'hockey',
+      espnEventId: game.espnEventId,
+      scheduledStart: new Date(
+        gameTimeToUtcMs(game.date, game.startTime ?? '19:00'),
+      ).toISOString(),
+      expectedDurationMinutes: game.expectedDuration ?? defaults.duration,
+      strikeDurationMinutes: game.strikeDuration ?? defaults.strike,
+      chain: gameChain,
+      crewCount: game.crewCount ?? 22,
+      gemini: gemini.isEnabled() ? gemini : undefined,
+    };
+
+    // Stop existing watcher for this game if already running
+    const prev = spotters.get(game.id);
+    if (prev) prev.stopWatching();
+
+    const liveSpotter = new SpotterAgent();
+    const bus = orchestrator.getRuntime().getBus();
+    const now = new Date();
+    const cred: import('@apron/types').Credential = {
+      agent: 'SPOTTER',
+      showId: game.id,
+      grant: { agent: 'SPOTTER', capabilities: ['read:game-feeds', 'read:weather'], role: 'reader', neverReceives: [] },
+      issuedAt: now.toISOString(),
+      expiresAt: new Date(now.getTime() + 86400000).toISOString(),
+    };
+    liveSpotter.bind({ bus, credential: cred, showId: game.id });
+    liveSpotter.startWatching(config);
+    spotters.set(game.id, liveSpotter);
+
+    // Persist active state
+    const watchStartedAt = new Date().toISOString();
+    void adminStore.setAgentAssignment(accountId, game.id, 'SPOTTER', {
+      status: 'active', startedAt: watchStartedAt,
+    });
+    void adminStore.setAgentRecord(accountId, game.id, 'SPOTTER', {
+      status: 'active',
+      startedAt: watchStartedAt,
+      sport: config.sport,
+      espnEventId: config.espnEventId,
+    });
+
+    // Broadcast SPOTTER events to WebSocket clients + auto-cleanup on game end
+    const watchedGameId = game.id;
+    const watchedAcctId = accountId;
+    bus.subscribe((event: AgentEvent) => {
+      if (event.agent === 'SPOTTER') {
+        const msg = JSON.stringify({ type: 'agent-event', event });
+        for (const ws of clients) {
+          if (ws.readyState === ws.OPEN) ws.send(msg);
+        }
+
+        if (event.type === 'agent-status' && event.agentStates.SPOTTER === 'done' && event.showId === watchedGameId) {
+          const finished = spotters.get(watchedGameId);
+          const snap = finished?.getStatus();
+          const fullLog = finished?.getLog() ?? [];
+          spotters.delete(watchedGameId);
+          console.log(`[spotter] Game ended — removed watch for ${watchedGameId} (${spotters.size} remaining)`);
+
+          const stoppedAt = new Date().toISOString();
+          void adminStore.setAgentAssignment(watchedAcctId, watchedGameId, 'SPOTTER', {
+            status: 'done',
+            startedAt: snap?.startedAt ?? watchStartedAt,
+            stoppedAt,
+          });
+          void adminStore.setAgentRecord(watchedAcctId, watchedGameId, 'SPOTTER', {
+            status: 'done',
+            stoppedAt,
+            lastScore: snap?.game ? `${snap.game.awayTeam} ${snap.game.awayScore}, ${snap.game.homeTeam} ${snap.game.homeScore}` : null,
+            lastDetail: snap?.game?.detail ?? null,
+            lastPrediction: snap?.prediction?.predictedEnd ?? null,
+            lastShowState: snap?.prediction?.showState ?? null,
+            log: fullLog,
+          });
+        }
+      }
+    });
+
+    return { ok: true };
+  }
+
+  // ---------------------------------------------------------------------------
+  // Game auto-scheduler — scans Firestore every 60s for games that should be
+  // watched.  A game qualifies when:
+  //   1. It has an espnEventId and a valid gameType
+  //   2. Its date is today (server local time)
+  //   3. Its startTime is ≤ 15 minutes from now, OR already in the past
+  //   4. It isn't already being watched (in the `spotters` Map)
+  //   5. It hasn't already finished (SPOTTER status !== 'done')
+  //
+  // This survives Cloud Run instance recycling — on startup the scan picks up
+  // any games that should already be live.  No timers to lose.
+  //
+  // Timezone: game.startTime is stored in ET.  gameTimeToUtcMs() uses Intl to
+  // convert ET → UTC regardless of the server's own TZ setting.
+  // ---------------------------------------------------------------------------
+  const SCHEDULER_INTERVAL_MS = 60_000;
+  const SCHEDULER_LEAD_MINUTES = 15;
+  /** Don't auto-start games more than 6 hours past their start — they're over. */
+  const SCHEDULER_MAX_PAST_MINUTES = 360;
+
+  /**
+   * Convert a game date ("YYYY-MM-DD") + time ("HH:MM") in America/New_York
+   * to a UTC timestamp in milliseconds.  Uses Intl so it works regardless of
+   * the server's own TZ setting and handles EDT / EST automatically.
+   */
+  function gameTimeToUtcMs(dateStr: string, timeStr: string): number {
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const [hour, minute] = timeStr.split(':').map(Number);
+
+    // Build a UTC date with the raw numbers, then figure out what ET offset
+    // applies at that approximate instant.
+    const approxUtcMs = Date.UTC(year!, month! - 1, day!, hour!, minute!);
+
+    // Format that UTC instant in America/New_York to discover the offset
+    const etParts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/New_York',
+      hour12: false,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit',
+    }).formatToParts(new Date(approxUtcMs));
+
+    const etH = parseInt(etParts.find(p => p.type === 'hour')!.value);
+    const etM = parseInt(etParts.find(p => p.type === 'minute')!.value);
+
+    // offset = ET_value − UTC_value  (e.g. EDT → −4h → −240min)
+    let offsetMin = (etH * 60 + etM) - (hour! * 60 + minute!);
+    if (offsetMin > 720) offsetMin -= 1440;
+    if (offsetMin < -720) offsetMin += 1440;
+
+    // We want: the UTC instant when ET reads hour:minute.
+    // ET = UTC + offset  →  UTC = ET − offset
+    // Since approxUtcMs represents hour:minute in UTC, subtract offset to
+    // shift it so that hour:minute lands in ET instead.
+    return approxUtcMs - offsetMin * 60_000;
+  }
+
+  async function scanAndStartGames(): Promise<void> {
+    try {
+      const accounts = await adminStore.listAccounts();
+      const nowMs = Date.now();
+
+      for (const acct of accounts) {
+        const games = await adminStore.listGames(acct.id);
+        for (const game of games) {
+          // Skip: no ESPN ID, wrong game type, already watching, already done
+          if (!game.espnEventId) continue;
+          if (!game.gameType || !['baseball', 'football', 'basketball', 'hockey'].includes(game.gameType)) continue;
+          if (spotters.has(game.id)) continue;
+          if (game.agents?.SPOTTER?.status === 'done') continue;
+
+          // Compute minutes until game start (timezone-safe)
+          const startTimeStr = game.startTime ?? '19:00';
+          const gameStartMs = gameTimeToUtcMs(game.date, startTimeStr);
+          const minsUntilStart = (gameStartMs - nowMs) / 60_000;
+
+          // Start if within lead window and not too far in the past
+          if (minsUntilStart <= SCHEDULER_LEAD_MINUTES && minsUntilStart > -SCHEDULER_MAX_PAST_MINUTES) {
+            console.log(`[scheduler] Auto-starting SPOTTER for "${game.title}" (${game.id}) — ${minsUntilStart <= 0 ? 'game already started' : `starts in ${Math.round(minsUntilStart)}m`}`);
+            const result = startWatch(game, acct.id);
+            if (!result.ok) {
+              console.log(`[scheduler] Skipped "${game.title}": ${result.error}`);
+            }
+          }
+        }
+      }
+    } catch (err) {
+      console.error('[scheduler] Error scanning games:', err);
+    }
+  }
+
+  // Start the scheduler unless in demo mode (no Firestore to scan)
+  if (!opts.demoMode) {
+    // Run once at startup (delayed 5s to let Firestore settle)
+    setTimeout(() => {
+      void scanAndStartGames();
+    }, 5_000);
+    // Then every 60s
+    const schedulerTimer = setInterval(() => {
+      void scanAndStartGames();
+    }, SCHEDULER_INTERVAL_MS);
+    // Don't keep the process alive just for the scheduler
+    schedulerTimer.unref();
+    console.log(`[scheduler] Game auto-start enabled — scanning every ${SCHEDULER_INTERVAL_MS / 1000}s with ${SCHEDULER_LEAD_MINUTES}m lead`);
+  }
+
   const httpServer = createHttpServer(async (req, res) => {
     const url = new URL(req.url ?? '/', `http://${req.headers.host}`);
     const path = url.pathname;
@@ -385,105 +593,12 @@ export async function createServer(opts: ServerOptions = {}) {
           return;
         }
 
-        if (!game.espnEventId) {
+        const result = startWatch(game, acctId!);
+        if (!result.ok) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Game has no espnEventId — set it in the admin console first' }));
+          res.end(JSON.stringify({ error: result.error }));
           return;
         }
-
-        if (!game.gameType || !['baseball', 'football', 'basketball', 'hockey'].includes(game.gameType)) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: `gameType must be baseball, football, basketball, or hockey (got: ${game.gameType})` }));
-          return;
-        }
-
-        const defaults = GAME_TYPE_DEFAULTS[game.gameType as GameType];
-
-        // Build game-specific chain from game timing data (not the fixture)
-        const gameChain = buildGameChain(game, defaults);
-
-        const config: SpotterWatchConfig = {
-          showId: game.id,
-          sport: game.gameType as 'baseball' | 'football' | 'basketball' | 'hockey',
-          espnEventId: game.espnEventId,
-          scheduledStart: game.startTime
-            ? new Date(`${game.date}T${game.startTime}`).toISOString()
-            : new Date(`${game.date}T19:00`).toISOString(),
-          expectedDurationMinutes: game.expectedDuration ?? defaults.duration,
-          strikeDurationMinutes: game.strikeDuration ?? defaults.strike,
-          chain: gameChain,
-          crewCount: game.crewCount ?? 22,
-          gemini: gemini.isEnabled() ? gemini : undefined,
-        };
-
-        // Stop existing watcher for this game if already running
-        const prev = spotters.get(game.id);
-        if (prev) prev.stopWatching();
-
-        const liveSpotter = new SpotterAgent();
-        // Bind to the orchestrator's bus so emit() works
-        const bus = orchestrator.getRuntime().getBus();
-        const now = new Date();
-        const cred: import('@apron/types').Credential = {
-          agent: 'SPOTTER',
-          showId: game.id,
-          grant: { agent: 'SPOTTER', capabilities: ['read:game-feeds', 'read:weather'], role: 'reader', neverReceives: [] },
-          issuedAt: now.toISOString(),
-          expiresAt: new Date(now.getTime() + 86400000).toISOString(),
-        };
-        liveSpotter.bind({ bus, credential: cred, showId: game.id });
-        liveSpotter.startWatching(config);
-        spotters.set(game.id, liveSpotter);
-
-        // Persist active state to both levels
-        const watchStartedAt = new Date().toISOString();
-        void adminStore.setAgentAssignment(acctId!, game.id, 'SPOTTER', {
-          status: 'active', startedAt: watchStartedAt,
-        });
-        void adminStore.setAgentRecord(acctId!, game.id, 'SPOTTER', {
-          status: 'active',
-          startedAt: watchStartedAt,
-          sport: config.sport,
-          espnEventId: config.espnEventId,
-        });
-
-        // Broadcast SPOTTER events to WebSocket clients + auto-cleanup on game end
-        const watchedGameId = game.id;
-        const watchedAcctId = acctId!;
-        orchestrator.getRuntime().getBus().subscribe((event: AgentEvent) => {
-          if (event.agent === 'SPOTTER') {
-            const msg = JSON.stringify({ type: 'agent-event', event });
-            for (const ws of clients) {
-              if (ws.readyState === ws.OPEN) ws.send(msg);
-            }
-
-            // Auto-remove from the Map when the agent signals it's done (game ended)
-            if (event.type === 'agent-status' && event.agentStates.SPOTTER === 'done' && event.showId === watchedGameId) {
-              const finished = spotters.get(watchedGameId);
-              const snap = finished?.getStatus();
-              const fullLog = finished?.getLog() ?? [];
-              spotters.delete(watchedGameId);
-              console.log(`[spotter] Game ended — removed watch for ${watchedGameId} (${spotters.size} remaining)`);
-
-              // Persist done state to both levels (detail + full log)
-              const stoppedAt = new Date().toISOString();
-              void adminStore.setAgentAssignment(watchedAcctId, watchedGameId, 'SPOTTER', {
-                status: 'done',
-                startedAt: snap?.startedAt ?? watchStartedAt,
-                stoppedAt,
-              });
-              void adminStore.setAgentRecord(watchedAcctId, watchedGameId, 'SPOTTER', {
-                status: 'done',
-                stoppedAt,
-                lastScore: snap?.game ? `${snap.game.awayTeam} ${snap.game.awayScore}, ${snap.game.homeTeam} ${snap.game.homeScore}` : null,
-                lastDetail: snap?.game?.detail ?? null,
-                lastPrediction: snap?.prediction?.predictedEnd ?? null,
-                lastShowState: snap?.prediction?.showState ?? null,
-                log: fullLog,
-              });
-            }
-          }
-        });
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({

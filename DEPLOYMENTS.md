@@ -20,6 +20,24 @@ Reserved: `apron.co` (not yet mapped)
 
 ## Revision History
 
+### apron-00004-j5j — 2026-08-09
+
+**Entry point:** `index.ts` (full server — Firestore + Gemini + live SPOTTER + auto-scheduler)
+
+**Env vars:**
+- `GOOGLE_CLOUD_PROJECT=apron-dev-504523`
+- `FIREBASE_PROJECT_ID=apron-dev-504523`
+- `NODE_ENV=production`
+- `TZ=America/New_York`
+
+**Changes:**
+- **Game auto-scheduler**: scans Firestore every 60s, auto-starts SPOTTER watches 15 minutes before gametime
+- Extracted `startWatch()` helper — shared by HTTP endpoint and scheduler
+- Survives Cloud Run instance recycling (no timers — periodic scan rediscovers games)
+- `TZ=America/New_York` env var for correct game-time comparisons
+
+---
+
 ### apron-00003-jg6 — 2026-08-09
 
 **Entry point:** `index.ts` (full server — Firestore + Gemini + live SPOTTER)
