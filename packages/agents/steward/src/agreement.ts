@@ -258,24 +258,34 @@ const EXTRACTION_SCHEMA = {
   required: ['turnaround', 'overtime', 'meals', 'scheduleChanges', 'excessiveAssignments'],
 };
 
-const LIVE_QUERY_SYSTEM = `You are the STEWARD agent — a labor agreement specialist for live sports and entertainment production operations. You have the full text of the applicable collective bargaining agreement.
+const LIVE_QUERY_SYSTEM = `You are the STEWARD agent — a labor agreement specialist for live sports and entertainment production operations. You have the EXTRACTED RULES from the applicable collective bargaining agreement — structured data with specific hours, dollar amounts, penalties, and article citations.
 
 You also receive OPERATIONAL CONTEXT about the current game/show, including:
 - Game details: venue, start/end times, timing chain (strike, shuttle, hotel), departure airport
 - Crew roster: each crew member's name, position, home market, next call (destination, call time, arrival deadline), travel routing (flights, departure/arrival times, slack minutes), and current board status
-- Extracted rules: the structured turnaround, overtime, meals, and schedule-change rules already parsed from this agreement
 
 When answering questions:
-1. Always cite the specific article, section, and subsection from the agreement
-2. Quote the exact contractual language when relevant
-3. Apply the rules to the SPECIFIC crew members and their situations — name them, reference their next calls and flight times
-4. Calculate actual turnaround gaps: compare the game's expected end time (plus strike/transport) against each crew member's next call time
-5. Flag specific penalties and dollar amounts that would apply
-6. If a crew member's turnaround is unknown (no next call data), flag it as UNKNOWN RISK — do not assume compliance
-7. Note if different rules apply to entertainment productions vs. standard operations
-8. When the question involves timing scenarios (e.g. "runs long by 2 hours"), recalculate the chain and evaluate each crew member against the adjusted timeline
+1. Always cite the specific article, section, and subsection from the extracted rules
+2. Apply the rules to the SPECIFIC crew members and their situations — name them, reference their next calls and flight times
+3. Calculate actual turnaround gaps: compare the game's expected end time (plus strike/transport) against each crew member's next call time
+4. Flag specific penalties and dollar amounts that would apply
+5. If a crew member's turnaround is unknown (no next call data), flag it as UNKNOWN RISK — do not assume compliance
+6. Note if different rules apply to entertainment productions vs. standard operations
+7. When the question involves timing scenarios (e.g. "runs long by 2 hours"), recalculate the chain and evaluate each crew member against the adjusted timeline
 
 Be precise, operational, and crew-specific — the TMC desk needs actionable answers about real people in real time, not generic agreement summaries.`;
+
+/** Fallback system instruction when extracted rules are not available — uses full agreement text. */
+const LIVE_QUERY_SYSTEM_FULL_TEXT = `You are the STEWARD agent — a labor agreement specialist for live sports and entertainment production operations. You have the full text of the applicable collective bargaining agreement.
+
+When answering questions:
+1. Always cite the specific article, section, and subsection
+2. Quote the exact contractual language when relevant
+3. Flag any penalties, dollar amounts, or time constraints
+4. Note if different rules apply to entertainment productions vs. standard operations
+5. If the answer depends on facts not provided (e.g. employee classification, home office location), say what additional information is needed
+
+Be precise and operational — the TMC desk needs actionable answers in real time.`;
 
 // ---------------------------------------------------------------------------
 // Agreement operations
@@ -312,7 +322,12 @@ export async function extractRules(
 
 /**
  * Query the agreement live using Gemini.
- * Sends the full agreement text + operational context for ad-hoc questions.
+ *
+ * Context strategy:
+ *   - When extracted rules are available (in operationalContext.extractedRules),
+ *     use those as the primary agreement reference — they're compact and structured.
+ *   - Only include full agreement text when rules haven't been extracted yet.
+ *   - Always include operational context (game, crew, timing) when available.
  */
 export async function queryAgreement(
   gemini: GeminiClient,
@@ -322,11 +337,24 @@ export async function queryAgreement(
 ): Promise<AgreementQueryResult> {
   const start = Date.now();
 
-  const contextPayload: Record<string, unknown> = {
-    agreementText,
-  };
+  const hasExtractedRules = operationalContext?.['extractedRules'] != null;
+  const contextPayload: Record<string, unknown> = {};
+
+  if (hasExtractedRules) {
+    // Extracted rules are the distilled, structured version — much smaller than full text.
+    // Full text is 700KB+; extracted rules are ~2KB. Use rules as primary reference.
+    contextPayload['extractedRules'] = operationalContext!['extractedRules'];
+  } else {
+    // No rules extracted yet — fall back to full agreement text
+    contextPayload['agreementText'] = agreementText;
+  }
+
+  // Add operational context (game, crew, timing) minus the rules we already included
   if (operationalContext) {
-    contextPayload['operationalContext'] = operationalContext;
+    const { extractedRules: _rules, ...restContext } = operationalContext;
+    if (Object.keys(restContext).length > 0) {
+      Object.assign(contextPayload, restContext);
+    }
   }
 
   const result = await gemini.promptJSON<{
@@ -335,7 +363,7 @@ export async function queryAgreement(
     confidence: 'high' | 'medium' | 'low';
   }>({
     agent: 'STEWARD',
-    systemInstruction: LIVE_QUERY_SYSTEM,
+    systemInstruction: hasExtractedRules ? LIVE_QUERY_SYSTEM : LIVE_QUERY_SYSTEM_FULL_TEXT,
     context: contextPayload,
     query: question,
     maxOutputTokens: 4096,
@@ -354,10 +382,10 @@ export async function queryAgreement(
 
   if (!result) {
     return {
-      answer: `[fixture mode] STEWARD would query agreement for: ${question}`,
+      answer: `[error] STEWARD query failed — Gemini returned no result. Try again or simplify the question.`,
       citations: [],
       confidence: 'low',
-      model: 'fixture',
+      model: 'error',
       tokensUsed: 0,
       latencyMs,
     };
