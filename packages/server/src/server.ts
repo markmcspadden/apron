@@ -99,7 +99,7 @@ export async function createServer(opts: ServerOptions = {}) {
   });
 
   // Initialize admin store eagerly so the SPOTTER watch endpoint can use it
-  const adminStore = initAdminStore(firestore);
+  const adminStore = initAdminStore(firestore, gemini);
 
   if (gemini.isEnabled()) {
     console.log(`[google-cloud] Gemini client connected (${gemini.getMode()})`);

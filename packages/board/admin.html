@@ -202,6 +202,56 @@ tbody tr.sel{background:var(--panel-2);box-shadow:inset 3px 0 0 var(--live)}
   font-weight:640;margin:14px 0 8px;padding-top:10px;border-top:1px solid var(--line)}
 .itin-section-label:first-of-type{margin-top:0;padding-top:0;border-top:none}
 
+/* ---------- steward panel ---------- */
+.stew-panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+  margin-bottom:16px;overflow:hidden}
+.stew-header{padding:14px 18px;background:var(--panel-2);border-bottom:1px solid var(--line);
+  display:flex;align-items:center;gap:12px}
+.stew-header h3{font-size:14px;font-weight:650;letter-spacing:-.01em}
+.stew-header .stew-badge{font-family:var(--m);font-size:9.5px;letter-spacing:.1em;padding:3px 8px;
+  border-radius:4px;text-transform:uppercase}
+.stew-badge.loaded{background:#0E2040;color:var(--live);border:1px solid #1A3A60}
+.stew-badge.none{background:var(--panel-2);color:var(--ink-3);border:1px solid var(--line-2)}
+.stew-header .sub{font-size:11px;color:var(--ink-3);margin-left:auto}
+.stew-body{padding:14px 18px}
+.stew-meta{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;
+  margin-bottom:14px}
+.stew-meta-item{background:var(--panel-2);border:1px solid var(--line);border-radius:7px;padding:10px 12px}
+.stew-meta-label{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);
+  font-weight:640;margin-bottom:4px}
+.stew-meta-val{font-size:13px;font-weight:600}
+.stew-rules{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;
+  padding:14px 16px;margin-bottom:14px}
+.stew-rules-title{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);
+  font-weight:640;margin-bottom:12px;display:flex;align-items:center;gap:10px}
+.stew-rules-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}
+.stew-rule-card{background:var(--bg);border:1px solid var(--line-2);border-radius:6px;padding:10px 12px}
+.stew-rule-card h4{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2);
+  font-weight:640;margin-bottom:6px}
+.stew-rule-row{display:flex;justify-content:space-between;font-size:12px;padding:2px 0}
+.stew-rule-row .k{color:var(--ink-3)}
+.stew-rule-row .v{font-family:var(--m);font-weight:600;color:var(--ink)}
+.stew-rule-cite{font-family:var(--m);font-size:10px;color:var(--ink-3);margin-top:4px;padding-top:4px;
+  border-top:1px solid var(--line)}
+.stew-query{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;
+  padding:14px 16px;margin-bottom:14px}
+.stew-query-title{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);
+  font-weight:640;margin-bottom:10px}
+.stew-query-row{display:flex;gap:8px;margin-bottom:10px}
+.stew-query-row input{flex:1;font:inherit;font-size:13px;padding:8px 12px;background:var(--bg);
+  border:1px solid var(--line-2);border-radius:6px;color:var(--ink);outline:none}
+.stew-query-row input:focus{border-color:var(--live)}
+.stew-answer{background:var(--bg);border:1px solid var(--line-2);border-radius:6px;padding:12px 14px;
+  font-size:13px;line-height:1.55;white-space:pre-wrap;display:none}
+.stew-answer.show{display:block}
+.stew-answer-cite{font-family:var(--m);font-size:10px;color:var(--ink-3);margin-top:8px;
+  padding-top:6px;border-top:1px solid var(--line)}
+.stew-answer-conf{font-family:var(--m);font-size:10px;letter-spacing:.08em;padding:2px 7px;
+  border-radius:4px;text-transform:uppercase;display:inline-block;margin-left:8px}
+.stew-answer-conf.high{background:var(--clear-bg);color:var(--clear);border:1px solid #1A4A24}
+.stew-answer-conf.medium{background:var(--watch-bg);color:var(--watch);border:1px solid #4A3A10}
+.stew-answer-conf.low{background:var(--down-bg);color:var(--down);border:1px solid #5A2220}
+
 /* ---------- sections ---------- */
 .section{display:none}
 .section.active{display:block}
@@ -812,6 +862,105 @@ tbody tr.sel{background:var(--panel-2);box-shadow:inset 3px 0 0 var(--live)}
       </div>
     </div>
   </div>
+
+  <!-- STEWARD agreement panel -->
+  <div class="stew-panel" id="stew-panel" style="display:none">
+    <div class="stew-header">
+      <h3>⚖ STEWARD — Agreement</h3>
+      <span class="stew-badge none" id="stew-status">No agreement</span>
+      <span class="sub" id="stew-sub"></span>
+    </div>
+    <div class="stew-body">
+      <div id="err-stew" class="err-msg"></div>
+
+      <!-- no agreement state -->
+      <div id="stew-empty" class="empty">
+        <b>No agreement loaded</b>
+        Load the default NABET-CWA agreement or paste custom agreement text.
+      </div>
+
+      <!-- load controls -->
+      <div id="stew-load-controls" style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center">
+        <button class="btn pri sm" id="btn-stew-load-default">Load NABET-CWA Default</button>
+        <button class="btn sm" id="btn-stew-load-custom">Paste Custom…</button>
+        <button class="btn sm danger" id="btn-stew-remove" style="display:none;margin-left:auto">Remove Agreement</button>
+      </div>
+
+      <!-- custom paste form (hidden by default) -->
+      <div class="inline-form" id="form-stew-custom">
+        <div class="form-title">Custom Agreement Text</div>
+        <div class="form-row">
+          <div class="form-group" style="min-width:100%">
+            <label>Agreement Name</label>
+            <input type="text" id="stew-custom-name" placeholder="e.g. SAG-AFTRA 2024 Agreement">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group" style="min-width:100%">
+            <label>Full Text</label>
+            <textarea id="stew-custom-text" rows="6" style="font:inherit;font-size:12px;font-family:var(--m);padding:8px 12px;background:var(--bg);border:1px solid var(--line-2);border-radius:6px;color:var(--ink);outline:none;width:100%;resize:vertical" placeholder="Paste full agreement text here…"></textarea>
+          </div>
+        </div>
+        <div class="form-actions">
+          <button class="btn pri sm" id="btn-stew-save-custom">Load Custom</button>
+          <button class="btn sm" id="btn-stew-cancel-custom">Cancel</button>
+        </div>
+      </div>
+
+      <!-- agreement metadata -->
+      <div id="stew-meta-section" style="display:none">
+        <div class="stew-meta">
+          <div class="stew-meta-item">
+            <div class="stew-meta-label">Agreement</div>
+            <div class="stew-meta-val" id="stew-meta-name">—</div>
+          </div>
+          <div class="stew-meta-item">
+            <div class="stew-meta-label">Size</div>
+            <div class="stew-meta-val mono" id="stew-meta-size">—</div>
+          </div>
+          <div class="stew-meta-item">
+            <div class="stew-meta-label">Loaded</div>
+            <div class="stew-meta-val mono" id="stew-meta-loaded">—</div>
+          </div>
+          <div class="stew-meta-item">
+            <div class="stew-meta-label">Source</div>
+            <div class="stew-meta-val" id="stew-meta-source" style="font-size:11px;word-break:break-all">—</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- extracted rules -->
+      <div id="stew-rules-section" style="display:none">
+        <div class="stew-rules">
+          <div class="stew-rules-title">
+            Extracted Rules
+            <button class="btn sm" id="btn-stew-extract">⚡ Extract Rules</button>
+            <span class="mono" id="stew-extract-status" style="font-size:10px;color:var(--ink-3)"></span>
+          </div>
+          <div id="stew-no-rules" style="color:var(--ink-3);font-size:12px;padding:8px 0">
+            No rules extracted yet. Click Extract to run Gemini analysis (~20s).
+          </div>
+          <div id="stew-rules-grid" class="stew-rules-grid" style="display:none"></div>
+        </div>
+      </div>
+
+      <!-- live query -->
+      <div id="stew-query-section" style="display:none">
+        <div class="stew-query">
+          <div class="stew-query-title">Live Agreement Query (Gemini)</div>
+          <div class="stew-query-row">
+            <input type="text" id="stew-query-input" placeholder="e.g. What is the midnight call penalty?">
+            <button class="btn pri sm" id="btn-stew-query">Ask</button>
+          </div>
+          <div class="stew-answer" id="stew-answer">
+            <div id="stew-answer-text"></div>
+            <div class="stew-answer-cite" id="stew-answer-cite"></div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
 </div>
 
 <!-- ---- CREW ---- -->
@@ -1081,6 +1230,7 @@ function selectAccount(id, name){
   $('assign-panel').style.display = 'none';
   $('itin-panel').style.display = 'none';
   $('itin-edit').classList.remove('open');
+  $('stew-panel').style.display = 'none';
 }
 
 // Toggle form
@@ -1387,6 +1537,7 @@ async function openAssignments(game){
   loadAssignments();
   loadCrewForAssign();
   openItineraries(game);
+  openSteward(game);
 }
 
 async function loadAssignments(){
@@ -1881,6 +2032,264 @@ $('btn-save-member').addEventListener('click', async function(){
     showErr('err-members', 'Failed to create member: ' + e.message);
   }
 });
+
+/* ============ STEWARD AGREEMENT ============ */
+var stewAgreement = null;
+var stewRules = null;
+
+function openSteward(game) {
+  $('stew-panel').style.display = '';
+  loadStewardAgreement();
+}
+
+async function loadStewardAgreement() {
+  if (!selectedAccountId || !selectedGameId) return;
+  clearErr('err-stew');
+  try {
+    var data = await api('GET', '/api/admin/accounts/' + selectedAccountId + '/games/' + selectedGameId + '/agreement');
+    stewAgreement = data.agreement;
+    stewRules = data.rules;
+    renderSteward();
+  } catch (e) {
+    showErr('err-stew', 'Failed to load agreement: ' + e.message);
+  }
+}
+
+function renderSteward() {
+  var loaded = !!stewAgreement;
+  var badge = $('stew-status');
+  badge.textContent = loaded ? 'Loaded' : 'No agreement';
+  badge.className = 'stew-badge ' + (loaded ? 'loaded' : 'none');
+  $('stew-sub').textContent = loaded ? stewAgreement.name : '';
+  $('stew-empty').style.display = loaded ? 'none' : '';
+  $('btn-stew-remove').style.display = loaded ? '' : 'none';
+  $('btn-stew-load-default').style.display = loaded ? 'none' : '';
+  $('btn-stew-load-custom').style.display = loaded ? 'none' : '';
+  $('stew-meta-section').style.display = loaded ? '' : 'none';
+  $('stew-rules-section').style.display = loaded ? '' : 'none';
+  $('stew-query-section').style.display = loaded ? '' : 'none';
+
+  if (loaded) {
+    $('stew-meta-name').textContent = stewAgreement.name || '—';
+    $('stew-meta-size').textContent = (stewAgreement.textLength || 0).toLocaleString() + ' chars';
+    $('stew-meta-loaded').textContent = stewAgreement.loadedAt ? new Date(stewAgreement.loadedAt).toLocaleString() : '—';
+    $('stew-meta-source').textContent = stewAgreement.source || '—';
+    renderStewardRules();
+  }
+}
+
+function renderStewardRules() {
+  if (!stewRules) {
+    $('stew-no-rules').style.display = '';
+    $('stew-rules-grid').style.display = 'none';
+    $('stew-extract-status').textContent = '';
+    return;
+  }
+  $('stew-no-rules').style.display = 'none';
+  $('stew-rules-grid').style.display = '';
+  $('stew-extract-status').textContent = stewRules.extractedAt
+    ? 'Extracted ' + new Date(stewRules.extractedAt).toLocaleString()
+    : '';
+
+  var cards = [];
+
+  // Turnaround
+  if (stewRules.turnaround) {
+    var t = stewRules.turnaround;
+    cards.push(ruleCard('Turnaround', [
+      ['Minimum', t.minimumHours + 'h'],
+      ['Day off', t.dayOffHours + 'h'],
+      ['Two-day off', t.twoDayOffHours + 'h'],
+      ['Penalty/hr', '$' + t.penaltyPerHour],
+      ['Early penalty/hr', '$' + t.earlyPenaltyPerHour],
+    ], t.citation));
+  }
+
+  // Overtime
+  if (stewRules.overtime) {
+    var o = stewRules.overtime;
+    cards.push(ruleCard('Overtime', [
+      ['Regular day', o.regularDayHours + 'h'],
+      ['Multiplier', o.multiplier + '×'],
+      ['Segment', o.computationSegment],
+    ], o.citation));
+  }
+
+  // Meals
+  if (stewRules.meals) {
+    var m = stewRules.meals;
+    cards.push(ruleCard('Meals & Per Diem', [
+      ['Per diem', '$' + m.perDiem],
+      ['Laundry/day', '$' + m.laundryPerDay],
+      ['Meal after 11h', '$' + m.mealAfter11h],
+      ['Meal after 15h', '$' + m.mealAfter15h],
+    ], m.citation));
+  }
+
+  // Schedule changes
+  if (stewRules.scheduleChanges) {
+    var s = stewRules.scheduleChanges;
+    cards.push(ruleCard('Schedule Changes', [
+      ['Notice required', s.advanceNoticeHours + 'h'],
+      ['Penalty', '$' + s.insufficientNoticePenalty],
+      ['Day-off notice', s.dayOffNoticeHours + 'h'],
+      ['Day-off penalty', '$' + s.dayOffPenalty],
+      ['Cancel penalty', '$' + s.cancellationPenalty],
+    ], s.citation));
+  }
+
+  // Excessive assignments
+  if (stewRules.excessiveAssignments) {
+    var x = stewRules.excessiveAssignments;
+    cards.push(ruleCard('Excessive Assignments', [
+      ['Max consecutive', x.maxConsecutiveDays + ' days'],
+      ['Penalty type', x.penaltyType],
+    ], x.citation));
+  }
+
+  // Entertainment production
+  if (stewRules.entertainmentProduction) {
+    var ep = stewRules.entertainmentProduction;
+    cards.push(ruleCard('Entertainment Production', [
+      ['Turnaround min', ep.turnaroundMinimumHours + 'h'],
+      ['Day off', ep.dayOffHours + 'h'],
+      ['Two-day off', ep.twoDayOffHours + 'h'],
+      ['Penalty/hr', '$' + ep.penaltyPerHour],
+      ['Expires', ep.expiresDate],
+    ], ep.citation));
+  }
+
+  $('stew-rules-grid').innerHTML = cards.join('');
+}
+
+function ruleCard(title, rows, citation) {
+  var html = '<div class="stew-rule-card"><h4>' + esc(title) + '</h4>';
+  rows.forEach(function(r) {
+    html += '<div class="stew-rule-row"><span class="k">' + esc(r[0]) + '</span><span class="v">' + esc(r[1]) + '</span></div>';
+  });
+  if (citation) {
+    html += '<div class="stew-rule-cite">' + esc(citation) + '</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
+// Load default
+$('btn-stew-load-default').addEventListener('click', async function() {
+  if (!selectedAccountId || !selectedGameId) return;
+  clearErr('err-stew');
+  this.disabled = true;
+  this.textContent = 'Loading…';
+  try {
+    await api('POST', '/api/admin/accounts/' + selectedAccountId + '/games/' + selectedGameId + '/agreement/load');
+    loadStewardAgreement();
+  } catch (e) {
+    showErr('err-stew', 'Failed to load agreement: ' + e.message);
+  }
+  this.disabled = false;
+  this.textContent = 'Load NABET-CWA Default';
+});
+
+// Custom paste toggle
+$('btn-stew-load-custom').addEventListener('click', function() {
+  $('form-stew-custom').classList.toggle('open');
+});
+$('btn-stew-cancel-custom').addEventListener('click', function() {
+  $('form-stew-custom').classList.remove('open');
+});
+$('btn-stew-save-custom').addEventListener('click', async function() {
+  var name = $('stew-custom-name').value.trim();
+  var text = $('stew-custom-text').value.trim();
+  if (!text) { showErr('err-stew', 'Agreement text is required.'); return; }
+  if (!name) name = 'Custom Agreement';
+  clearErr('err-stew');
+  this.disabled = true;
+  this.textContent = 'Loading…';
+  try {
+    await api('POST', '/api/admin/accounts/' + selectedAccountId + '/games/' + selectedGameId + '/agreement/load', {
+      text: text, name: name, source: 'manual paste'
+    });
+    $('form-stew-custom').classList.remove('open');
+    $('stew-custom-name').value = '';
+    $('stew-custom-text').value = '';
+    loadStewardAgreement();
+  } catch (e) {
+    showErr('err-stew', 'Failed to load custom agreement: ' + e.message);
+  }
+  this.disabled = false;
+  this.textContent = 'Load Custom';
+});
+
+// Remove
+$('btn-stew-remove').addEventListener('click', async function() {
+  if (!confirm('Remove the agreement from this game?')) return;
+  clearErr('err-stew');
+  try {
+    await api('DELETE', '/api/admin/accounts/' + selectedAccountId + '/games/' + selectedGameId + '/agreement');
+    stewAgreement = null;
+    stewRules = null;
+    renderSteward();
+  } catch (e) {
+    showErr('err-stew', 'Failed to remove agreement: ' + e.message);
+  }
+});
+
+// Extract rules
+$('btn-stew-extract').addEventListener('click', async function() {
+  if (!selectedAccountId || !selectedGameId) return;
+  clearErr('err-stew');
+  this.disabled = true;
+  this.textContent = 'Extracting…';
+  $('stew-extract-status').textContent = 'Running Gemini extraction (~20s)…';
+  try {
+    var data = await api('POST', '/api/admin/accounts/' + selectedAccountId + '/games/' + selectedGameId + '/agreement/extract');
+    stewRules = data.rules;
+    renderStewardRules();
+  } catch (e) {
+    showErr('err-stew', 'Extraction failed: ' + e.message);
+    $('stew-extract-status').textContent = 'Failed';
+  }
+  this.disabled = false;
+  this.textContent = '⚡ Extract Rules';
+});
+
+// Live query
+$('btn-stew-query').addEventListener('click', stewQuery);
+$('stew-query-input').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') stewQuery();
+});
+
+async function stewQuery() {
+  var question = $('stew-query-input').value.trim();
+  if (!question) return;
+  if (!selectedAccountId || !selectedGameId) return;
+  clearErr('err-stew');
+  $('btn-stew-query').disabled = true;
+  $('btn-stew-query').textContent = 'Asking…';
+  $('stew-answer').classList.remove('show');
+  try {
+    var data = await api('POST', '/api/admin/accounts/' + selectedAccountId + '/games/' + selectedGameId + '/agreement/query', {
+      question: question
+    });
+    $('stew-answer-text').textContent = data.answer || '(no answer)';
+    var citeHtml = '';
+    if (data.citations && data.citations.length) {
+      citeHtml = 'Citations: ' + data.citations.map(function(c) { return esc(c); }).join(', ');
+    }
+    if (data.confidence) {
+      citeHtml += '<span class="stew-answer-conf ' + data.confidence + '">' + data.confidence + '</span>';
+    }
+    if (data.latencyMs) {
+      citeHtml += ' <span style="color:var(--ink-3);font-size:10px">' + (data.latencyMs / 1000).toFixed(1) + 's</span>';
+    }
+    $('stew-answer-cite').innerHTML = citeHtml;
+    $('stew-answer').classList.add('show');
+  } catch (e) {
+    showErr('err-stew', 'Query failed: ' + e.message);
+  }
+  $('btn-stew-query').disabled = false;
+  $('btn-stew-query').textContent = 'Ask';
+}
 
 /* ============ UTILS ============ */
 function esc(s){

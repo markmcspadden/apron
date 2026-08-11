@@ -18,6 +18,10 @@ export interface AgentPrompt {
   systemInstruction: string;
   context: Record<string, unknown>;
   query: string;
+  /** Override max output tokens (default 2048). Extraction needs more. */
+  maxOutputTokens?: number;
+  /** JSON Schema for Gemini Structured Outputs — enforces type-safe keys. */
+  responseSchema?: Record<string, unknown>;
 }
 
 export interface AgentResponse {
@@ -109,18 +113,27 @@ export class GeminiClient {
 
     const start = Date.now();
 
-    console.log(`[gemini] ${request.agent} prompt context:`, JSON.stringify(request.context, null, 2));
+    const contextKeys = Object.keys(request.context);
+    const contextSizes = contextKeys.map(k => `${k}:${JSON.stringify(request.context[k]).length}`).join(', ');
+    console.log(`[gemini] ${request.agent} promptJSON — context: {${contextSizes}}, maxTokens: ${request.maxOutputTokens ?? 2048}`);
 
     try {
+      const config: Record<string, unknown> = {
+        systemInstruction: request.systemInstruction,
+        responseMimeType: 'application/json',
+        temperature: 0.1,
+        maxOutputTokens: request.maxOutputTokens ?? 2048,
+      };
+
+      // Gemini Structured Outputs — enforces valid JSON matching the schema
+      if (request.responseSchema) {
+        config['responseSchema'] = request.responseSchema;
+      }
+
       const response = await this.client.models.generateContent({
         model: this.model,
         contents: `Context:\n${JSON.stringify(request.context, null, 2)}\n\n${request.query}`,
-        config: {
-          systemInstruction: request.systemInstruction,
-          responseMimeType: 'application/json',
-          temperature: 0.1,
-          maxOutputTokens: 2048,
-        },
+        config,
       });
 
       const text = response.text ?? '';

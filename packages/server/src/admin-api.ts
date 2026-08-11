@@ -12,17 +12,27 @@ import { AdminStore, GAME_TYPE_DEFAULTS } from './admin-store.js';
 import type { Game, GameType } from './admin-store.js';
 import { generateCrewAssignments } from './crew-generator.js';
 import type { GeneratorOptions } from './crew-generator.js';
+import type { GeminiClient } from '@apron/integration-google-cloud';
+import { extractRules, queryAgreement, buildAgreementMeta } from '@apron/agent-steward/agreement';
+import type { AgreementMeta, ExtractedRules } from '@apron/agent-steward/agreement';
+import { readFileSync } from 'node:fs';
+import { resolve, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 // ---------------------------------------------------------------------------
-// Module-level singleton — created on first request
+// Module-level singletons
 // ---------------------------------------------------------------------------
 
 let store: AdminStore | null = null;
+let gemini: GeminiClient | null = null;
 
 /** Initialize the store singleton eagerly (called from server.ts at startup). */
-export function initAdminStore(firestoreStore: FirestoreStore | null): AdminStore {
+export function initAdminStore(firestoreStore: FirestoreStore | null, geminiClient?: GeminiClient): AdminStore {
   if (!store) {
     store = new AdminStore(firestoreStore);
+  }
+  if (geminiClient) {
+    gemini = geminiClient;
   }
   return store;
 }
@@ -500,6 +510,11 @@ async function routeGames(
     return routeCrewAssignments(req, res, method, accountId, gameId, segments);
   }
 
+  // Nested agreement: /api/admin/accounts/:id/games/:gameId/agreement/...
+  if (segments.length >= 5 && segments[4] === 'agreement') {
+    return routeAgreement(req, res, method, accountId, gameId, segments);
+  }
+
   return false;
 }
 
@@ -730,6 +745,175 @@ async function routeCrewAssignments(
     }
 
     return methodNotAllowed(res);
+  }
+
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// Agreement — STEWARD agent agreement loading and rule extraction
+// Path: /api/admin/accounts/:id/games/:gameId/agreement/...
+// ---------------------------------------------------------------------------
+
+/** Resolve the default NABET agreement text bundled with the project. */
+function loadDefaultAgreement(): { text: string; name: string; source: string } {
+  const __dirname = dirname(fileURLToPath(import.meta.url));
+  const txtPath = resolve(__dirname, '../../../agreements/nabet-cwa-nbcu-2022-2027.txt');
+  const text = readFileSync(txtPath, 'utf-8');
+  return {
+    text,
+    name: 'NABET-CWA/NBCUniversal 2022-2027 Master Agreement',
+    source: 'https://nabetlocal11.org/system/files/2025-02/nabet_master_agreement_2022_-_2027_final_draft_0.pdf',
+  };
+}
+
+async function routeAgreement(
+  req: IncomingMessage,
+  res: ServerResponse,
+  method: string,
+  accountId: string,
+  gameId: string,
+  segments: string[],
+): Promise<boolean> {
+  const game = await store!.getGame(accountId, gameId);
+  if (!game) return notFound(res, 'Game not found');
+
+  // GET/DELETE /api/admin/accounts/:id/games/:gameId/agreement
+  if (segments.length === 5) {
+    if (method === 'GET') {
+      const record = await store!.getAgentRecord(accountId, gameId, 'STEWARD');
+      if (!record) {
+        return json(res, 200, { loaded: false, agreement: null, rules: null });
+      }
+      const agreement = record['agreement'] ?? null;
+      return json(res, 200, {
+        loaded: !!agreement,
+        agreement,
+        rules: record['rules'] ?? null,
+      });
+    }
+    if (method === 'DELETE') {
+      await store!.setAgentRecord(accountId, gameId, 'STEWARD', {
+        agreement: null,
+        agreementText: null,
+        rules: null,
+      });
+      await store!.setAgentAssignment(accountId, gameId, 'STEWARD', {
+        status: 'idle',
+        startedAt: new Date().toISOString(),
+      });
+      return json(res, 200, { removed: true });
+    }
+    return methodNotAllowed(res);
+  }
+
+  const action = segments[5];
+
+  // POST /api/admin/accounts/:id/games/:gameId/agreement/load
+  // Loads the default agreement (or custom text) and stores it on the STEWARD agent record.
+  // Optional body: { text?: string, name?: string, source?: string }
+  if (action === 'load') {
+    if (method !== 'POST') return methodNotAllowed(res);
+
+    const body = await readBody(req);
+    let text: string;
+    let name: string;
+    let source: string;
+
+    if (typeof body['text'] === 'string' && body['text'].length > 0) {
+      text = body['text'] as string;
+      name = (body['name'] as string) ?? 'Custom Agreement';
+      source = (body['source'] as string) ?? 'manual upload';
+    } else {
+      // Load the bundled NABET agreement
+      const defaultAgreement = loadDefaultAgreement();
+      text = defaultAgreement.text;
+      name = defaultAgreement.name;
+      source = defaultAgreement.source;
+    }
+
+    const meta = buildAgreementMeta(name, text, source);
+
+    // Store on the STEWARD agent record
+    await store!.setAgentRecord(accountId, gameId, 'STEWARD', {
+      agreement: meta,
+      agreementText: text,
+    });
+
+    // Set agent lifecycle to active
+    await store!.setAgentAssignment(accountId, gameId, 'STEWARD', {
+      status: 'active',
+      startedAt: new Date().toISOString(),
+    });
+
+    return json(res, 200, {
+      loaded: true,
+      agreement: meta,
+      rules: null,
+      message: `Agreement loaded: ${name} (${meta.textLength.toLocaleString()} chars)`,
+    });
+  }
+
+  // POST /api/admin/accounts/:id/games/:gameId/agreement/extract
+  // Runs Gemini one-time extraction to produce structured rules
+  if (action === 'extract') {
+    if (method !== 'POST') return methodNotAllowed(res);
+
+    const record = await store!.getAgentRecord(accountId, gameId, 'STEWARD');
+    const agreementText = record?.['agreementText'] as string | undefined;
+    if (!agreementText) {
+      return badRequest(res, 'No agreement loaded — call /agreement/load first');
+    }
+
+    if (!gemini?.isEnabled()) {
+      return json(res, 200, {
+        rules: null,
+        message: '[fixture mode] Gemini not available — rules extraction skipped',
+      });
+    }
+
+    const rules = await extractRules(gemini, agreementText);
+    if (!rules) {
+      return json(res, 500, { error: 'Gemini extraction returned no result' });
+    }
+
+    // Store the extracted rules
+    await store!.setAgentRecord(accountId, gameId, 'STEWARD', {
+      rules,
+    });
+
+    return json(res, 200, { rules });
+  }
+
+  // POST /api/admin/accounts/:id/games/:gameId/agreement/query
+  // Live query: send a question about the agreement to Gemini
+  if (action === 'query') {
+    if (method !== 'POST') return methodNotAllowed(res);
+
+    const body = await readBody(req);
+    const question = body['question'] as string;
+    if (!question || typeof question !== 'string') {
+      return badRequest(res, 'Missing required field: question');
+    }
+
+    const record = await store!.getAgentRecord(accountId, gameId, 'STEWARD');
+    const agreementText = record?.['agreementText'] as string | undefined;
+    if (!agreementText) {
+      return badRequest(res, 'No agreement loaded — call /agreement/load first');
+    }
+
+    if (!gemini?.isEnabled()) {
+      return json(res, 200, {
+        answer: `[fixture mode] STEWARD would query: ${question}`,
+        citations: [],
+        confidence: 'low',
+      });
+    }
+
+    const operationalContext = body['context'] as Record<string, unknown> | undefined;
+    const result = await queryAgreement(gemini, agreementText, question, operationalContext);
+
+    return json(res, 200, result);
   }
 
   return false;

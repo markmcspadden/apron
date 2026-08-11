@@ -101,6 +101,9 @@ importers:
 
   packages/agents/steward:
     dependencies:
+      '@apron/integration-google-cloud':
+        specifier: workspace:*
+        version: link:../../../integrations/google-cloud
       '@apron/orchestrator':
         specifier: workspace:*
         version: link:../../orchestrator

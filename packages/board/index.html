@@ -197,6 +197,54 @@ tbody tr.t2{box-shadow:inset 3px 0 0 var(--line-2)}
 .prov.inferred{color:#E0B45A} .prov.inferred .pi{color:var(--watch)}
 .prov.none{color:#5C5A55}
 .prov.external{color:#8FB4DE} .prov.external .pi{color:#5DA9E9}
+
+/* agreement panel (board) */
+.agmt{border-bottom:1px solid var(--line);padding:16px 20px}
+.agmt-h{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-2);
+  font-weight:640;margin-bottom:4px;display:flex;align-items:center;gap:10px}
+.agmt-h .agmt-badge{font-family:var(--m);font-size:9px;letter-spacing:.08em;padding:2px 7px;
+  border-radius:4px;background:#0E2040;color:var(--live);border:1px solid #1A3A60}
+.agmt-name-row{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.agmt-name-row a{color:var(--ink);font-size:13px;font-weight:600;text-decoration:none;
+  border-bottom:1px dashed var(--line-2)}
+.agmt-name-row a:hover{color:var(--live);border-color:var(--live)}
+.agmt-name-row .agmt-size{font-family:var(--m);font-size:10px;color:var(--ink-3)}
+.agmt-rules{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;
+  margin-bottom:14px}
+.agmt-card{background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:9px 11px}
+.agmt-card h4{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2);
+  font-weight:640;margin-bottom:5px}
+.agmt-card-row{display:flex;justify-content:space-between;font-size:12px;padding:1.5px 0}
+.agmt-card-row .k{color:var(--ink-3)}
+.agmt-card-row .v{font-family:var(--m);font-weight:600;color:var(--ink)}
+.agmt-card-cite{font-family:var(--m);font-size:9.5px;color:var(--ink-3);margin-top:3px;
+  padding-top:3px;border-top:1px solid var(--line)}
+.agmt-query{background:var(--panel);border:1px solid var(--line);border-radius:8px;
+  padding:12px 14px}
+.agmt-query-label{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);
+  font-weight:640;margin-bottom:8px}
+.agmt-query-row{display:flex;gap:8px}
+.agmt-query-row input{flex:1;font:inherit;font-size:12px;padding:7px 10px;background:var(--bg);
+  border:1px solid var(--line-2);border-radius:6px;color:var(--ink);outline:none;
+  font-family:var(--f)}
+.agmt-query-row input:focus{border-color:var(--live)}
+.agmt-query-row button{font:inherit;font-size:11px;font-weight:600;padding:7px 12px;
+  border-radius:6px;cursor:pointer;border:1px solid #2A6FB5;background:#2A6FB5;color:#fff;
+  white-space:nowrap}
+.agmt-query-row button:hover{background:#3480CC}
+.agmt-query-row button:disabled{opacity:.4;cursor:default}
+.agmt-answer{background:var(--bg);border:1px solid var(--line-2);border-radius:6px;
+  padding:10px 12px;margin-top:10px;font-size:12px;line-height:1.55;white-space:pre-wrap;
+  display:none}
+.agmt-answer.show{display:block}
+.agmt-answer-meta{font-family:var(--m);font-size:10px;color:var(--ink-3);margin-top:6px;
+  padding-top:5px;border-top:1px solid var(--line);display:flex;align-items:center;gap:8px;
+  flex-wrap:wrap}
+.agmt-conf{font-family:var(--m);font-size:9px;letter-spacing:.08em;padding:2px 6px;
+  border-radius:3px;text-transform:uppercase}
+.agmt-conf.high{background:var(--clear-bg);color:var(--clear);border:1px solid #1A4A24}
+.agmt-conf.medium{background:var(--watch-bg);color:var(--watch);border:1px solid #4A3A10}
+.agmt-conf.low{background:var(--down-bg);color:var(--down);border:1px solid #5A2220}
 .redact{color:var(--ink-3);font-style:italic}
 .brk{font-family:var(--m);font-size:8.5px;letter-spacing:.07em;background:#0E2A16;color:#3FBE62;
   border:1px solid #1C5C2E;padding:1px 5px;border-radius:3px;margin-left:6px}
@@ -331,6 +379,29 @@ tbody tr.t2{box-shadow:inset 3px 0 0 var(--line-2)}
       </table>
     </div>
 
+    <div class="agmt" id="agmt-panel" style="display:none">
+      <div class="agmt-h">
+        ⚖ STEWARD — Agreement
+        <span class="agmt-badge" id="agmt-badge">Active</span>
+      </div>
+      <div class="agmt-name-row" id="agmt-name-row">
+        <a href="#" id="agmt-link" target="_blank">—</a>
+        <span class="agmt-size" id="agmt-size"></span>
+      </div>
+      <div class="agmt-rules" id="agmt-rules"></div>
+      <div class="agmt-query">
+        <div class="agmt-query-label">Ask STEWARD (Gemini live query)</div>
+        <div class="agmt-query-row">
+          <input type="text" id="agmt-q" placeholder="e.g. What's the midnight call penalty?">
+          <button id="btn-agmt-q">Ask</button>
+        </div>
+        <div class="agmt-answer" id="agmt-a">
+          <div id="agmt-a-text"></div>
+          <div class="agmt-answer-meta" id="agmt-a-meta"></div>
+        </div>
+      </div>
+    </div>
+
     <div class="opts" id="opts"></div>
 
     <div class="handoff" id="handoff">
@@ -396,6 +467,28 @@ tbody tr.t2{box-shadow:inset 3px 0 0 var(--line-2)}
         </tr></thead>
         <tbody id="proster"></tbody>
       </table>
+    </div>
+  </div>
+
+  <div class="pcard" id="pagmt-panel" style="display:none;margin-bottom:16px">
+    <div class="pcard-h">⚖ STEWARD — Agreement <span class="cnt" id="pagmt-badge">Active</span></div>
+    <div style="padding:14px 18px 16px">
+      <div class="agmt-name-row" id="pagmt-name-row">
+        <a href="#" id="pagmt-link" target="_blank">—</a>
+        <span class="agmt-size" id="pagmt-size"></span>
+      </div>
+      <div class="agmt-rules" id="pagmt-rules"></div>
+      <div class="agmt-query">
+        <div class="agmt-query-label">Ask STEWARD (Gemini live query)</div>
+        <div class="agmt-query-row">
+          <input type="text" id="pagmt-q" placeholder="e.g. What's the midnight call penalty?">
+          <button id="btn-pagmt-q">Ask</button>
+        </div>
+        <div class="agmt-answer" id="pagmt-a">
+          <div id="pagmt-a-text"></div>
+          <div class="agmt-answer-meta" id="pagmt-a-meta"></div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -1140,7 +1233,172 @@ if (gameParam) {
       }
     }
   } catch(e) { /* board API not available */ }
+
+  // Fetch agreement data for this game (boardAcctId used by live query)
+  if (boardData && boardData.account && boardData.account.id) {
+    window.boardAcctId = boardData.account.id;
+    try {
+      var axhr = new XMLHttpRequest();
+      axhr.open('GET', '/api/admin/accounts/' + encodeURIComponent(boardAcctId) + '/games/' + encodeURIComponent(gameParam) + '/agreement', false);
+      axhr.send();
+      if (axhr.status === 200) {
+        var agmtData = JSON.parse(axhr.responseText);
+        if (agmtData.loaded && agmtData.agreement) {
+          renderBoardAgreement(agmtData.agreement, agmtData.rules);
+        }
+      }
+    } catch(e) { /* agreement API not available */ }
+  }
 }
+
+function renderBoardAgreement(agreement, rules) {
+  // Populate both TMC Desk and Production Seat panels
+  var seats = [
+    { panel: 'agmt-panel', link: 'agmt-link', size: 'agmt-size', rulesEl: 'agmt-rules' },
+    { panel: 'pagmt-panel', link: 'pagmt-link', size: 'pagmt-size', rulesEl: 'pagmt-rules' },
+  ];
+  seats.forEach(function(s) {
+    $(s.panel).style.display = '';
+    $(s.link).textContent = agreement.name || '—';
+    if (agreement.source && agreement.source.startsWith('http')) {
+      $(s.link).href = agreement.source;
+    } else {
+      $(s.link).removeAttribute('href');
+      $(s.link).style.cursor = 'default';
+    }
+    $(s.size).textContent = agreement.textLength
+      ? (agreement.textLength).toLocaleString() + ' chars'
+      : '';
+  });
+
+  if (!rules) {
+    var noRules = '<span style="font-size:12px;color:var(--ink-3);grid-column:1/-1">Agreement loaded · rules not yet extracted</span>';
+    seats.forEach(function(s) { $(s.rulesEl).innerHTML = noRules; });
+    return;
+  }
+
+  var cards = [];
+
+  if (rules.turnaround) {
+    var t = rules.turnaround;
+    cards.push(agmtCard('Turnaround', [
+      ['Minimum', t.minimumHours + 'h'],
+      ['Day off', t.dayOffHours + 'h'],
+      ['Two-day off', t.twoDayOffHours + 'h'],
+      ['Penalty/hr', '$' + t.penaltyPerHour],
+      ['Early penalty', '$' + t.earlyPenaltyPerHour],
+    ], t.citation));
+  }
+  if (rules.overtime) {
+    var o = rules.overtime;
+    cards.push(agmtCard('Overtime', [
+      ['Regular day', o.regularDayHours + 'h'],
+      ['Multiplier', o.multiplier + '×'],
+      ['Segment', o.computationSegment],
+    ], o.citation));
+  }
+  if (rules.meals) {
+    var m = rules.meals;
+    cards.push(agmtCard('Meals & Per Diem', [
+      ['Per diem', '$' + m.perDiem],
+      ['Laundry/day', '$' + m.laundryPerDay],
+      ['Meal after 11h', '$' + m.mealAfter11h],
+      ['Meal after 15h', '$' + m.mealAfter15h],
+    ], m.citation));
+  }
+  if (rules.scheduleChanges) {
+    var s = rules.scheduleChanges;
+    cards.push(agmtCard('Schedule Changes', [
+      ['Notice req.', s.advanceNoticeHours + 'h'],
+      ['Penalty', '$' + s.insufficientNoticePenalty],
+      ['Day-off notice', s.dayOffNoticeHours + 'h'],
+      ['Day-off penalty', '$' + s.dayOffPenalty],
+      ['Cancel penalty', '$' + s.cancellationPenalty],
+    ], s.citation));
+  }
+  if (rules.excessiveAssignments) {
+    var x = rules.excessiveAssignments;
+    cards.push(agmtCard('Excessive Assignments', [
+      ['Max consecutive', x.maxConsecutiveDays + ' days'],
+      ['Penalty', x.penaltyType],
+    ], x.citation));
+  }
+  if (rules.entertainmentProduction) {
+    var ep = rules.entertainmentProduction;
+    cards.push(agmtCard('Entertainment Prod.', [
+      ['Turnaround', ep.turnaroundMinimumHours + 'h'],
+      ['Day off', ep.dayOffHours + 'h'],
+      ['Two-day off', ep.twoDayOffHours + 'h'],
+      ['Expires', ep.expiresDate],
+    ], ep.citation));
+  }
+
+  var cardsHtml = cards.join('');
+  seats.forEach(function(s) { $(s.rulesEl).innerHTML = cardsHtml; });
+}
+
+function agmtCard(title, rows, citation) {
+  var html = '<div class="agmt-card"><h4>' + esc(title) + '</h4>';
+  rows.forEach(function(r) {
+    html += '<div class="agmt-card-row"><span class="k">' + esc(r[0]) + '</span><span class="v">' + esc(String(r[1])) + '</span></div>';
+  });
+  if (citation) html += '<div class="agmt-card-cite">' + esc(citation) + '</div>';
+  html += '</div>';
+  return html;
+}
+
+// Live query from board — works for both TMC and Prod seats
+function boardAgmtQuery(prefix) {
+  var qId = prefix + 'agmt-q';
+  var btnId = 'btn-' + prefix + 'agmt-q';
+  var aId = prefix + 'agmt-a';
+  var atId = prefix + 'agmt-a-text';
+  var amId = prefix + 'agmt-a-meta';
+
+  var question = $(qId).value.trim();
+  if (!question || !window.boardAcctId || !gameParam) return;
+  $(btnId).disabled = true;
+  $(btnId).textContent = 'Asking…';
+  $(aId).classList.remove('show');
+
+  var xq = new XMLHttpRequest();
+  xq.open('POST', '/api/admin/accounts/' + encodeURIComponent(window.boardAcctId) + '/games/' + encodeURIComponent(gameParam) + '/agreement/query');
+  xq.setRequestHeader('Content-Type', 'application/json');
+  xq.onload = function() {
+    $(btnId).disabled = false;
+    $(btnId).textContent = 'Ask';
+    if (xq.status === 200) {
+      try {
+        var data = JSON.parse(xq.responseText);
+        $(atId).textContent = data.answer || '(no answer)';
+        var meta = '';
+        if (data.citations && data.citations.length) {
+          meta += data.citations.map(function(c) { return esc(c); }).join(', ');
+        }
+        if (data.confidence) {
+          meta += ' <span class="agmt-conf ' + data.confidence + '">' + data.confidence + '</span>';
+        }
+        if (data.latencyMs) {
+          meta += ' <span style="color:var(--ink-3)">' + (data.latencyMs / 1000).toFixed(1) + 's</span>';
+        }
+        $(amId).innerHTML = meta;
+        $(aId).classList.add('show');
+      } catch(e) { /* parse error */ }
+    }
+  };
+  xq.onerror = function() {
+    $(btnId).disabled = false;
+    $(btnId).textContent = 'Ask';
+  };
+  xq.send(JSON.stringify({ question: question }));
+}
+
+// TMC Desk query handlers
+$('btn-agmt-q').addEventListener('click', function() { boardAgmtQuery(''); });
+$('agmt-q').addEventListener('keydown', function(e) { if (e.key === 'Enter') boardAgmtQuery(''); });
+// Production Seat query handlers
+$('btn-pagmt-q').addEventListener('click', function() { boardAgmtQuery('p'); });
+$('pagmt-q').addEventListener('keydown', function(e) { if (e.key === 'Enter') boardAgmtQuery('p'); });
 
 if (seatParam === 'prod' || seatParam === 'production') {
   setSeat('prod');
