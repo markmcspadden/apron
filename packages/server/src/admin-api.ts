@@ -887,6 +887,7 @@ async function routeAgreement(
 
   // POST /api/admin/accounts/:id/games/:gameId/agreement/query
   // Live query: send a question about the agreement to Gemini
+  // Automatically enriches with game + crew operational context
   if (action === 'query') {
     if (method !== 'POST') return methodNotAllowed(res);
 
@@ -910,7 +911,8 @@ async function routeAgreement(
       });
     }
 
-    const operationalContext = body['context'] as Record<string, unknown> | undefined;
+    // Gather operational context: game details, crew, chain, extracted rules
+    const operationalContext = await buildOperationalContext(accountId, gameId, record);
     const result = await queryAgreement(gemini, agreementText, question, operationalContext);
 
     return json(res, 200, result);
@@ -1109,6 +1111,93 @@ function computeChain(game: Game): ChainNode[] | null {
   }
 
   return chain;
+}
+
+// ---------------------------------------------------------------------------
+// Build operational context for STEWARD live queries
+// ---------------------------------------------------------------------------
+
+async function buildOperationalContext(
+  accountId: string,
+  gameId: string,
+  stewardRecord: Record<string, unknown> | null,
+): Promise<Record<string, unknown>> {
+  const context: Record<string, unknown> = {};
+
+  // Game details + timing chain
+  const game = await store!.getGame(accountId, gameId);
+  if (game) {
+    context['game'] = {
+      title: game.title,
+      network: game.network,
+      venue: game.venue,
+      date: game.date,
+      callTime: game.callTime,
+      startTime: game.startTime,
+      expectedEndTime: game.expectedEndTime,
+      departureAirport: game.departureAirport,
+      lobbyCallTime: game.lobbyCallTime,
+      minRestHours: game.minRestHours ?? 8,
+    };
+
+    const chain = computeChain(game);
+    if (chain) {
+      context['timingChain'] = chain.map(n => ({
+        label: n.label,
+        time: n.time,
+        ...(n.isDuration ? { isDuration: true } : {}),
+      }));
+    }
+  }
+
+  // Crew assignments with next calls, flights, and routing
+  const crewAssignments = await store!.listCrewAssignments(accountId, gameId);
+  if (crewAssignments.length > 0) {
+    context['crew'] = crewAssignments.map(ca => {
+      const crew: Record<string, unknown> = {
+        name: ca.name,
+        position: ca.position,
+        homeAirport: ca.homeAirport,
+        status: ca.status,
+      };
+
+      // Next call info
+      if (ca.nextCall) {
+        crew['nextCall'] = {
+          type: ca.nextCall.type,
+          destination: ca.nextCall.destinationCity
+            ? `${ca.nextCall.destinationCity} (${ca.nextCall.destinationAirport})`
+            : ca.nextCall.destinationAirport,
+          callTime: ca.nextCall.callTime?.display ?? null,
+          callTimeISO: ca.nextCall.callTime?.iso ?? null,
+          arrivalDeadline: ca.nextCall.arrivalDeadline?.display ?? null,
+          production: ca.nextCall.production?.name ?? null,
+        };
+      }
+
+      // Travel routing
+      if (ca.routing) {
+        crew['routing'] = {
+          flight: ca.routing.carrierDisplay,
+          departure: ca.routing.departureTime,
+          route: ca.routing.routeSummary,
+          arrival: ca.routing.arrivalTime,
+          slackMinutes: ca.routing.slackMinutes,
+          status: ca.routing.status,
+        };
+      }
+
+      return crew;
+    });
+  }
+
+  // Include extracted rules so Gemini can reference the structured data
+  const rules = stewardRecord?.['rules'] as Record<string, unknown> | undefined;
+  if (rules) {
+    context['extractedRules'] = rules;
+  }
+
+  return context;
 }
 
 // ---------------------------------------------------------------------------
