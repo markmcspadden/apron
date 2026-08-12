@@ -146,7 +146,7 @@ export class GeminiClient {
         return JSON.parse(text) as T;
       } catch {
         // responseMimeType should prevent this, but guard against it
-        console.warn(`[gemini] ${request.agent}: JSON parse failed despite responseMimeType. Raw:`, text.slice(0, 200));
+        console.warn(`[gemini] ${request.agent}: JSON parse failed despite responseMimeType (${text.length} chars). Raw head:`, text.replace(/\n/g, '\\n').slice(0, 300));
         return null;
       }
     } catch (err) {

@@ -26,6 +26,14 @@ import { fileURLToPath } from 'node:url';
 let store: AdminStore | null = null;
 let gemini: GeminiClient | null = null;
 
+/** Callback invoked when crew data is mutated (assignments, routing, nextCall). */
+let onCrewChanged: ((accountId: string, gameId: string) => void) | null = null;
+
+/** Register a callback for crew data mutations (called by server.ts). */
+export function setCrewChangeCallback(cb: (accountId: string, gameId: string) => void): void {
+  onCrewChanged = cb;
+}
+
 /** Initialize the store singleton eagerly (called from server.ts at startup). */
 export function initAdminStore(firestoreStore: FirestoreStore | null, geminiClient?: GeminiClient): AdminStore {
   if (!store) {
@@ -695,6 +703,7 @@ async function routeCrewAssignments(
 
     // Persist to Firestore
     await store!.setCrewAssignmentsBatch(accountId, gameId, crewAssignments);
+    onCrewChanged?.(accountId, gameId);
 
     return json(res, 201, {
       generated: crewAssignments.length,
@@ -735,12 +744,14 @@ async function routeCrewAssignments(
       if (body['nextCall'] != null) patch['nextCall'] = body['nextCall'];
       const updated = await store!.updateCrewAssignment(accountId, gameId, crewId, patch);
       if (!updated) return notFound(res, 'Crew assignment not found');
+      onCrewChanged?.(accountId, gameId);
       return json(res, 200, updated);
     }
 
     if (method === 'DELETE') {
       const deleted = await store!.deleteCrewAssignment(accountId, gameId, crewId);
       if (!deleted) return notFound(res, 'Crew assignment not found');
+      onCrewChanged?.(accountId, gameId);
       return json(res, 200, { ok: true });
     }
 
@@ -756,7 +767,7 @@ async function routeCrewAssignments(
 // ---------------------------------------------------------------------------
 
 /** Resolve the default NABET agreement text bundled with the project. */
-function loadDefaultAgreement(): { text: string; name: string; source: string } {
+export function loadDefaultAgreement(): { text: string; name: string; source: string } {
   const __dirname = dirname(fileURLToPath(import.meta.url));
   const txtPath = resolve(__dirname, '../../../agreements/nabet-cwa-nbcu-2022-2027.txt');
   const text = readFileSync(txtPath, 'utf-8');
@@ -1117,7 +1128,7 @@ function computeChain(game: Game): ChainNode[] | null {
 // Build operational context for STEWARD live queries
 // ---------------------------------------------------------------------------
 
-async function buildOperationalContext(
+export async function buildOperationalContext(
   accountId: string,
   gameId: string,
   stewardRecord: Record<string, unknown> | null,

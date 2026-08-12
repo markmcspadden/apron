@@ -34,6 +34,8 @@ export type {
   HandoffComposed,
   ShowClosed,
   AgentStatusChange,
+  ComplianceUpdate,
+  CrewComplianceEntry,
   BoardEvent,
 } from './events.js';
 

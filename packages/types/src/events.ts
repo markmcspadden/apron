@@ -71,6 +71,62 @@ export interface ShowStateChange extends BaseEvent {
   alert: string | null;
 }
 
+/** Per-crew compliance status from STEWARD proactive monitoring. */
+export interface CrewComplianceEntry {
+  name: string;
+  position: string;
+  turnaround: {
+    status: 'violation' | 'at_risk' | 'clear' | 'unknown';
+    gapHours: number | null;
+    minimumHours: number;
+    nextCallTime: string | null;
+  };
+  overtime: {
+    triggered: boolean;
+    hoursWorked: number;
+    regularDayHours: number;
+    otCost: number;
+  };
+  meals: {
+    perDiemTriggered: boolean;
+    mealAfter11h: boolean;
+    mealAfter15h: boolean;
+    incrementalCost: number;
+  };
+  penalties: {
+    turnaroundPenalty: number;
+    scheduleChangePenalty: number;
+    totalPenalty: number;
+  };
+}
+
+/** STEWARD compliance snapshot — emitted when game timing changes. */
+export interface ComplianceUpdate extends BaseEvent {
+  type: 'compliance-update';
+  /** What triggered this evaluation */
+  trigger: 'chain-update' | 'crew-rebooked' | 'game-started' | 'game-ended';
+  /** Per-crew compliance assessments */
+  crew: CrewComplianceEntry[];
+  /** Aggregate cost exposure */
+  totals: {
+    turnaroundPenalties: number;
+    overtimeCost: number;
+    mealCost: number;
+    scheduleChangePenalties: number;
+    totalExposure: number;
+  };
+  /** Tonight's rest window — hotel arrival to lobby call */
+  restCompression: {
+    hotelArrival: string | null;
+    lobbyCall: string | null;
+    restHours: number | null;
+    minimumRest: number;
+    compressed: boolean;
+  };
+  /** Summary for the board alert bar */
+  summary: string;
+}
+
 export type AgentEvent =
   | GameStateUpdate
   | ChainUpdate
@@ -82,7 +138,8 @@ export type AgentEvent =
   | HandoffComposed
   | ShowClosed
   | AgentStatusChange
-  | ShowStateChange;
+  | ShowStateChange
+  | ComplianceUpdate;
 
 export interface BoardEvent {
   type: 'agent-event';

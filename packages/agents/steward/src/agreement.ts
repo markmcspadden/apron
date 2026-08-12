@@ -401,6 +401,226 @@ export async function queryAgreement(
   };
 }
 
+// ---------------------------------------------------------------------------
+// Proactive compliance evaluation
+// ---------------------------------------------------------------------------
+
+const EVALUATE_SYSTEM = `You are the STEWARD agent evaluating VARIANCE FROM THE ORIGINAL PLAN caused by game timing changes in a live sports/entertainment production.
+
+CRITICAL: You are NOT evaluating absolute compliance. You are evaluating what CHANGED vs. what was already planned. The original plan is assumed fully compliant — costs and obligations that would have existed under the planned timing are NOT flagged.
+
+## How to determine the variance
+
+The context includes:
+- "game.expectedEndTime" — the PLANNED end time when the game was scheduled (the baseline)
+- "currentPredictedEnd" — SPOTTER's CURRENT predicted end time as the game progresses
+- "timingChain" — the wrap-to-gate chain computed from the planned end time
+
+Calculate the OVERRUN: how many minutes/hours the current predicted end exceeds the planned end. If there is no overrun (game on schedule or early), all variance values should be zero.
+
+For each crew member, push the entire timing chain forward by the overrun amount and assess:
+
+1. TURNAROUND: Using the SHIFTED end-of-duty (hotel arrival pushed by the overrun), compare against next call time. Status:
+   - "violation" if gap < minimum turnaround hours from the agreement
+   - "at_risk" if gap < minimum + 2 hours
+   - "clear" if gap >= minimum + 2 hours
+   - "unknown" if next call time is not available
+   gapHours = the actual gap with the shifted timing, or null if unknown.
+
+2. OVERTIME: Only the INCREMENTAL overtime caused by the overrun. Calculate hours worked under the plan vs. hours worked with the overrun. Only the difference counts. Use $50/hr base if not in rules.
+
+3. MEALS: Only flag meal thresholds NEWLY crossed because of the overrun. If the planned timing already triggered a meal (e.g., crew was always going to work 12h), that is NOT a variance. Only flag if the overrun pushes past a threshold that the plan didn't reach. Set incrementalCost to $0 if no new thresholds crossed.
+
+4. PENALTIES: Only penalties caused by the overrun — turnaround encroachment penalties from the shifted end-of-duty. Schedule change penalties only if call time itself changed with insufficient notice, not from game overrun.
+
+5. REST COMPRESSION: Calculate rest window using the SHIFTED hotel arrival vs. lobby call. This IS a variance since overrun directly compresses rest.
+
+ALL dollar amounts must be INCREMENTAL — the cost ABOVE what was already budgeted for the planned end time. If currentPredictedEnd is not available or equals the planned end, report $0 across the board. When data is missing, flag as unknown.`;
+
+/** Gemini Structured Output schema for compliance evaluation. */
+const EVALUATE_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    crew: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          name: { type: 'STRING' },
+          position: { type: 'STRING' },
+          turnaround: {
+            type: 'OBJECT',
+            properties: {
+              status: { type: 'STRING', enum: ['violation', 'at_risk', 'clear', 'unknown'] },
+              gapHours: { type: 'NUMBER', nullable: true },
+              minimumHours: { type: 'NUMBER' },
+              nextCallTime: { type: 'STRING', nullable: true },
+            },
+            required: ['status', 'minimumHours'],
+          },
+          overtime: {
+            type: 'OBJECT',
+            properties: {
+              triggered: { type: 'BOOLEAN' },
+              hoursWorked: { type: 'NUMBER' },
+              regularDayHours: { type: 'NUMBER' },
+              otCost: { type: 'NUMBER' },
+            },
+            required: ['triggered', 'hoursWorked', 'regularDayHours', 'otCost'],
+          },
+          meals: {
+            type: 'OBJECT',
+            properties: {
+              perDiemTriggered: { type: 'BOOLEAN' },
+              mealAfter11h: { type: 'BOOLEAN' },
+              mealAfter15h: { type: 'BOOLEAN' },
+              incrementalCost: { type: 'NUMBER' },
+            },
+            required: ['perDiemTriggered', 'mealAfter11h', 'mealAfter15h', 'incrementalCost'],
+          },
+          penalties: {
+            type: 'OBJECT',
+            properties: {
+              turnaroundPenalty: { type: 'NUMBER' },
+              scheduleChangePenalty: { type: 'NUMBER' },
+              totalPenalty: { type: 'NUMBER' },
+            },
+            required: ['turnaroundPenalty', 'scheduleChangePenalty', 'totalPenalty'],
+          },
+        },
+        required: ['name', 'position', 'turnaround', 'overtime', 'meals', 'penalties'],
+      },
+    },
+    totals: {
+      type: 'OBJECT',
+      properties: {
+        turnaroundPenalties: { type: 'NUMBER' },
+        overtimeCost: { type: 'NUMBER' },
+        mealCost: { type: 'NUMBER' },
+        scheduleChangePenalties: { type: 'NUMBER' },
+        totalExposure: { type: 'NUMBER' },
+      },
+      required: ['turnaroundPenalties', 'overtimeCost', 'mealCost', 'scheduleChangePenalties', 'totalExposure'],
+    },
+    restCompression: {
+      type: 'OBJECT',
+      properties: {
+        hotelArrival: { type: 'STRING', nullable: true },
+        lobbyCall: { type: 'STRING', nullable: true },
+        restHours: { type: 'NUMBER', nullable: true },
+        minimumRest: { type: 'NUMBER' },
+        compressed: { type: 'BOOLEAN' },
+      },
+      required: ['minimumRest', 'compressed'],
+    },
+    summary: { type: 'STRING' },
+  },
+  required: ['crew', 'totals', 'restCompression', 'summary'],
+};
+
+/** Result of a proactive compliance evaluation. */
+export interface ComplianceSnapshot {
+  crew: Array<{
+    name: string;
+    position: string;
+    turnaround: {
+      status: 'violation' | 'at_risk' | 'clear' | 'unknown';
+      gapHours: number | null;
+      minimumHours: number;
+      nextCallTime: string | null;
+    };
+    overtime: {
+      triggered: boolean;
+      hoursWorked: number;
+      regularDayHours: number;
+      otCost: number;
+    };
+    meals: {
+      perDiemTriggered: boolean;
+      mealAfter11h: boolean;
+      mealAfter15h: boolean;
+      incrementalCost: number;
+    };
+    penalties: {
+      turnaroundPenalty: number;
+      scheduleChangePenalty: number;
+      totalPenalty: number;
+    };
+  }>;
+  totals: {
+    turnaroundPenalties: number;
+    overtimeCost: number;
+    mealCost: number;
+    scheduleChangePenalties: number;
+    totalExposure: number;
+  };
+  restCompression: {
+    hotelArrival: string | null;
+    lobbyCall: string | null;
+    restHours: number | null;
+    minimumRest: number;
+    compressed: boolean;
+  };
+  summary: string;
+  evaluatedAt: string;
+  latencyMs: number;
+}
+
+/**
+ * Proactive compliance evaluation — called when game timing changes.
+ *
+ * Uses extracted rules + operational context (same compact payload as live query)
+ * to evaluate every crew member's compliance status against the agreement.
+ */
+export async function evaluateImpact(
+  gemini: GeminiClient,
+  operationalContext: Record<string, unknown>,
+): Promise<ComplianceSnapshot | null> {
+  if (!gemini.isEnabled()) return null;
+
+  const rules = operationalContext['extractedRules'];
+  if (!rules) {
+    console.warn('[steward] evaluateImpact called without extracted rules — skipping');
+    return null;
+  }
+
+  const start = Date.now();
+
+  // Retry up to 2 times — Gemini structured output can intermittently produce malformed JSON
+  let result: Omit<ComplianceSnapshot, 'evaluatedAt' | 'latencyMs'> | null = null;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    result = await gemini.promptJSON<Omit<ComplianceSnapshot, 'evaluatedAt' | 'latencyMs'>>({
+      agent: 'STEWARD',
+      systemInstruction: EVALUATE_SYSTEM,
+      context: operationalContext,
+      query: 'Evaluate compliance impact for the current timing chain. Assess every crew member.',
+      maxOutputTokens: 8192,
+      responseSchema: EVALUATE_SCHEMA,
+    });
+    if (result) break;
+    if (attempt < 2) {
+      console.log(`[steward] evaluateImpact — retry ${attempt}/2`);
+    }
+  }
+
+  const latencyMs = Date.now() - start;
+
+  if (!result) {
+    console.warn(`[steward] evaluateImpact — Gemini returned no result after retries (${latencyMs}ms)`);
+    return null;
+  }
+
+  return {
+    ...result,
+    evaluatedAt: new Date().toISOString(),
+    latencyMs,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Agreement metadata
+// ---------------------------------------------------------------------------
+
 /**
  * Build agreement metadata from the text content and source.
  */

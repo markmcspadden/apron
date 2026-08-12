@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>APRON — STEWARD Dashboard</title>
+<style>
+:root{
+  --bg:#0B0B0C; --panel:#141416; --panel-2:#1B1B1E; --line:#2A2A2E; --line-2:#3A3A40;
+  --ink:#F2F1EE; --ink-2:#A9A69E; --ink-3:#6E6B65;
+  --clear:#25B04B; --clear-bg:#0E2A16;
+  --watch:#E8A81C; --watch-bg:#2E2308;
+  --risk:#EE7A3C; --risk-bg:#31190A;
+  --down:#E0403C; --down-bg:#33100F;
+  --live:#5DA9E9;
+  --f:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --m:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f);font-size:14px;
+  line-height:1.45;-webkit-font-smoothing:antialiased;display:flex;min-height:100vh}
+.mono{font-family:var(--m);font-variant-numeric:tabular-nums}
+
+/* ---------- sidebar ---------- */
+.sidebar{width:220px;min-height:100vh;background:var(--panel);border-right:1px solid var(--line);
+  position:fixed;top:0;left:0;bottom:0;z-index:90;display:flex;flex-direction:column}
+.sidebar-brand{padding:18px 20px 16px;border-bottom:1px solid var(--line)}
+.sidebar-brand b{font-size:16px;font-weight:750;letter-spacing:.13em}
+.sidebar-brand span{font-size:10px;letter-spacing:.16em;color:var(--ink-3);text-transform:uppercase;
+  margin-left:9px}
+.sidebar-nav{padding:12px 0;flex:1}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 20px;font-size:13px;font-weight:600;
+  color:var(--ink-3);cursor:pointer;transition:background .12s,color .12s;border:none;background:none;
+  width:100%;text-align:left;font-family:var(--f);letter-spacing:.02em;text-decoration:none}
+.nav-item:hover{background:var(--panel-2);color:var(--ink-2)}
+.nav-item.active{color:var(--ink);background:var(--panel-2);border-right:2px solid var(--live)}
+.nav-icon{font-size:15px;width:22px;text-align:center;opacity:.6}
+.nav-item.active .nav-icon{opacity:1}
+.sidebar-foot{padding:14px 20px;border-top:1px solid var(--line);font-size:10px;color:var(--ink-3);
+  letter-spacing:.08em;font-family:var(--m)}
+
+/* ---------- top bar ---------- */
+.topbar{position:fixed;top:0;left:220px;right:0;z-index:80;background:#0B0B0Cf2;
+  backdrop-filter:blur(10px);border-bottom:1px solid var(--line);height:52px;
+  display:flex;align-items:center;padding:0 24px;gap:16px}
+.topbar-title{font-size:12px;letter-spacing:.15em;text-transform:uppercase;color:var(--ink-2);
+  font-weight:640}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:12px}
+.topbar-pill{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  padding:3px 10px;border-radius:99px;font-family:var(--m)}
+.topbar-pill.on{background:var(--clear-bg);color:var(--clear);border:1px solid var(--clear)}
+.topbar-pill.off{background:var(--panel-2);color:var(--ink-3);border:1px solid var(--line)}
+.topbar-pill.warn{background:var(--watch-bg);color:var(--watch);border:1px solid var(--watch)}
+.topbar-pill.alert{background:var(--down-bg);color:var(--down);border:1px solid var(--down)}
+.refresh-label{font-size:11px;color:var(--ink-3);font-family:var(--m)}
+
+/* ---------- main ---------- */
+.main{margin-left:220px;padding:68px 28px 40px;flex:1;min-width:0}
+
+/* ---------- instance block ---------- */
+.steward-instance{margin-bottom:32px;padding-bottom:24px;border-bottom:1px solid var(--line)}
+.steward-instance:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
+.instance-header{display:flex;align-items:center;gap:10px;margin-bottom:14px;padding:10px 16px;
+  background:var(--panel);border:1px solid var(--line);border-radius:8px}
+.instance-icon{font-size:18px}
+.instance-label{font-size:14px;font-weight:700;letter-spacing:.03em;flex:1}
+.instance-uptime{font-size:11px;color:var(--ink-3)}
+
+/* ---------- summary cards ---------- */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-bottom:18px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.card-header{padding:12px 16px 8px;border-bottom:1px solid var(--line);display:flex;
+  align-items:center;gap:8px}
+.card-title{font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink-3)}
+.card-icon{font-size:13px;opacity:.7}
+.card-body{padding:12px 16px 14px}
+.card-big{font-size:28px;font-weight:750;font-family:var(--m);font-variant-numeric:tabular-nums}
+.card-sub{font-size:11px;color:var(--ink-3);margin-top:2px}
+
+/* ---------- crew table ---------- */
+.crew-section{margin-top:12px}
+.crew-heading{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink-2);margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.crew-wrap{background:var(--panel);border:1px solid var(--line);border-radius:8px;
+  overflow:hidden;overflow-x:auto}
+.crew-table{width:100%;border-collapse:collapse;font-size:12px;font-family:var(--m);
+  font-variant-numeric:tabular-nums;min-width:780px}
+.crew-table th{position:sticky;top:0;background:var(--panel);border-bottom:1px solid var(--line);
+  padding:8px 12px;text-align:left;font-size:9px;font-weight:700;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--ink-3);z-index:2;white-space:nowrap}
+.crew-table td{padding:7px 12px;border-bottom:1px solid var(--line);vertical-align:middle;
+  white-space:nowrap}
+.crew-table tr:last-child td{border-bottom:none}
+.crew-table tr:hover{background:var(--panel-2)}
+.crew-name{font-weight:600;color:var(--ink)}
+.crew-pos{color:var(--ink-3);font-size:11px}
+
+/* status pills */
+.st{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.08em;
+  text-transform:uppercase;padding:2px 7px;border-radius:3px}
+.st-clear{background:var(--clear-bg);color:var(--clear)}
+.st-at_risk,.st-at-risk{background:var(--watch-bg);color:var(--watch)}
+.st-violation{background:var(--down-bg);color:var(--down)}
+.st-unknown{background:var(--panel-2);color:var(--ink-3);border:1px solid var(--line)}
+.st-yes{background:var(--watch-bg);color:var(--watch)}
+.st-no{background:var(--panel-2);color:var(--ink-3)}
+
+/* show state pills */
+.show-pill{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.08em;
+  text-transform:uppercase;padding:3px 10px;border-radius:4px;font-family:var(--m)}
+.show-pill.clear{background:var(--clear-bg);color:var(--clear)}
+.show-pill.watch{background:var(--watch-bg);color:var(--watch)}
+.show-pill.risk{background:var(--risk-bg);color:var(--risk)}
+.show-pill.down{background:var(--down-bg);color:var(--down)}
+
+/* rest compression card */
+.rest-bar{height:6px;border-radius:3px;background:var(--panel-2);margin-top:8px;overflow:hidden}
+.rest-fill{height:100%;border-radius:3px;transition:width .3s}
+
+/* completed section */
+.completed-section{margin-top:40px;border-top:1px solid var(--line);padding-top:24px}
+.completed-heading{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink-3);margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.completed-heading::before{content:'';flex:none;width:8px;height:8px;border-radius:50%;
+  background:var(--ink-3);opacity:.4}
+.completed-list{display:flex;flex-direction:column;gap:8px}
+.completed-card{background:var(--panel);border:1px solid var(--line);border-radius:8px;
+  padding:14px 18px;display:grid;grid-template-columns:auto 1fr auto auto;
+  gap:12px;align-items:center;opacity:.7;transition:opacity .15s;cursor:pointer}
+.completed-card:hover{opacity:1}
+.completed-icon{font-size:16px;opacity:.5}
+.completed-title{font-size:13px;font-weight:600}
+.completed-exposure{font-size:12px;color:var(--ink-2);font-family:var(--m);font-variant-numeric:tabular-nums}
+.completed-badge{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;padding:2px 8px;border-radius:4px;font-family:var(--m)}
+.completed-badge.done{background:var(--clear-bg);color:var(--clear)}
+.completed-badge.idle{background:var(--panel-2);color:var(--ink-3);border:1px solid var(--line)}
+
+/* empty state */
+.empty{text-align:center;padding:60px 20px}
+.empty-icon{font-size:48px;margin-bottom:16px;opacity:.3}
+.empty-text{font-size:14px;color:var(--ink-3);margin-bottom:6px}
+.empty-sub{font-size:12px;color:var(--ink-3);opacity:.7}
+
+/* detail modal */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:100;display:none;
+  align-items:center;justify-content:center;padding:24px}
+.modal-bg.open{display:flex}
+.modal{background:var(--bg);border:1px solid var(--line);border-radius:10px;width:100%;
+  max-width:800px;max-height:90vh;display:flex;flex-direction:column}
+.modal-head{padding:16px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px}
+.modal-title{font-size:13px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2)}
+.modal-close{margin-left:auto;background:none;border:1px solid var(--line);color:var(--ink-3);
+  font-size:12px;padding:4px 12px;border-radius:4px;cursor:pointer;font-family:var(--f)}
+.modal-close:hover{border-color:var(--ink-3);color:var(--ink)}
+.modal-body{overflow-y:auto;flex:1;min-height:0;padding:20px}
+.modal-summary{font-size:13px;color:var(--ink-2);margin-bottom:16px;line-height:1.5}
+.modal-ts{font-size:11px;color:var(--ink-3);font-family:var(--m);margin-bottom:16px}
+</style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sidebar-brand"><b>APRON</b><span>Admin</span></div>
+  <nav class="sidebar-nav">
+    <a href="/admin" class="nav-item"><span class="nav-icon">⚙</span>Console</a>
+    <a href="/spotter" class="nav-item"><span class="nav-icon">📡</span>SPOTTER</a>
+    <a href="/steward" class="nav-item active"><span class="nav-icon">📜</span>STEWARD</a>
+    <a href="/board" class="nav-item"><span class="nav-icon">📋</span>Board</a>
+    <a href="/demo" class="nav-item"><span class="nav-icon">▶</span>Demo</a>
+  </nav>
+  <div class="sidebar-foot">apron.show</div>
+</aside>
+
+<header class="topbar">
+  <span class="topbar-title">STEWARD Compliance Dashboard</span>
+  <div class="topbar-right">
+    <span id="status-pill" class="topbar-pill off">IDLE</span>
+    <span id="refresh-ts" class="refresh-label"></span>
+  </div>
+</header>
+
+<main class="main">
+  <!-- empty state -->
+  <div id="empty-state" class="empty">
+    <div class="empty-icon">📜</div>
+    <div class="empty-text">No STEWARD is currently monitoring compliance</div>
+    <div class="empty-sub">STEWARD starts automatically when a game with extracted agreement rules begins SPOTTER monitoring</div>
+  </div>
+
+  <!-- active monitors -->
+  <div id="live-state" style="display:none"></div>
+
+  <!-- completed monitors -->
+  <div id="completed-state" style="display:none"></div>
+</main>
+
+<!-- Snapshot detail modal -->
+<div class="modal-bg" id="detail-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <span class="modal-title">Compliance Snapshot</span>
+      <button class="modal-close" id="btn-close-modal">Close</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   STEWARD Dashboard — compliance monitoring
+   Polls /api/steward/status every 5s.
+   Renders compliance snapshot cards per monitored game.
+   ============================================================ */
+
+var POLL_INTERVAL = 5000;
+var pollTimer = null;
+var lastData = null;
+
+function $(id){ return document.getElementById(id); }
+
+// ---- Format helpers ----
+function fmtTime(iso){
+  if(!iso) return '—';
+  var d = new Date(iso);
+  return d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
+}
+function fmtTimeShort(iso){
+  if(!iso) return '—';
+  var d = new Date(iso);
+  return d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true});
+}
+function fmtDuration(startIso){
+  if(!startIso) return '';
+  var ms = Date.now() - new Date(startIso).getTime();
+  var m = Math.floor(ms/60000);
+  if(m < 60) return m+'m';
+  return Math.floor(m/60)+'h '+m%60+'m';
+}
+function fmtDollars(n){
+  if(n == null) return '—';
+  return '$'+n.toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});
+}
+function fmtHours(n){
+  if(n == null) return '—';
+  return n.toFixed(1)+'h';
+}
+function esc(s){
+  if(!s) return '';
+  var d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// ---- Determine worst crew turnaround status ----
+function worstStatus(crew){
+  if(!crew || !crew.length) return 'clear';
+  var order = {clear:0, unknown:1, at_risk:2, violation:3};
+  var worst = 'clear';
+  for(var i=0; i<crew.length; i++){
+    var s = crew[i].turnaround ? crew[i].turnaround.status : 'clear';
+    if((order[s]||0) > (order[worst]||0)) worst = s;
+  }
+  return worst;
+}
+
+// ---- Status pill class ----
+function stClass(status){
+  return 'st st-'+status.replace('_','-');
+}
+
+// ---- Build summary cards for a snapshot ----
+function buildSummaryCards(snap){
+  if(!snap) return '<div style="color:var(--ink-3);padding:12px">Waiting for first evaluation…</div>';
+
+  var totals = snap.totals || {};
+  var rest = snap.restCompression || {};
+  var crew = snap.crew || [];
+
+  var violations = crew.filter(function(c){ return c.turnaround && c.turnaround.status === 'violation'; }).length;
+  var atRisk = crew.filter(function(c){ return c.turnaround && c.turnaround.status === 'at_risk'; }).length;
+  var unknown = crew.filter(function(c){ return c.turnaround && c.turnaround.status === 'unknown'; }).length;
+
+  var html = '<div class="cards">';
+
+  // Total exposure
+  var expColor = (totals.totalExposure||0) > 0 ? 'var(--watch)' : 'var(--clear)';
+  html += '<div class="card"><div class="card-header"><span class="card-icon">💰</span><span class="card-title">Variance to Plan</span></div><div class="card-body">';
+  html += '<div class="card-big" style="color:'+expColor+'">'+fmtDollars(totals.totalExposure||0)+'</div>';
+  html += '<div class="card-sub">Incremental cost vs. schedule</div>';
+  html += '</div></div>';
+
+  // Turnaround status
+  var turnColor = violations > 0 ? 'var(--down)' : atRisk > 0 ? 'var(--watch)' : 'var(--clear)';
+  var turnText = violations > 0 ? violations+' violation'+(violations>1?'s':'') :
+                 atRisk > 0 ? atRisk+' at risk' :
+                 unknown > 0 ? unknown+' unknown' : 'All clear';
+  html += '<div class="card"><div class="card-header"><span class="card-icon">⏱</span><span class="card-title">Turnaround</span></div><div class="card-body">';
+  html += '<div class="card-big" style="color:'+turnColor+'">'+esc(turnText)+'</div>';
+  html += '<div class="card-sub">'+crew.length+' crew evaluated</div>';
+  html += '</div></div>';
+
+  // Overtime
+  var otCount = crew.filter(function(c){ return c.overtime && c.overtime.triggered; }).length;
+  html += '<div class="card"><div class="card-header"><span class="card-icon">⏰</span><span class="card-title">Incremental OT</span></div><div class="card-body">';
+  html += '<div class="card-big">'+(otCount > 0 ? otCount+' triggered' : 'None')+'</div>';
+  html += '<div class="card-sub">'+fmtDollars(totals.overtimeCost||0)+' beyond plan</div>';
+  html += '</div></div>';
+
+  // Rest compression
+  html += '<div class="card"><div class="card-header"><span class="card-icon">🛏</span><span class="card-title">Rest Window</span></div><div class="card-body">';
+  if(rest.restHours != null){
+    var restColor = rest.compressed ? 'var(--down)' : rest.restHours < (rest.minimumRest||8) + 1 ? 'var(--watch)' : 'var(--clear)';
+    html += '<div class="card-big" style="color:'+restColor+'">'+fmtHours(rest.restHours)+'</div>';
+    html += '<div class="card-sub">'+(rest.compressed ? 'COMPRESSED — below '+rest.minimumRest+'h minimum' : 'Min '+rest.minimumRest+'h required')+'</div>';
+    // Bar visualization
+    var pct = Math.min(100, (rest.restHours / Math.max(rest.minimumRest||8, 12)) * 100);
+    var barColor = rest.compressed ? 'var(--down)' : rest.restHours < (rest.minimumRest||8) + 1 ? 'var(--watch)' : 'var(--clear)';
+    html += '<div class="rest-bar"><div class="rest-fill" style="width:'+pct+'%;background:'+barColor+'"></div></div>';
+  } else {
+    html += '<div class="card-big" style="color:var(--ink-3)">—</div>';
+    html += '<div class="card-sub">Not yet calculated</div>';
+  }
+  html += '</div></div>';
+
+  // Meals — only incremental (new thresholds crossed vs plan)
+  var mealCount = crew.filter(function(c){ return c.meals && (c.meals.mealAfter11h || c.meals.mealAfter15h); }).length;
+  html += '<div class="card"><div class="card-header"><span class="card-icon">🍽</span><span class="card-title">New Meal Triggers</span></div><div class="card-body">';
+  html += '<div class="card-big">'+(mealCount > 0 ? mealCount+' new' : 'None')+'</div>';
+  html += '<div class="card-sub">'+fmtDollars(totals.mealCost||0)+' beyond plan</div>';
+  html += '</div></div>';
+
+  // Penalties — only from timing variance
+  var penTotal = (totals.turnaroundPenalties||0) + (totals.scheduleChangePenalties||0);
+  html += '<div class="card"><div class="card-header"><span class="card-icon">⚠</span><span class="card-title">Penalty Exposure</span></div><div class="card-body">';
+  html += '<div class="card-big"'+(penTotal > 0 ? ' style="color:var(--down)"' : '')+'>'+fmtDollars(penTotal)+'</div>';
+  html += '<div class="card-sub">Turnaround '+fmtDollars(totals.turnaroundPenalties||0)+' · Sched '+fmtDollars(totals.scheduleChangePenalties||0)+'</div>';
+  html += '</div></div>';
+
+  html += '</div>';
+  return html;
+}
+
+// ---- Build crew table ----
+function buildCrewTable(crew){
+  if(!crew || !crew.length) return '';
+
+  var html = '<div class="crew-section"><div class="crew-heading">Crew Compliance</div>';
+  html += '<div class="crew-wrap"><table class="crew-table"><thead><tr>';
+  html += '<th>Name</th><th>Position</th><th>Turnaround</th><th>Gap</th><th>Next Call</th>';
+  html += '<th>Δ OT</th><th>Hours</th><th>Δ OT Cost</th>';
+  html += '<th>Δ Meals</th><th>Δ Meal Cost</th>';
+  html += '<th>Δ Penalties</th>';
+  html += '</tr></thead><tbody>';
+
+  for(var i=0; i<crew.length; i++){
+    var c = crew[i];
+    var t = c.turnaround || {};
+    var o = c.overtime || {};
+    var m = c.meals || {};
+    var p = c.penalties || {};
+
+    html += '<tr>';
+    html += '<td class="crew-name">'+esc(c.name)+'</td>';
+    html += '<td class="crew-pos">'+esc(c.position)+'</td>';
+    html += '<td><span class="'+stClass(t.status||'unknown')+'">'+(t.status||'unknown').replace('_',' ')+'</span></td>';
+    html += '<td>'+(t.gapHours != null ? fmtHours(t.gapHours) : '—')+'</td>';
+    html += '<td>'+(t.nextCallTime ? fmtTimeShort(t.nextCallTime) : '—')+'</td>';
+    html += '<td><span class="'+(o.triggered ? 'st st-yes' : 'st st-no')+'">'+(o.triggered ? 'YES' : 'no')+'</span></td>';
+    html += '<td>'+fmtHours(o.hoursWorked)+'</td>';
+    html += '<td>'+fmtDollars(o.otCost||0)+'</td>';
+    html += '<td><span class="'+(m.perDiemTriggered ? 'st st-yes' : 'st st-no')+'">'+(m.perDiemTriggered ? 'YES' : 'no')+'</span></td>';
+    html += '<td>'+fmtDollars(m.incrementalCost||0)+'</td>';
+    html += '<td>'+fmtDollars(p.totalPenalty||0)+'</td>';
+    html += '</tr>';
+  }
+
+  html += '</tbody></table></div></div>';
+  return html;
+}
+
+// ---- Build HTML for one active STEWARD instance ----
+function buildInstanceHTML(label, snapshot){
+  var worst = worstStatus(snapshot ? snapshot.crew : []);
+
+  var html = '<div class="steward-instance">';
+
+  // Instance header
+  html += '<div class="instance-header">';
+  html += '<span class="instance-icon">📜</span>';
+  html += '<span class="instance-label">'+esc(label)+'</span>';
+  html += '<span class="show-pill '+worst+'">'+worst.replace('_',' ')+'</span>';
+  if(snapshot && snapshot.evaluatedAt){
+    html += '<span class="instance-uptime mono">Last eval: '+fmtTime(snapshot.evaluatedAt)+'</span>';
+  }
+  html += '</div>';
+
+  // Summary if available
+  if(snapshot && snapshot.summary){
+    html += '<div style="font-size:13px;color:var(--ink-2);margin-bottom:14px;padding:0 4px;line-height:1.5">'+esc(snapshot.summary)+'</div>';
+  }
+
+  // Summary cards
+  html += buildSummaryCards(snapshot);
+
+  // Crew table
+  if(snapshot) html += buildCrewTable(snapshot.crew);
+
+  // Eval latency
+  if(snapshot && snapshot.latencyMs){
+    html += '<div style="margin-top:8px;font-size:11px;color:var(--ink-3);font-family:var(--m)">Evaluated in '+Math.round(snapshot.latencyMs/1000)+'s</div>';
+  }
+
+  html += '</div>';
+  return html;
+}
+
+// ---- Build HTML for one completed STEWARD ----
+function buildCompletedHTML(item){
+  var a = item.agent || {};
+  var snap = item.lastSnapshot;
+  var isDone = a.status === 'done';
+
+  var exposure = snap && snap.totals ? fmtDollars(snap.totals.totalExposure) : '—';
+
+  var html = '<div class="completed-card" data-idx="'+esc(String(item._idx))+'">';
+  html += '<span class="completed-icon">'+(isDone ? '✅' : '⏹')+'</span>';
+  html += '<span class="completed-title">'+esc(item.title || item.gameId)+'</span>';
+  html += '<span class="completed-exposure">'+exposure+' exposure</span>';
+  html += '<span class="completed-badge '+(isDone?'done':'idle')+'">'+(isDone ? 'DONE' : 'IDLE')+'</span>';
+  html += '</div>';
+  return html;
+}
+
+// ---- Render ----
+function render(response){
+  lastData = response;
+  $('refresh-ts').textContent = 'Updated ' + fmtTime(new Date().toISOString());
+
+  var active = response.active || [];
+  var completed = response.completed || [];
+
+  var hasActive = active.length > 0;
+  var hasCompleted = completed.length > 0;
+
+  if(!hasActive && !hasCompleted){
+    $('empty-state').style.display = '';
+    $('live-state').style.display = 'none';
+    $('completed-state').style.display = 'none';
+    $('status-pill').className = 'topbar-pill off';
+    $('status-pill').textContent = 'IDLE';
+    return;
+  }
+
+  $('empty-state').style.display = 'none';
+
+  // ---- Active monitors ----
+  if(hasActive){
+    $('live-state').style.display = '';
+
+    // Determine worst across all active monitors
+    var pillWorst = 'clear';
+    var orderMap = {clear:0, unknown:1, at_risk:2, violation:3};
+    for(var i=0; i<active.length; i++){
+      var s = worstStatus(active[i].snapshot ? active[i].snapshot.crew : []);
+      if((orderMap[s]||0) > (orderMap[pillWorst]||0)) pillWorst = s;
+    }
+
+    var pillClass = pillWorst === 'violation' ? 'alert' : pillWorst === 'at_risk' ? 'warn' : 'on';
+    var pillText = active.length > 1 ? active.length+' MONITORING' : 'MONITORING';
+    if(pillWorst === 'violation') pillText = active.length > 1 ? active.length+' · VIOLATION' : 'VIOLATION';
+    else if(pillWorst === 'at_risk') pillText = active.length > 1 ? active.length+' · AT RISK' : 'AT RISK';
+    $('status-pill').className = 'topbar-pill '+pillClass;
+    $('status-pill').textContent = pillText;
+
+    var html = '';
+    for(var j=0; j<active.length; j++){
+      html += buildInstanceHTML(active[j].title || active[j].gameId, active[j].snapshot);
+    }
+    $('live-state').innerHTML = html;
+  } else {
+    $('live-state').style.display = 'none';
+    $('status-pill').className = 'topbar-pill off';
+    $('status-pill').textContent = 'IDLE';
+  }
+
+  // ---- Completed monitors ----
+  if(hasCompleted){
+    $('completed-state').style.display = '';
+    var chtml = '<div class="completed-section">';
+    chtml += '<div class="completed-heading">Completed Evaluations</div>';
+    chtml += '<div class="completed-list">';
+    // Sort by most recently stopped
+    completed.sort(function(a,b){
+      var ta = a.agent && a.agent.stoppedAt || ''; var tb = b.agent && b.agent.stoppedAt || '';
+      return tb.localeCompare(ta);
+    });
+    for(var k=0; k<completed.length; k++){
+      completed[k]._idx = k;
+      chtml += buildCompletedHTML(completed[k]);
+    }
+    chtml += '</div></div>';
+    $('completed-state').innerHTML = chtml;
+  } else {
+    $('completed-state').style.display = 'none';
+  }
+}
+
+// ---- Detail modal ----
+function showSnapshotModal(snap, title){
+  if(!snap){ return; }
+  var html = '';
+  if(title) html += '<div style="font-size:15px;font-weight:700;margin-bottom:8px">'+esc(title)+'</div>';
+  if(snap.summary) html += '<div class="modal-summary">'+esc(snap.summary)+'</div>';
+  if(snap.evaluatedAt) html += '<div class="modal-ts">Evaluated: '+fmtTime(snap.evaluatedAt)+'</div>';
+  html += buildSummaryCards(snap);
+  html += buildCrewTable(snap.crew);
+  $('modal-body').innerHTML = html;
+  $('detail-modal').classList.add('open');
+}
+
+$('btn-close-modal').addEventListener('click', function(){ $('detail-modal').classList.remove('open'); });
+$('detail-modal').addEventListener('click', function(e){ if(e.target === $('detail-modal')) $('detail-modal').classList.remove('open'); });
+document.addEventListener('keydown', function(e){ if(e.key === 'Escape') $('detail-modal').classList.remove('open'); });
+
+// Delegated click for completed cards
+$('completed-state').addEventListener('click', function(e){
+  var card = e.target.closest('.completed-card');
+  if(!card || !lastData) return;
+  var idx = parseInt(card.dataset.idx, 10);
+  var item = lastData.completed[idx];
+  if(item && item.lastSnapshot){
+    showSnapshotModal(item.lastSnapshot, item.title || item.gameId);
+  }
+});
+
+// ---- Polling ----
+async function poll(){
+  try{
+    var res = await fetch('/api/steward/status');
+    var data = await res.json();
+    render(data);
+  } catch(err){
+    console.warn('STEWARD poll error:', err);
+  }
+}
+
+function startPolling(){
+  poll();
+  pollTimer = setInterval(poll, POLL_INTERVAL);
+}
+
+// ---- Boot ----
+startPolling();
+</script>
+</body>
+</html>

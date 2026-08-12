@@ -18,8 +18,10 @@ import { ClickhouseAuditStore } from '@apron/integration-clickhouse';
 import { GeminiClient } from '@apron/integration-google-cloud';
 import type { AgentEvent, FixtureScenario, ChainNode } from '@apron/types';
 import type { SpotterWatchConfig } from '@apron/agent-spotter';
+import type { StewardWatchConfig } from '@apron/agent-steward';
 import { GAME_TYPE_DEFAULTS, type GameType } from './admin-store.js';
-import { initAdminStore } from './admin-api.js';
+import { initAdminStore, buildOperationalContext, loadDefaultAgreement, setCrewChangeCallback } from './admin-api.js';
+import { extractRules, buildAgreementMeta } from '@apron/agent-steward/agreement';
 
 let FirebaseAuth: typeof import('@apron/integration-firebase').FirebaseAuth | undefined;
 let FirestoreStore: typeof import('@apron/integration-firebase').FirestoreStore | undefined;
@@ -62,6 +64,8 @@ export async function createServer(opts: ServerOptions = {}) {
 
   /** Live SPOTTER instances — one per watched game, keyed by gameId. */
   const spotters = new Map<string, SpotterAgent>();
+  /** Live STEWARD instances — one per watched game, keyed by gameId. */
+  const stewards = new Map<string, StewardAgent>();
   orchestrator.registerAgent(new TrafficAgent());
   orchestrator.registerAgent(new AdvanceAgent());
   orchestrator.registerAgent(new WranglerAgent());
@@ -100,6 +104,15 @@ export async function createServer(opts: ServerOptions = {}) {
 
   // Initialize admin store eagerly so the SPOTTER watch endpoint can use it
   const adminStore = initAdminStore(firestore, gemini);
+
+  // Notify STEWARD when crew data changes (assignments, routing, nextCall)
+  setCrewChangeCallback((_accountId, gameId) => {
+    const activeSteward = stewards.get(gameId);
+    if (activeSteward) {
+      console.log(`[steward] Crew data changed for game ${gameId} — triggering re-evaluation`);
+      void activeSteward.onCrewRebooked();
+    }
+  });
 
   if (gemini.isEnabled()) {
     console.log(`[google-cloud] Gemini client connected (${gemini.getMode()})`);
@@ -219,14 +232,126 @@ export async function createServer(opts: ServerOptions = {}) {
       espnEventId: config.espnEventId,
     });
 
+    // ---- Start STEWARD compliance monitoring alongside SPOTTER ----
+    const prevSteward = stewards.get(game.id);
+    if (prevSteward) prevSteward.stopWatching();
+
+    // Fire async — ensure agreement rules exist (auto-provision if needed), then start watching
+    const stewardGameId = game.id;
+    const stewardAcctId = accountId;
+    void (async () => {
+      try {
+        let stewardRecord = await adminStore.getAgentRecord(stewardAcctId, stewardGameId, 'STEWARD');
+        let hasRules = stewardRecord?.['rules'] != null;
+
+        // Auto-provision: load default agreement + extract rules if missing
+        if (!hasRules && gemini.isEnabled()) {
+          const hasAgreement = stewardRecord?.['agreementText'] != null;
+
+          // Step 1: Load default agreement if none loaded
+          if (!hasAgreement) {
+            console.log(`[steward] No agreement for game ${stewardGameId} — loading default`);
+            try {
+              const defaultAgmt = loadDefaultAgreement();
+              const meta = buildAgreementMeta(defaultAgmt.name, defaultAgmt.text, defaultAgmt.source);
+              await adminStore.setAgentRecord(stewardAcctId, stewardGameId, 'STEWARD', {
+                agreement: meta,
+                agreementText: defaultAgmt.text,
+              });
+              console.log(`[steward] Default agreement loaded for game ${stewardGameId} (${meta.textLength} chars)`);
+            } catch (err) {
+              console.error('[steward] Failed to load default agreement:', err);
+            }
+          }
+
+          // Step 2: Extract rules from the agreement text
+          stewardRecord = await adminStore.getAgentRecord(stewardAcctId, stewardGameId, 'STEWARD');
+          const agreementText = stewardRecord?.['agreementText'] as string | undefined;
+          if (agreementText) {
+            console.log(`[steward] Extracting rules for game ${stewardGameId}...`);
+            try {
+              const rules = await extractRules(gemini, agreementText);
+              if (rules) {
+                await adminStore.setAgentRecord(stewardAcctId, stewardGameId, 'STEWARD', { rules });
+                stewardRecord = await adminStore.getAgentRecord(stewardAcctId, stewardGameId, 'STEWARD');
+                hasRules = true;
+                console.log(`[steward] Rules extracted for game ${stewardGameId}`);
+              } else {
+                console.warn(`[steward] Rule extraction returned no result for game ${stewardGameId}`);
+              }
+            } catch (err) {
+              console.error('[steward] Rule extraction failed:', err);
+            }
+          }
+        }
+
+        if (!hasRules) {
+          console.log(`[steward] No rules available for game ${stewardGameId} — skipping compliance monitoring`);
+          return;
+        }
+
+        const liveSteward = new StewardAgent();
+        const stewardCred: import('@apron/types').Credential = {
+          agent: 'STEWARD',
+          showId: stewardGameId,
+          grant: { agent: 'STEWARD', capabilities: ['read:rule-packs', 'read:roster'], role: 'reader', neverReceives: [] },
+          issuedAt: now.toISOString(),
+          expiresAt: new Date(now.getTime() + 86400000).toISOString(),
+        };
+        liveSteward.bind({ bus, credential: stewardCred, showId: stewardGameId });
+
+        const stewardConfig: StewardWatchConfig = {
+          gameId: stewardGameId,
+          accountId: stewardAcctId,
+          gemini,
+          getOperationalContext: async () => {
+            const ctx = await buildOperationalContext(stewardAcctId, stewardGameId, stewardRecord);
+            // Inject SPOTTER's current predicted end time for variance calculation
+            const spotter = spotters.get(stewardGameId);
+            if (spotter) {
+              const spotterStatus = spotter.getStatus();
+              if (spotterStatus.prediction?.predictedEnd) {
+                ctx['currentPredictedEnd'] = spotterStatus.prediction.predictedEnd;
+              }
+              if (spotterStatus.prediction?.showState) {
+                ctx['currentShowState'] = spotterStatus.prediction.showState;
+              }
+            }
+            return ctx;
+          },
+        };
+        liveSteward.startWatching(stewardConfig);
+        stewards.set(stewardGameId, liveSteward);
+
+        void adminStore.setAgentAssignment(stewardAcctId, stewardGameId, 'STEWARD', {
+          status: 'active', startedAt: watchStartedAt,
+        });
+      } catch (err) {
+        console.error('[steward] Failed to start compliance monitoring:', err);
+      }
+    })();
+
     // Broadcast SPOTTER events to WebSocket clients + auto-cleanup on game end
     const watchedGameId = game.id;
     const watchedAcctId = accountId;
     bus.subscribe((event: AgentEvent) => {
+      // Forward SPOTTER events to WebSocket clients
       if (event.agent === 'SPOTTER') {
         const msg = JSON.stringify({ type: 'agent-event', event });
         for (const ws of clients) {
           if (ws.readyState === ws.OPEN) ws.send(msg);
+        }
+
+        // Trigger STEWARD evaluation when SPOTTER's predicted end time changes
+        if (event.type === 'chain-update' && event.showId === watchedGameId) {
+          const activeSteward = stewards.get(watchedGameId);
+          const currentSpotter = spotters.get(watchedGameId);
+          if (activeSteward && currentSpotter) {
+            const pred = currentSpotter.getStatus().prediction;
+            if (pred?.predictedEnd) {
+              activeSteward.onPredictionChanged(pred.predictedEnd);
+            }
+          }
         }
 
         if (event.type === 'agent-status' && event.agentStates.SPOTTER === 'done' && event.showId === watchedGameId) {
@@ -235,6 +360,25 @@ export async function createServer(opts: ServerOptions = {}) {
           const fullLog = finished?.getLog() ?? [];
           spotters.delete(watchedGameId);
           console.log(`[spotter] Game ended — removed watch for ${watchedGameId} (${spotters.size} remaining)`);
+
+          // Stop STEWARD when SPOTTER finishes
+          const finishedSteward = stewards.get(watchedGameId);
+          if (finishedSteward) {
+            finishedSteward.stopWatching();
+            stewards.delete(watchedGameId);
+            void adminStore.setAgentAssignment(watchedAcctId, watchedGameId, 'STEWARD', {
+              status: 'done',
+              startedAt: watchStartedAt,
+              stoppedAt: new Date().toISOString(),
+            });
+            // Persist the last compliance snapshot
+            const lastSnap = finishedSteward.getLastSnapshot();
+            if (lastSnap) {
+              void adminStore.setAgentRecord(watchedAcctId, watchedGameId, 'STEWARD', {
+                lastSnapshot: lastSnap,
+              });
+            }
+          }
 
           const stoppedAt = new Date().toISOString();
           void adminStore.setAgentAssignment(watchedAcctId, watchedGameId, 'SPOTTER', {
@@ -251,6 +395,14 @@ export async function createServer(opts: ServerOptions = {}) {
             lastShowState: snap?.prediction?.showState ?? null,
             log: fullLog,
           });
+        }
+      }
+
+      // Forward STEWARD events to WebSocket clients
+      if (event.agent === 'STEWARD' && event.showId === watchedGameId) {
+        const msg = JSON.stringify({ type: 'agent-event', event });
+        for (const ws of clients) {
+          if (ws.readyState === ws.OPEN) ws.send(msg);
         }
       }
     });
@@ -514,6 +666,49 @@ export async function createServer(opts: ServerOptions = {}) {
       return;
     }
 
+    // ---- STEWARD compliance dashboard API ----
+    if (path === '/api/steward/status') {
+      // Active compliance monitors from in-memory Map (enrich with game title)
+      const activeMonitors: Array<{ gameId: string; title: string; snapshot: ReturnType<StewardAgent['getLastSnapshot']> }> = [];
+      // Build a gameId→title lookup from all active STEWARD games
+      const gameTitles = new Map<string, string>();
+      try {
+        const activeGames = await adminStore.listGamesByAgentStatus('STEWARD', ['active']);
+        for (const g of activeGames) gameTitles.set(g.id, g.title);
+      } catch { /* ok */ }
+      for (const [gid, s] of stewards) {
+        activeMonitors.push({ gameId: gid, title: gameTitles.get(gid) ?? gid, snapshot: s.getLastSnapshot() });
+      }
+
+      // Completed STEWARD agents from Firestore
+      const completed: Array<{
+        gameId: string;
+        accountId: string;
+        title: string;
+        agent: import('./admin-store.js').AgentAssignment;
+        lastSnapshot?: Record<string, unknown>;
+      }> = [];
+      try {
+        const doneGames = await adminStore.listGamesByAgentStatus('STEWARD', ['done', 'idle']);
+        for (const g of doneGames) {
+          if (!stewards.has(g.id) && g.agents?.STEWARD) {
+            const record = await adminStore.getAgentRecord(g.accountId, g.id, 'STEWARD');
+            completed.push({
+              gameId: g.id,
+              accountId: g.accountId,
+              title: g.title,
+              agent: g.agents.STEWARD,
+              lastSnapshot: record?.['lastSnapshot'] as Record<string, unknown> | undefined,
+            });
+          }
+        }
+      } catch { /* Firestore unavailable */ }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ active: activeMonitors, completed }));
+      return;
+    }
+
     if (path === '/api/play' && req.method === 'POST') {
       orchestrator.play();
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -641,6 +836,8 @@ export async function createServer(opts: ServerOptions = {}) {
       filePath = join(ROOT, 'packages', 'board', 'admin.html');
     } else if (path === '/spotter' || path === '/spotter.html') {
       filePath = join(ROOT, 'packages', 'board', 'spotter.html');
+    } else if (path === '/steward' || path === '/steward.html') {
+      filePath = join(ROOT, 'packages', 'board', 'steward.html');
     } else if (path === '/demo' || path === '/demo.html') {
       filePath = join(ROOT, 'packages', 'board', 'index.html');
     } else if (path === '/login' || path === '/login.html') {

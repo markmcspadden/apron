@@ -727,6 +727,22 @@ function applyAgentEvent(ev) {
     logEvent({ ts: ev.timestamp, who: ev.agent, msg: ev.message });
   }
 
+  if (ev.type === 'compliance-update') {
+    // Build a concise log message from the compliance snapshot
+    var exposure = ev.totals ? '$' + (ev.totals.totalExposure || 0) : '$0';
+    var crewCount = ev.crew ? ev.crew.length : 0;
+    var violations = ev.crew ? ev.crew.filter(function(c) { return c.turnaround && c.turnaround.status === 'violation'; }).length : 0;
+    var atRisk = ev.crew ? ev.crew.filter(function(c) { return c.turnaround && c.turnaround.status === 'at_risk'; }).length : 0;
+
+    var logMsg = 'Compliance eval (' + (ev.trigger || 'unknown') + '): ' + exposure + ' variance';
+    if (violations > 0) logMsg += ' · ' + violations + ' violation' + (violations > 1 ? 's' : '');
+    else if (atRisk > 0) logMsg += ' · ' + atRisk + ' at risk';
+    else logMsg += ' · all clear';
+    logMsg += ' (' + crewCount + ' crew)';
+
+    logEvent({ ts: ev.timestamp, who: ev.agent, msg: logMsg });
+  }
+
   // Re-render production seat to pick up changes
   if (seatActive()) renderProd();
 }
