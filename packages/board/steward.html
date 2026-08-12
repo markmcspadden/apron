@@ -217,19 +217,32 @@ body{background:var(--bg);color:var(--ink);font-family:var(--f);font-size:14px;
 var POLL_INTERVAL = 5000;
 var pollTimer = null;
 var lastData = null;
+var gameTzMap = {}; // gameId → IANA timezone from last poll
 
 function $(id){ return document.getElementById(id); }
 
-// ---- Format helpers ----
-function fmtTime(iso){
+// ---- IANA timezone abbreviation map ----
+var TZ_ABBREV = {
+  'America/New_York': 'ET', 'America/Chicago': 'CT',
+  'America/Denver': 'MT', 'America/Los_Angeles': 'PT',
+  'America/Phoenix': 'AZ'
+};
+function tzLabel(iana){ return TZ_ABBREV[iana] || iana; }
+
+// ---- Format helpers (all render in venue timezone) ----
+function fmtTime(iso, tz){
   if(!iso) return '—';
   var d = new Date(iso);
-  return d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
+  var opts = {hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false};
+  if(tz) opts.timeZone = tz;
+  return d.toLocaleTimeString('en-US', opts);
 }
-function fmtTimeShort(iso){
+function fmtTimeShort(iso, tz){
   if(!iso) return '—';
   var d = new Date(iso);
-  return d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true});
+  var opts = {hour:'2-digit',minute:'2-digit',hour12:true};
+  if(tz) opts.timeZone = tz;
+  return d.toLocaleTimeString('en-US', opts);
 }
 function fmtDuration(startIso){
   if(!startIso) return '';
@@ -343,7 +356,7 @@ function buildSummaryCards(snap){
 }
 
 // ---- Build crew table ----
-function buildCrewTable(crew){
+function buildCrewTable(crew, gameTz){
   if(!crew || !crew.length) return '';
 
   var html = '<div class="crew-section"><div class="crew-heading">Crew Compliance</div>';
@@ -366,7 +379,7 @@ function buildCrewTable(crew){
     html += '<td class="crew-pos">'+esc(c.position)+'</td>';
     html += '<td><span class="'+stClass(t.status||'unknown')+'">'+(t.status||'unknown').replace('_',' ')+'</span></td>';
     html += '<td>'+(t.gapHours != null ? fmtHours(t.gapHours) : '—')+'</td>';
-    html += '<td>'+(t.nextCallTime ? fmtTimeShort(t.nextCallTime) : '—')+'</td>';
+    html += '<td>'+(t.nextCallTime ? fmtTimeShort(t.nextCallTime, gameTz) : '—')+'</td>';
     html += '<td><span class="'+(o.triggered ? 'st st-yes' : 'st st-no')+'">'+(o.triggered ? 'YES' : 'no')+'</span></td>';
     html += '<td>'+fmtHours(o.hoursWorked)+'</td>';
     html += '<td>'+fmtDollars(o.otCost||0)+'</td>';
@@ -381,7 +394,7 @@ function buildCrewTable(crew){
 }
 
 // ---- Build HTML for one active STEWARD instance ----
-function buildInstanceHTML(label, snapshot){
+function buildInstanceHTML(label, snapshot, gameTz){
   var worst = worstStatus(snapshot ? snapshot.crew : []);
 
   var html = '<div class="steward-instance">';
@@ -392,7 +405,7 @@ function buildInstanceHTML(label, snapshot){
   html += '<span class="instance-label">'+esc(label)+'</span>';
   html += '<span class="show-pill '+worst+'">'+worst.replace('_',' ')+'</span>';
   if(snapshot && snapshot.evaluatedAt){
-    html += '<span class="instance-uptime mono">Last eval: '+fmtTime(snapshot.evaluatedAt)+'</span>';
+    html += '<span class="instance-uptime mono">Last eval: '+fmtTime(snapshot.evaluatedAt, gameTz)+' '+tzLabel(gameTz)+'</span>';
   }
   html += '</div>';
 
@@ -405,7 +418,7 @@ function buildInstanceHTML(label, snapshot){
   html += buildSummaryCards(snapshot);
 
   // Crew table
-  if(snapshot) html += buildCrewTable(snapshot.crew);
+  if(snapshot) html += buildCrewTable(snapshot.crew, gameTz);
 
   // Eval latency
   if(snapshot && snapshot.latencyMs){
@@ -476,7 +489,9 @@ function render(response){
 
     var html = '';
     for(var j=0; j<active.length; j++){
-      html += buildInstanceHTML(active[j].title || active[j].gameId, active[j].snapshot);
+      var tz = active[j].timezone || 'America/New_York';
+      gameTzMap[active[j].gameId] = tz;
+      html += buildInstanceHTML(active[j].title || active[j].gameId, active[j].snapshot, tz);
     }
     $('live-state').innerHTML = html;
   } else {
@@ -508,14 +523,15 @@ function render(response){
 }
 
 // ---- Detail modal ----
-function showSnapshotModal(snap, title){
+function showSnapshotModal(snap, title, gameTz){
   if(!snap){ return; }
+  var tz = gameTz || 'America/New_York';
   var html = '';
   if(title) html += '<div style="font-size:15px;font-weight:700;margin-bottom:8px">'+esc(title)+'</div>';
   if(snap.summary) html += '<div class="modal-summary">'+esc(snap.summary)+'</div>';
-  if(snap.evaluatedAt) html += '<div class="modal-ts">Evaluated: '+fmtTime(snap.evaluatedAt)+'</div>';
+  if(snap.evaluatedAt) html += '<div class="modal-ts">Evaluated: '+fmtTime(snap.evaluatedAt, tz)+' '+tzLabel(tz)+'</div>';
   html += buildSummaryCards(snap);
-  html += buildCrewTable(snap.crew);
+  html += buildCrewTable(snap.crew, tz);
   $('modal-body').innerHTML = html;
   $('detail-modal').classList.add('open');
 }
@@ -531,7 +547,7 @@ $('completed-state').addEventListener('click', function(e){
   var idx = parseInt(card.dataset.idx, 10);
   var item = lastData.completed[idx];
   if(item && item.lastSnapshot){
-    showSnapshotModal(item.lastSnapshot, item.title || item.gameId);
+    showSnapshotModal(item.lastSnapshot, item.title || item.gameId, gameTzMap[item.gameId]);
   }
 });
 

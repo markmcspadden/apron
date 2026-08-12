@@ -18,6 +18,7 @@ import type {
   ProvenanceLevel,
 } from '@apron/types';
 import type { Game, CrewRecord } from './admin-store.js';
+import { abbrevToIANA, localTimeToUtcIso, getTimezoneOffsetDelta } from './tz-utils.js';
 
 // ---------------------------------------------------------------------------
 // Reference data — airports, airlines, cities, positions
@@ -220,6 +221,16 @@ function dayOfWeek(dateStr: string): string {
   return DAY_NAMES[d.getUTCDay()]!;
 }
 
+/**
+ * Build a proper UTC ISO string from a date + HH:MM + timezone abbreviation.
+ * Replaces the old pattern of `${date}T${HH}:${MM}:00Z` which falsely
+ * labeled local times as UTC.
+ */
+function toUtcIso(dateStr: string, hour: number, minute: number, tzAbbrev: string): string {
+  const timeStr = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+  return localTimeToUtcIso(dateStr, timeStr, abbrevToIANA(tzAbbrev));
+}
+
 // ---------------------------------------------------------------------------
 // Generator
 // ---------------------------------------------------------------------------
@@ -385,7 +396,7 @@ function buildNextCall(type: NextCallType, ctx: NextCallContext): NextCall {
       // Arrival deadline: 1 hour before call
       const arrHour = callHour - 1;
       const arrTimeStr = `${nextDayName} ${arrHour}:${callMin.toString().padStart(2, '0')} ${dest.tz}`;
-      const arrIso = `${nextDay}T${arrHour.toString().padStart(2, '0')}:${callMin.toString().padStart(2, '0')}:00Z`;
+      const arrIso = toUtcIso(nextDay, arrHour, callMin, dest.tz);
 
       const provLevel: ProvenanceLevel = disclosed
         ? (rand() < 0.5 ? 'external' : 'confirmed')
@@ -405,7 +416,7 @@ function buildNextCall(type: NextCallType, ctx: NextCallContext): NextCall {
           venue: `${dest.city}`,
         },
         callTime: {
-          iso: `${nextDay}T${callHour.toString().padStart(2, '0')}:${callMin.toString().padStart(2, '0')}:00Z`,
+          iso: toUtcIso(nextDay, callHour, callMin, dest.tz),
           display: callTimeStr,
           tz: dest.tz,
         },
@@ -431,7 +442,10 @@ function buildNextCall(type: NextCallType, ctx: NextCallContext): NextCall {
       // Arrive 1 hour before call
       const arrMin = callMin - 60;
       const arrTimeStr = `${callDay} ${formatHHMM(arrMin)} ${nextShow.tz}`;
-      const arrIso = `${nextShow.callDate}T${formatHHMM(arrMin)}:00Z`;
+      const arrHH = Math.floor(((arrMin % 1440) + 1440) % 1440 / 60);
+      const arrMM = ((arrMin % 1440) + 1440) % 1440 % 60;
+      const arrIso = toUtcIso(nextShow.callDate, arrHH, arrMM, nextShow.tz);
+      const [callH, callM] = nextShow.callTime.split(':').map(Number);
 
       return {
         type: 'same-production',
@@ -443,7 +457,7 @@ function buildNextCall(type: NextCallType, ctx: NextCallContext): NextCall {
           venue: `${nextShow.venue}`,
         },
         callTime: {
-          iso: `${nextShow.callDate}T${nextShow.callTime}:00Z`,
+          iso: toUtcIso(nextShow.callDate, callH!, callM!, nextShow.tz),
           display: callTimeStr,
           tz: nextShow.tz,
         },
@@ -468,7 +482,7 @@ function buildNextCall(type: NextCallType, ctx: NextCallContext): NextCall {
         const holdHour = randInt(9, 14, rand);
         softHold = {
           display: `${holdDay} ${holdHour}:00 held`,
-          iso: `${holdDate}T${holdHour.toString().padStart(2, '0')}:00:00Z`,
+          iso: toUtcIso(holdDate, holdHour, 0, dest.tz),
         };
       }
 
@@ -557,6 +571,16 @@ interface RoutingContext {
 function buildRouting(ctx: RoutingContext): TravelRouting {
   const { rand, originAirport, destinationAirport, departureDate, depWindowStart, depWindowEnd } = ctx;
 
+  // Timezone offset helper: adjust arrival time from origin TZ to destination TZ
+  function tzAdjust(fromAirport: string, toAirport: string, minInOriginTz: number): number {
+    const fromTz = AIRPORTS[fromAirport]?.tz ?? 'ET';
+    const toTz = AIRPORTS[toAirport]?.tz ?? 'ET';
+    if (fromTz === toTz) return minInOriginTz;
+    // Get offset delta: e.g. ET→CT = -60 (CT is 1 hour behind ET)
+    const delta = getTimezoneOffsetDelta(abbrevToIANA(fromTz), abbrevToIANA(toTz));
+    return minInOriginTz + delta;
+  }
+
   // Pick a carrier
   const carrier = pick(CARRIERS, rand);
 
@@ -564,7 +588,7 @@ function buildRouting(ctx: RoutingContext): TravelRouting {
   const flightMin = estimateFlightMinutes(originAirport, destinationAirport, rand);
   const needsConnection = flightMin > 200 || (flightMin > 120 && rand() < 0.3);
 
-  // Departure time within the window
+  // Departure time within the window (in origin airport's local time)
   const depMin = randInt(depWindowStart, depWindowEnd, rand);
   const depTime = formatHHMM(depMin);
 
@@ -576,11 +600,14 @@ function buildRouting(ctx: RoutingContext): TravelRouting {
     const hub = pick(hubs.filter(h => h !== originAirport && h !== destinationAirport), rand) ?? 'ORD';
 
     const leg1Duration = estimateFlightMinutes(originAirport, hub, rand);
-    const leg1ArrMin = depMin + leg1Duration;
+    // Arrival in hub's local time
+    const leg1ArrMin = tzAdjust(originAirport, hub, depMin + leg1Duration);
     const layoverMin = randInt(45, 90, rand);
+    // Departure from hub in hub's local time
     const leg2DepMin = leg1ArrMin + layoverMin;
     const leg2Duration = estimateFlightMinutes(hub, destinationAirport, rand);
-    const leg2ArrMin = leg2DepMin + leg2Duration;
+    // Arrival in destination's local time
+    const leg2ArrMin = tzAdjust(hub, destinationAirport, leg2DepMin + leg2Duration);
 
     const flightNum1 = randInt(carrier.range[0], carrier.range[1], rand).toString();
     const flightNum2 = randInt(carrier.range[0], carrier.range[1], rand).toString();
@@ -601,7 +628,8 @@ function buildRouting(ctx: RoutingContext): TravelRouting {
     });
   } else {
     const flightNum = randInt(carrier.range[0], carrier.range[1], rand).toString();
-    const arrMin = depMin + flightMin;
+    // Arrival in destination's local time
+    const arrMin = tzAdjust(originAirport, destinationAirport, depMin + flightMin);
 
     legs.push({
       carrier: carrier.code,

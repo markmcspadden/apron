@@ -22,6 +22,7 @@ import type { StewardWatchConfig } from '@apron/agent-steward';
 import { GAME_TYPE_DEFAULTS, type GameType } from './admin-store.js';
 import { initAdminStore, buildOperationalContext, loadDefaultAgreement, setCrewChangeCallback } from './admin-api.js';
 import { extractRules, buildAgreementMeta } from '@apron/agent-steward/agreement';
+import { localTimeToUtcMs, inferTimezone, ianaToAbbrev } from './tz-utils.js';
 
 let FirebaseAuth: typeof import('@apron/integration-firebase').FirebaseAuth | undefined;
 let FirestoreStore: typeof import('@apron/integration-firebase').FirestoreStore | undefined;
@@ -193,13 +194,14 @@ export async function createServer(opts: ServerOptions = {}) {
       sport: game.gameType as 'baseball' | 'football' | 'basketball' | 'hockey',
       espnEventId: game.espnEventId,
       scheduledStart: new Date(
-        gameTimeToUtcMs(game.date, game.startTime ?? '19:00'),
+        localTimeToUtcMs(game.date, game.startTime ?? '19:00', resolveGameTimezone(game)),
       ).toISOString(),
       expectedDurationMinutes: game.expectedDuration ?? defaults.duration,
       strikeDurationMinutes: game.strikeDuration ?? defaults.strike,
       chain: gameChain,
       crewCount: game.crewCount ?? 22,
       gemini: gemini.isEnabled() ? gemini : undefined,
+      timezone: resolveGameTimezone(game),
     };
 
     // Stop existing watcher for this game if already running
@@ -422,8 +424,9 @@ export async function createServer(opts: ServerOptions = {}) {
   // This survives Cloud Run instance recycling — on startup the scan picks up
   // any games that should already be live.  No timers to lose.
   //
-  // Timezone: game.startTime is stored in ET.  gameTimeToUtcMs() uses Intl to
-  // convert ET → UTC regardless of the server's own TZ setting.
+  // Timezone: game HH:MM fields are wall-clock times in the game's timezone.
+  // resolveGameTimezone() reads game.timezone or infers from venue.
+  // localTimeToUtcMs() (from tz-utils) converts to UTC using Intl.
   // ---------------------------------------------------------------------------
   const SCHEDULER_INTERVAL_MS = 60_000;
   const SCHEDULER_LEAD_MINUTES = 15;
@@ -431,39 +434,12 @@ export async function createServer(opts: ServerOptions = {}) {
   const SCHEDULER_MAX_PAST_MINUTES = 360;
 
   /**
-   * Convert a game date ("YYYY-MM-DD") + time ("HH:MM") in America/New_York
-   * to a UTC timestamp in milliseconds.  Uses Intl so it works regardless of
-   * the server's own TZ setting and handles EDT / EST automatically.
+   * Resolve the IANA timezone for a game — uses the stored timezone field,
+   * falls back to venue inference, defaults to America/New_York.
    */
-  function gameTimeToUtcMs(dateStr: string, timeStr: string): number {
-    const [year, month, day] = dateStr.split('-').map(Number);
-    const [hour, minute] = timeStr.split(':').map(Number);
-
-    // Build a UTC date with the raw numbers, then figure out what ET offset
-    // applies at that approximate instant.
-    const approxUtcMs = Date.UTC(year!, month! - 1, day!, hour!, minute!);
-
-    // Format that UTC instant in America/New_York to discover the offset
-    const etParts = new Intl.DateTimeFormat('en-US', {
-      timeZone: 'America/New_York',
-      hour12: false,
-      year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit',
-    }).formatToParts(new Date(approxUtcMs));
-
-    const etH = parseInt(etParts.find(p => p.type === 'hour')!.value);
-    const etM = parseInt(etParts.find(p => p.type === 'minute')!.value);
-
-    // offset = ET_value − UTC_value  (e.g. EDT → −4h → −240min)
-    let offsetMin = (etH * 60 + etM) - (hour! * 60 + minute!);
-    if (offsetMin > 720) offsetMin -= 1440;
-    if (offsetMin < -720) offsetMin += 1440;
-
-    // We want: the UTC instant when ET reads hour:minute.
-    // ET = UTC + offset  →  UTC = ET − offset
-    // Since approxUtcMs represents hour:minute in UTC, subtract offset to
-    // shift it so that hour:minute lands in ET instead.
-    return approxUtcMs - offsetMin * 60_000;
+  function resolveGameTimezone(game: WatchableGame): string {
+    if (game.timezone) return game.timezone;
+    return inferTimezone(game.venue) ?? 'America/New_York';
   }
 
   async function scanAndStartGames(): Promise<void> {
@@ -482,7 +458,7 @@ export async function createServer(opts: ServerOptions = {}) {
 
           // Compute minutes until game start (timezone-safe)
           const startTimeStr = game.startTime ?? '19:00';
-          const gameStartMs = gameTimeToUtcMs(game.date, startTimeStr);
+          const gameStartMs = localTimeToUtcMs(game.date, startTimeStr, resolveGameTimezone(game));
           const minsUntilStart = (gameStartMs - nowMs) / 60_000;
 
           // Start if within lead window and not too far in the past
@@ -582,9 +558,10 @@ export async function createServer(opts: ServerOptions = {}) {
     // ---- SPOTTER dashboard API (multi-instance) ----
     if (path === '/api/spotter/status') {
       // Active watchers from in-memory Map
-      const watches: Array<{ gameId: string; status: ReturnType<SpotterAgent['getStatus']> }> = [];
+      const watches: Array<{ gameId: string; timezone: string; status: ReturnType<SpotterAgent['getStatus']> }> = [];
       for (const [gid, s] of spotters) {
-        watches.push({ gameId: gid, status: s.getStatus() });
+        const tz = s.getWatchConfig()?.timezone ?? 'America/New_York';
+        watches.push({ gameId: gid, timezone: tz, status: s.getStatus() });
       }
 
       // Inactive SPOTTER agents from Firestore (done = game ended, idle = manually stopped)
@@ -668,16 +645,17 @@ export async function createServer(opts: ServerOptions = {}) {
 
     // ---- STEWARD compliance dashboard API ----
     if (path === '/api/steward/status') {
-      // Active compliance monitors from in-memory Map (enrich with game title)
-      const activeMonitors: Array<{ gameId: string; title: string; snapshot: ReturnType<StewardAgent['getLastSnapshot']> }> = [];
-      // Build a gameId→title lookup from all active STEWARD games
-      const gameTitles = new Map<string, string>();
+      // Active compliance monitors from in-memory Map (enrich with game title + tz)
+      const activeMonitors: Array<{ gameId: string; title: string; timezone: string; snapshot: ReturnType<StewardAgent['getLastSnapshot']> }> = [];
+      // Build a gameId→title/tz lookup from all active STEWARD games
+      const gameInfo = new Map<string, { title: string; timezone: string }>();
       try {
         const activeGames = await adminStore.listGamesByAgentStatus('STEWARD', ['active']);
-        for (const g of activeGames) gameTitles.set(g.id, g.title);
+        for (const g of activeGames) gameInfo.set(g.id, { title: g.title, timezone: resolveGameTimezone(g) });
       } catch { /* ok */ }
       for (const [gid, s] of stewards) {
-        activeMonitors.push({ gameId: gid, title: gameTitles.get(gid) ?? gid, snapshot: s.getLastSnapshot() });
+        const info = gameInfo.get(gid);
+        activeMonitors.push({ gameId: gid, title: info?.title ?? gid, timezone: info?.timezone ?? 'America/New_York', snapshot: s.getLastSnapshot() });
       }
 
       // Completed STEWARD agents from Firestore

@@ -99,6 +99,9 @@ export interface Game {
 
   // ---- timing model ----
   gameType?: GameType;
+  /** IANA timezone for the venue (e.g. "America/Chicago"). All HH:MM fields
+   *  on this game are wall-clock times in this timezone. */
+  timezone?: string;
   /** Game/show start time (HH:MM, 24h local). */
   startTime?: string;
   /** Override expected duration in minutes (otherwise uses gameType default). */
@@ -464,6 +467,7 @@ export class AdminStore {
       crewCount?: number;
       id?: string;
       gameType?: GameType;
+      timezone?: string;
       startTime?: string;
       expectedDuration?: number;
       expectedEndTime?: string;

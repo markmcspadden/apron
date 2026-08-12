@@ -424,6 +424,17 @@ tbody tr.sel{background:var(--panel-2);box-shadow:inset 3px 0 0 var(--live)}
         <label>Venue</label>
         <input type="text" id="game-venue" placeholder="e.g. Progressive Field, Cleveland">
       </div>
+      <div class="form-group" style="flex:none;min-width:140px">
+        <label>Timezone</label>
+        <select id="game-tz">
+          <option value="">Auto (from venue)</option>
+          <option value="America/New_York">Eastern (ET)</option>
+          <option value="America/Chicago">Central (CT)</option>
+          <option value="America/Denver">Mountain (MT)</option>
+          <option value="America/Los_Angeles">Pacific (PT)</option>
+          <option value="America/Phoenix">Arizona (AZ)</option>
+        </select>
+      </div>
       <div class="form-group">
         <label>Date</label>
         <input type="date" id="game-date">
@@ -552,6 +563,17 @@ tbody tr.sel{background:var(--panel-2);box-shadow:inset 3px 0 0 var(--live)}
       <div class="form-group">
         <label>Venue</label>
         <input type="text" id="eg-venue">
+      </div>
+      <div class="form-group" style="flex:none;min-width:140px">
+        <label>Timezone</label>
+        <select id="eg-tz">
+          <option value="">Auto (from venue)</option>
+          <option value="America/New_York">Eastern (ET)</option>
+          <option value="America/Chicago">Central (CT)</option>
+          <option value="America/Denver">Mountain (MT)</option>
+          <option value="America/Los_Angeles">Pacific (PT)</option>
+          <option value="America/Phoenix">Arizona (AZ)</option>
+        </select>
       </div>
       <div class="form-group">
         <label>Date</label>
@@ -1393,6 +1415,7 @@ $('btn-save-game').addEventListener('click', async function(){
   clearErr('err-games');
 
   var gameType = $('game-type').value || undefined;
+  var timezone = $('game-tz').value || undefined;
   var startTime = $('game-starttime').value || undefined;
   var expectedEndTime = $('game-endtime').value || undefined;
   var expectedDuration = $('game-duration').value ? Number($('game-duration').value) : undefined;
@@ -1408,7 +1431,7 @@ $('btn-save-game').addEventListener('click', async function(){
   try{
     await api('POST', '/api/admin/accounts/' + selectedAccountId + '/games', {
       network: network, title: title, venue: venue, date: date, callTime: callTime,
-      gameType: gameType, startTime: startTime, expectedEndTime: expectedEndTime,
+      gameType: gameType, timezone: timezone, startTime: startTime, expectedEndTime: expectedEndTime,
       expectedDuration: expectedDuration, strikeDuration: strikeDuration,
       venueToTransport: venueToTransport, transportDuration: transportDuration,
       departureAirport: departureAirport, overnightLabel: overnightLabel,
@@ -1417,7 +1440,7 @@ $('btn-save-game').addEventListener('click', async function(){
     });
     $('form-new-game').classList.remove('open');
     /* Reset all fields */
-    ['game-type','game-network','game-title','game-venue','game-date','game-calltime',
+    ['game-type','game-network','game-title','game-venue','game-tz','game-date','game-calltime',
      'game-starttime','game-endtime','game-duration','game-strike','game-v2t','game-t2o',
      'game-airport','game-overnight','game-lobby','game-minrest','game-espn'].forEach(function(id){
       $(id).value = '';
@@ -1440,6 +1463,7 @@ function openEditGame(game){
   $('eg-network').value = game.network || '';
   $('eg-title').value = game.title || '';
   $('eg-venue').value = game.venue || '';
+  $('eg-tz').value = game.timezone || '';
   $('eg-date').value = game.date || '';
   $('eg-calltime').value = game.callTime || '';
   $('eg-starttime').value = game.startTime || '';
@@ -1470,6 +1494,7 @@ $('btn-update-game').addEventListener('click', async function(){
   patch.network = $('eg-network').value || undefined;
   patch.title = $('eg-title').value.trim();
   patch.venue = $('eg-venue').value.trim();
+  patch.timezone = $('eg-tz').value || undefined;
   patch.date = $('eg-date').value || undefined;
   patch.callTime = $('eg-calltime').value || undefined;
   patch.startTime = $('eg-starttime').value || undefined;

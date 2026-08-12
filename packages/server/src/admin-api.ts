@@ -452,6 +452,7 @@ async function routeGames(
         callTime: typeof body['callTime'] === 'string' ? body['callTime'] : undefined,
         crewCount: typeof body['crewCount'] === 'number' ? body['crewCount'] : undefined,
         gameType: typeof body['gameType'] === 'string' ? body['gameType'] as GameType : undefined,
+        timezone: typeof body['timezone'] === 'string' ? body['timezone'] : undefined,
         startTime: typeof body['startTime'] === 'string' ? body['startTime'] : undefined,
         expectedEndTime: typeof body['expectedEndTime'] === 'string' ? body['expectedEndTime'] : undefined,
         expectedDuration: typeof body['expectedDuration'] === 'number' ? body['expectedDuration'] : undefined,
@@ -488,7 +489,7 @@ async function routeGames(
       const patch: Record<string, unknown> = {};
       const strFields = [
         'network', 'title', 'venue', 'date', 'callTime',
-        'gameType', 'startTime', 'expectedEndTime', 'departureAirport',
+        'gameType', 'timezone', 'startTime', 'expectedEndTime', 'departureAirport',
         'overnightLabel', 'lobbyCallTime', 'espnEventId',
       ] as const;
       for (const field of strFields) {
@@ -1009,6 +1010,7 @@ async function routeSeed(
     date: '2026-10-17',
     callTime: '14:00',
     gameType: 'baseball',
+    timezone: 'America/New_York',
     startTime: '19:08',
     expectedEndTime: '22:58',        // can be overridden live
     strikeDuration: 75,               // 75min load-out at Progressive Field
@@ -1270,6 +1272,7 @@ async function routeBoard(
         startTime: game.startTime,
         expectedEndTime: game.expectedEndTime,
         strikeDuration: game.strikeDuration,
+        timezone: game.timezone,
         departureAirport: game.departureAirport,
         lobbyCallTime: game.lobbyCallTime,
         minRestHours: game.minRestHours ?? 8,

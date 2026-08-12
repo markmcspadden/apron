@@ -261,19 +261,32 @@ var currentFilter = 'all';
 var pollTimer = null;
 var lastData = null; // cache for filter changes
 var modalGameId = null;
+var gameTzMap = {}; // gameId → IANA timezone from last poll
 
 function $(id){ return document.getElementById(id); }
 
-// ---- Format helpers ----
-function fmtTime(iso){
+// ---- IANA timezone abbreviation map (for display labels) ----
+var TZ_ABBREV = {
+  'America/New_York': 'ET', 'America/Chicago': 'CT',
+  'America/Denver': 'MT', 'America/Los_Angeles': 'PT',
+  'America/Phoenix': 'AZ'
+};
+function tzLabel(iana){ return TZ_ABBREV[iana] || iana; }
+
+// ---- Format helpers (all render in venue timezone) ----
+function fmtTime(iso, tz){
   if(!iso) return '—';
   var d = new Date(iso);
-  return d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false});
+  var opts = {hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false};
+  if(tz) opts.timeZone = tz;
+  return d.toLocaleTimeString('en-US', opts);
 }
-function fmtTimeShort(iso){
+function fmtTimeShort(iso, tz){
   if(!iso) return '—';
   var d = new Date(iso);
-  return d.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit',hour12:true});
+  var opts = {hour:'2-digit',minute:'2-digit',hour12:true};
+  if(tz) opts.timeZone = tz;
+  return d.toLocaleTimeString('en-US', opts);
 }
 function fmtDuration(startIso){
   if(!startIso) return '';
@@ -305,7 +318,7 @@ function cfgRow(label, val){
 }
 
 // ---- Build HTML for one SPOTTER instance ----
-function buildInstanceHTML(gameId, data){
+function buildInstanceHTML(gameId, data, gameTz){
   var icon = data.config ? sportIcon(data.config.sport) : '📡';
   var showState = data.prediction ? data.prediction.showState : 'clear';
 
@@ -359,7 +372,7 @@ function buildInstanceHTML(gameId, data){
   html += '<div class="card"><div class="card-header"><span class="card-icon">🔮</span><span class="card-title">End-Time Prediction</span></div><div class="card-body">';
   html += '<div class="pred-label">Predicted end</div>';
   if(data.prediction){
-    html += '<div class="pred-time">'+fmtTimeShort(data.prediction.predictedEnd)+'</div>';
+    html += '<div class="pred-time">'+fmtTimeShort(data.prediction.predictedEnd, gameTz)+' <small>'+tzLabel(gameTz)+'</small></div>';
     html += '<div class="pred-state"><span class="show-pill '+data.prediction.showState+'">'+data.prediction.showState+'</span></div>';
   } else {
     html += '<div class="pred-time">—</div>';
@@ -373,7 +386,7 @@ function buildInstanceHTML(gameId, data){
     html += cfgRow('Sport', c.sport)+
       cfgRow('ESPN ID', c.espnEventId)+
       cfgRow('Show ID', c.showId)+
-      cfgRow('Scheduled', fmtTimeShort(c.scheduledStart))+
+      cfgRow('Scheduled', fmtTimeShort(c.scheduledStart, gameTz)+' '+tzLabel(gameTz))+
       cfgRow('Expected', c.expectedDurationMinutes+'m')+
       cfgRow('Crew', c.crewCount)+
       cfgRow('Gemini', c.geminiEnabled ? '<span style="color:var(--clear)">✓ enabled</span>' : '<span style="color:var(--ink-3)">✗ fixture mode</span>')+
@@ -413,7 +426,7 @@ function buildInstanceHTML(gameId, data){
     for(var i=0; i<filtered.length; i++){
       var e = filtered[i];
       html += '<tr>'+
-        '<td class="log-ts">'+fmtTime(e.timestamp)+'</td>'+
+        '<td class="log-ts">'+fmtTime(e.timestamp, gameTz)+'</td>'+
         '<td class="log-level"><span class="lvl lvl-'+e.level+'">'+e.level+'</span></td>'+
         '<td class="log-msg">'+esc(e.message)+'</td>'+
         '<td class="log-data">'+(e.data ? esc(JSON.stringify(e.data)) : '')+'</td>'+
@@ -494,7 +507,9 @@ function render(response){
     // Build all instance blocks
     var html = '';
     for(var j=0; j<watches.length; j++){
-      html += buildInstanceHTML(watches[j].gameId, watches[j].status);
+      var tz = watches[j].timezone || 'America/New_York';
+      gameTzMap[watches[j].gameId] = tz;
+      html += buildInstanceHTML(watches[j].gameId, watches[j].status, tz);
     }
     $('live-state').innerHTML = html;
 
@@ -544,6 +559,7 @@ function render(response){
 async function openFullLog(gameId){
   $('log-modal').classList.add('open');
   $('modal-log-tbody').innerHTML = '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--ink-3)">Loading…</td></tr>';
+  var logTz = gameTzMap[gameId] || 'America/New_York';
   try{
     var url = '/api/spotter/log?n=200';
     if(gameId) url += '&gameId='+encodeURIComponent(gameId);
@@ -555,7 +571,7 @@ async function openFullLog(gameId){
     for(var i=0; i<rev.length; i++){
       var e = rev[i];
       html += '<tr>'+
-        '<td class="log-ts">'+fmtTime(e.timestamp)+'</td>'+
+        '<td class="log-ts">'+fmtTime(e.timestamp, logTz)+'</td>'+
         '<td class="log-level"><span class="lvl lvl-'+e.level+'">'+e.level+'</span></td>'+
         '<td class="log-msg">'+esc(e.message)+'</td>'+
         '<td class="log-data">'+(e.data ? esc(JSON.stringify(e.data)) : '')+'</td>'+
@@ -572,6 +588,7 @@ async function openPersistedLog(accountId, gameId, title){
   $('log-modal').classList.add('open');
   $('modal-log-count').textContent = '';
   $('modal-log-tbody').innerHTML = '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--ink-3)">Loading…</td></tr>';
+  var logTz = gameTzMap[gameId] || 'America/New_York';
   try{
     var url = '/api/spotter/record?accountId='+encodeURIComponent(accountId)+'&gameId='+encodeURIComponent(gameId);
     var res = await fetch(url);
@@ -583,7 +600,7 @@ async function openPersistedLog(accountId, gameId, title){
     for(var i=0; i<rev.length; i++){
       var e = rev[i];
       html += '<tr>'+
-        '<td class="log-ts">'+fmtTime(e.timestamp)+'</td>'+
+        '<td class="log-ts">'+fmtTime(e.timestamp, logTz)+'</td>'+
         '<td class="log-level"><span class="lvl lvl-'+e.level+'">'+e.level+'</span></td>'+
         '<td class="log-msg">'+esc(e.message)+'</td>'+
         '<td class="log-data">'+(e.data ? esc(JSON.stringify(e.data)) : '')+'</td>'+

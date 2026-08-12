@@ -124,6 +124,10 @@ export interface SpotterWatchConfig {
 
   /** Optional Gemini client for end-time prediction */
   gemini?: GeminiClient;
+
+  /** IANA timezone for the game venue (e.g. "America/Chicago").
+   *  Chain times (HH:MM) are wall-clock in this timezone. */
+  timezone?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -178,6 +182,11 @@ export class SpotterAgent extends BaseAgent {
   getLog(n?: number): SpotterLogEntry[] {
     if (n == null || n >= this.logBuffer.length) return [...this.logBuffer];
     return this.logBuffer.slice(-n);
+  }
+
+  /** Expose watch config for timezone resolution. */
+  getWatchConfig(): SpotterWatchConfig | null {
+    return this.watchConfig;
   }
 
   /** Full structured status snapshot for the dashboard. */
@@ -873,6 +882,8 @@ export class SpotterAgent extends BaseAgent {
     strikeDurationMinutes: number,
   ): ChainNode[] {
     const endMs = new Date(predictedEnd).getTime();
+    const tz = this.watchConfig?.timezone ?? 'America/New_York';
+    const refDate = new Date(endMs); // anchor HH:MM parsing to game day
 
     // Walk the chain and shift times from the predicted end
     // Duration nodes (isDuration: true) are recomputed as the gap between
@@ -888,8 +899,8 @@ export class SpotterAgent extends BaseAgent {
         const prevRevised = result.length > 0 ? result[result.length - 1]! : null;
         const lobbyMatch = node.label.match(/(\d{1,2}:\d{2})/);
         if (prevRevised && lobbyMatch) {
-          const prevMs = parseChainTime(prevRevised.revisedTime);
-          const lobbyMs = parseChainTime(lobbyMatch[1]!);
+          const prevMs = parseChainTime(prevRevised.revisedTime, tz, refDate);
+          const lobbyMs = parseChainTime(lobbyMatch[1]!, tz, refDate);
           let restMs = lobbyMs - prevMs;
           if (restMs < 0) restMs += 24 * 60 * 60 * 1000; // wrap past midnight
           const restMins = Math.round(restMs / 60_000);
@@ -905,7 +916,7 @@ export class SpotterAgent extends BaseAgent {
 
       if (i === 0) {
         // First node is the game end — update its revised time
-        result.push({ ...node, revisedTime: formatChainTime(endMs) });
+        result.push({ ...node, revisedTime: formatChainTime(endMs, tz) });
         continue;
       }
 
@@ -913,11 +924,11 @@ export class SpotterAgent extends BaseAgent {
       // Offset from the first node stays constant, revised time shifts
       const firstNode = baseChain[0];
       if (!firstNode) { result.push({ ...node }); continue; }
-      const baseEnd = parseChainTime(firstNode.baseTime);
-      const baseOffset = parseChainTime(node.baseTime) - baseEnd;
+      const baseEnd = parseChainTime(firstNode.baseTime, tz, refDate);
+      const baseOffset = parseChainTime(node.baseTime, tz, refDate) - baseEnd;
       const revisedMs = endMs + baseOffset;
 
-      result.push({ ...node, revisedTime: formatChainTime(revisedMs) });
+      result.push({ ...node, revisedTime: formatChainTime(revisedMs, tz) });
     }
 
     return result;
@@ -928,21 +939,68 @@ export class SpotterAgent extends BaseAgent {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function parseChainTime(time: string): number {
-  // Handle HH:MM format
+/**
+ * Parse a chain time (HH:MM in venue-local, or ISO 8601) to UTC milliseconds.
+ * Uses Intl to interpret HH:MM in the game's timezone, so it works correctly
+ * regardless of the server's own timezone (e.g. UTC on Cloud Run).
+ */
+function parseChainTime(time: string, timezone: string, refDate?: Date): number {
+  // Handle HH:MM format — interpret in the game's venue timezone
   const match = time.match(/^(\d{1,2}):(\d{2})$/);
   if (match) {
-    const today = new Date();
-    today.setHours(parseInt(match[1]!, 10), parseInt(match[2]!, 10), 0, 0);
-    return today.getTime();
+    const h = parseInt(match[1]!, 10);
+    const m = parseInt(match[2]!, 10);
+    const ref = refDate ?? new Date();
+    // Build a date string in the venue timezone's "today"
+    const dateParts = new Intl.DateTimeFormat('en-US', {
+      timeZone: timezone,
+      year: 'numeric', month: '2-digit', day: '2-digit',
+    }).formatToParts(ref);
+    const year = dateParts.find(p => p.type === 'year')!.value;
+    const month = dateParts.find(p => p.type === 'month')!.value;
+    const day = dateParts.find(p => p.type === 'day')!.value;
+    const dateStr = `${year}-${month}-${day}`;
+    // Convert venue-local HH:MM to UTC ms
+    return localTimeToUtcMs(dateStr, `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`, timezone);
   }
   // Try ISO 8601
   return new Date(time).getTime();
 }
 
-function formatChainTime(ms: number): string {
-  const d = new Date(ms);
-  return `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+/**
+ * Format a UTC timestamp as HH:MM in the game's venue timezone.
+ */
+function formatChainTime(ms: number, timezone: string): string {
+  return utcToLocalHHMM(ms, timezone);
+}
+
+// Lazy imports — tz-utils lives in the server package, but the functions are
+// simple enough to inline.  We duplicate the two needed helpers here to avoid
+// a cross-package dependency from agents → server.
+
+function localTimeToUtcMs(dateStr: string, timeStr: string, timezone: string): number {
+  const [year, month, day] = dateStr.split('-').map(Number);
+  const [hour, minute] = timeStr.split(':').map(Number);
+  const approxUtcMs = Date.UTC(year!, month! - 1, day!, hour!, minute!);
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone, hour12: false,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+  }).formatToParts(new Date(approxUtcMs));
+  const tzH = parseInt(parts.find(p => p.type === 'hour')!.value);
+  const tzM = parseInt(parts.find(p => p.type === 'minute')!.value);
+  let offsetMin = (tzH * 60 + tzM) - (hour! * 60 + minute!);
+  if (offsetMin > 720) offsetMin -= 1440;
+  if (offsetMin < -720) offsetMin += 1440;
+  return approxUtcMs - offsetMin * 60_000;
+}
+
+function utcToLocalHHMM(utcTime: string | number, timezone: string): string {
+  const d = typeof utcTime === 'number' ? new Date(utcTime) : new Date(utcTime);
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone, hour12: false, hour: '2-digit', minute: '2-digit',
+  }).formatToParts(d);
+  return `${parts.find(p => p.type === 'hour')!.value}:${parts.find(p => p.type === 'minute')!.value}`;
 }
 
 // ---------------------------------------------------------------------------
