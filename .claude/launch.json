@@ -2,16 +2,16 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "apron-dev",
+      "name": "dev",
       "runtimeExecutable": "bash",
       "runtimeArgs": ["-c", "cd /Users/mark/Development/personal/apron/apron-starter && set -a && . ./.env 2>/dev/null; set +a && npx tsx packages/server/src/index.ts"],
       "port": 3000
     },
     {
-      "name": "apron-demo",
+      "name": "demo",
       "runtimeExecutable": "bash",
-      "runtimeArgs": ["-c", "cd /Users/mark/Development/personal/apron/apron-starter && npx tsx packages/server/src/demo.ts"],
-      "port": 3000
+      "runtimeArgs": ["-c", "cd /Users/mark/Development/personal/apron/apron-starter && PORT=3001 npx tsx packages/server/src/demo.ts"],
+      "port": 3001
     }
   ]
 }

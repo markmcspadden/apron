@@ -344,6 +344,23 @@ function buildSummaryCards(snap){
   html += '<div class="card-sub">'+fmtDollars(totals.mealCost||0)+' beyond plan</div>';
   html += '</div></div>';
 
+  // Overnight / time-of-day premiums
+  var overnightCost = (totals.overnightCost||0) + (totals.forcedCallCost||0);
+  var overnightCount = crew.filter(function(c){ return c.overnight && c.overnight.incrementalOvernightHours > 0; }).length;
+  var forcedCount = crew.filter(function(c){ return c.overnight && c.overnight.forcedCallTriggered; }).length;
+  html += '<div class="card"><div class="card-header"><span class="card-icon">🌙</span><span class="card-title">Overnight / Forced</span></div><div class="card-body">';
+  if(overnightCount > 0 || forcedCount > 0){
+    html += '<div class="card-big" style="color:var(--watch)">'+fmtDollars(overnightCost)+'</div>';
+    var oSub = [];
+    if(overnightCount > 0) oSub.push(overnightCount+' overnight');
+    if(forcedCount > 0) oSub.push(forcedCount+' forced call');
+    html += '<div class="card-sub">'+oSub.join(' · ')+' beyond plan</div>';
+  } else {
+    html += '<div class="card-big">None</div>';
+    html += '<div class="card-sub">No new overnight exposure</div>';
+  }
+  html += '</div></div>';
+
   // Penalties — only from timing variance
   var penTotal = (totals.turnaroundPenalties||0) + (totals.scheduleChangePenalties||0);
   html += '<div class="card"><div class="card-header"><span class="card-icon">⚠</span><span class="card-title">Penalty Exposure</span></div><div class="card-body">';
@@ -364,6 +381,7 @@ function buildCrewTable(crew, gameTz){
   html += '<th>Name</th><th>Position</th><th>Turnaround</th><th>Gap</th><th>Next Call</th>';
   html += '<th>Δ OT</th><th>Hours</th><th>Δ OT Cost</th>';
   html += '<th>Δ Meals</th><th>Δ Meal Cost</th>';
+  html += '<th>🌙 Hrs</th><th>🌙 Cost</th><th>Forced</th>';
   html += '<th>Δ Penalties</th>';
   html += '</tr></thead><tbody>';
 
@@ -372,6 +390,7 @@ function buildCrewTable(crew, gameTz){
     var t = c.turnaround || {};
     var o = c.overtime || {};
     var m = c.meals || {};
+    var n = c.overnight || {};
     var p = c.penalties || {};
 
     html += '<tr>';
@@ -385,6 +404,9 @@ function buildCrewTable(crew, gameTz){
     html += '<td>'+fmtDollars(o.otCost||0)+'</td>';
     html += '<td><span class="'+(m.perDiemTriggered ? 'st st-yes' : 'st st-no')+'">'+(m.perDiemTriggered ? 'YES' : 'no')+'</span></td>';
     html += '<td>'+fmtDollars(m.incrementalCost||0)+'</td>';
+    html += '<td>'+(n.incrementalOvernightHours > 0 ? fmtHours(n.incrementalOvernightHours) : '—')+'</td>';
+    html += '<td>'+fmtDollars((n.incrementalOvernightCost||0)+(n.forcedCallCost||0))+'</td>';
+    html += '<td><span class="'+(n.forcedCallTriggered ? 'st st-yes' : 'st st-no')+'">'+(n.forcedCallTriggered ? 'YES' : 'no')+'</span></td>';
     html += '<td>'+fmtDollars(p.totalPenalty||0)+'</td>';
     html += '</tr>';
   }

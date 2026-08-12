@@ -98,6 +98,41 @@ export interface ExtractedRules {
     expiresDate: string;
     citation: string;
   };
+  /**
+   * Time-of-day-dependent provisions — overnight premiums, forced call,
+   * midnight crossing rules. All hours are wall-clock local time (0–23).
+   */
+  timeOfDay?: {
+    /** Start of overnight window (e.g. 0 for midnight). Default 0 if not specified. */
+    overnightStartHour: number;
+    /** End of overnight window (e.g. 6 for 6 AM). Default 6 if not specified. */
+    overnightEndHour: number;
+    /** Premium multiplier for hours worked inside the overnight window (e.g. 2.0 = double time) */
+    overnightMultiplier: number;
+    /**
+     * "Forced call" / "golden time" — when a crew member is called back to work
+     * during their rest period with less than the forced-call notice threshold.
+     * Multiplier that applies (e.g. 2.0 = double time from forced-call to next rest).
+     */
+    forcedCallMultiplier: number;
+    /** Minimum rest hours that must pass before a callback is NOT a forced call */
+    forcedCallRestThresholdHours: number;
+    /**
+     * If true, work that starts before midnight and crosses midnight triggers
+     * overnight premiums for the post-midnight portion only. If false, the
+     * entire shift pays the overnight rate once any part falls in the window.
+     */
+    midnightCrossingProRata: boolean;
+    /**
+     * Some agreements define a "split day" boundary (e.g. 2 AM) for calculating
+     * which calendar day work belongs to. Null means midnight (hour 0) is the boundary.
+     */
+    dayBoundaryHour: number | null;
+    /** Minimum rest hours specifically for overnight turnarounds (may be longer than standard) */
+    overnightRestMinimumHours: number | null;
+    /** Article/section reference for time-of-day provisions */
+    citation: string;
+  };
   /** Raw Gemini extraction metadata */
   extractedAt: string;
   extractionModel: string;
@@ -122,7 +157,15 @@ const EXTRACTION_SYSTEM = `You are a labor agreement analyst specializing in bro
 
 Be exact with numbers — hours, dollar amounts, multipliers, notice periods. Always include the article and section number as a citation (e.g. "Art. VIII §8.3"). If a rule changed on a specific date (e.g. "effective April 1, 2024"), use the current/latest value.
 
-For entertainment productions ("New Entertainment Productions"), extract the alternate turnaround rules separately if they exist.`;
+For entertainment productions ("New Entertainment Productions"), extract the alternate turnaround rules separately if they exist.
+
+Pay special attention to TIME-OF-DAY provisions:
+- Overnight / late-night premium rates (work between midnight and early morning)
+- "Forced call" or "golden time" — when crew is called back during rest period
+- Midnight crossing rules — how pay is calculated when a shift spans midnight
+- Calendar day boundaries for pay purposes (some agreements use 2 AM, not midnight)
+- Extended rest requirements after overnight work
+If the agreement does not mention overnight/time-of-day provisions, use sensible defaults: overnight window 0–6, multiplier 0 (no premium), and set forcedCallMultiplier to 0.`;
 
 const EXTRACTION_QUERY = `Extract the following structured rules from this labor agreement. Return valid JSON matching this schema exactly:
 
@@ -169,6 +212,17 @@ const EXTRACTION_QUERY = `Extract the following structured rules from this labor
     "earlyPenaltyPerHour": <number>,
     "expiresDate": "<string>",
     "citation": "<string>"
+  },
+  "timeOfDay": {
+    "overnightStartHour": <number 0-23 — start of overnight/premium window, e.g. 0 for midnight. Default 0>,
+    "overnightEndHour": <number 0-23 — end of overnight window, e.g. 6 for 6 AM. Default 6>,
+    "overnightMultiplier": <number — premium multiplier for overnight hours, e.g. 2.0 for double time. 0 if no overnight premium>,
+    "forcedCallMultiplier": <number — multiplier when called back during rest with insufficient notice, e.g. 2.0. 0 if not specified>,
+    "forcedCallRestThresholdHours": <number — minimum rest hours that must pass before callback is NOT forced call. 0 if not specified>,
+    "midnightCrossingProRata": <boolean — true if only post-midnight portion gets overnight rate; false if entire shift pays overnight once any part crosses>,
+    "dayBoundaryHour": <number or null — hour that defines the calendar-day boundary for pay purposes (e.g. 2 for 2 AM). null means midnight>,
+    "overnightRestMinimumHours": <number or null — if overnight turnarounds require MORE rest than standard, that number; null if same as standard>,
+    "citation": "<string — article/section reference for overnight/time-of-day provisions>"
   }
 }`;
 
@@ -253,6 +307,21 @@ const EXTRACTION_SCHEMA = {
         citation: { type: 'STRING' },
       },
       required: ['turnaroundMinimumHours', 'dayOffHours', 'twoDayOffHours', 'penaltyPerHour', 'earlyPenaltyPerHour', 'expiresDate', 'citation'],
+    },
+    timeOfDay: {
+      type: 'OBJECT',
+      properties: {
+        overnightStartHour: { type: 'NUMBER' },
+        overnightEndHour: { type: 'NUMBER' },
+        overnightMultiplier: { type: 'NUMBER' },
+        forcedCallMultiplier: { type: 'NUMBER' },
+        forcedCallRestThresholdHours: { type: 'NUMBER' },
+        midnightCrossingProRata: { type: 'BOOLEAN' },
+        dayBoundaryHour: { type: 'NUMBER', nullable: true },
+        overnightRestMinimumHours: { type: 'NUMBER', nullable: true },
+        citation: { type: 'STRING' },
+      },
+      required: ['overnightStartHour', 'overnightEndHour', 'overnightMultiplier', 'forcedCallMultiplier', 'forcedCallRestThresholdHours', 'midnightCrossingProRata', 'citation'],
     },
   },
   required: ['turnaround', 'overtime', 'meals', 'scheduleChanges', 'excessiveAssignments'],
@@ -409,6 +478,20 @@ const EVALUATE_SYSTEM = `You are the STEWARD agent evaluating VARIANCE FROM THE 
 
 CRITICAL: You are NOT evaluating absolute compliance. You are evaluating what CHANGED vs. what was already planned. The original plan is assumed fully compliant — costs and obligations that would have existed under the planned timing are NOT flagged.
 
+## Timezone and local-time awareness
+
+ALL time-of-day evaluations MUST be done in the VENUE'S LOCAL TIME. The context includes:
+- "timezone" — the IANA timezone of the venue (e.g. "America/Chicago")
+- All ISO timestamps in the context are UTC — convert to venue local time before evaluating time-of-day rules
+
+When the context includes "extractedRules.timeOfDay", use those provisions:
+- overnightStartHour / overnightEndHour — the local-clock window for overnight premiums
+- overnightMultiplier — premium rate for hours falling inside the overnight window
+- forcedCallMultiplier / forcedCallRestThresholdHours — "golden time" for callbacks during rest
+- midnightCrossingProRata — if true, only post-midnight portion of a shift gets overnight rate
+- dayBoundaryHour — which local hour marks the calendar-day boundary for pay (null = midnight)
+- overnightRestMinimumHours — if set, overnight turnarounds require more rest than standard
+
 ## How to determine the variance
 
 The context includes:
@@ -421,7 +504,7 @@ Calculate the OVERRUN: how many minutes/hours the current predicted end exceeds 
 For each crew member, push the entire timing chain forward by the overrun amount and assess:
 
 1. TURNAROUND: Using the SHIFTED end-of-duty (hotel arrival pushed by the overrun), compare against next call time. Status:
-   - "violation" if gap < minimum turnaround hours from the agreement
+   - "violation" if gap < minimum turnaround hours from the agreement (use overnightRestMinimumHours if the rest period falls inside the overnight window)
    - "at_risk" if gap < minimum + 2 hours
    - "clear" if gap >= minimum + 2 hours
    - "unknown" if next call time is not available
@@ -431,9 +514,18 @@ For each crew member, push the entire timing chain forward by the overrun amount
 
 3. MEALS: Only flag meal thresholds NEWLY crossed because of the overrun. If the planned timing already triggered a meal (e.g., crew was always going to work 12h), that is NOT a variance. Only flag if the overrun pushes past a threshold that the plan didn't reach. Set incrementalCost to $0 if no new thresholds crossed.
 
-4. PENALTIES: Only penalties caused by the overrun — turnaround encroachment penalties from the shifted end-of-duty. Schedule change penalties only if call time itself changed with insufficient notice, not from game overrun.
+4. OVERNIGHT / TIME-OF-DAY: Convert the shifted timing chain to venue local time. Check:
+   - Does the OVERRUN push work INTO the overnight window (overnightStartHour–overnightEndHour)?
+     If the planned timing already covered those hours, this is NOT a variance.
+     Only flag hours NEWLY inside the overnight window because of the overrun.
+   - Apply midnightCrossingProRata: if true, only count post-midnight hours at the premium rate.
+   - Calculate incrementalOvernightCost = newly-overnight-hours × (overnightMultiplier - 1.0) × base rate.
+   - "forcedCall": if the overrun compresses rest below forcedCallRestThresholdHours AND the crew member
+     is then called back, flag forcedCallTriggered = true and compute golden-time cost.
 
-5. REST COMPRESSION: Calculate rest window using the SHIFTED hotel arrival vs. lobby call. This IS a variance since overrun directly compresses rest.
+5. PENALTIES: Only penalties caused by the overrun — turnaround encroachment penalties from the shifted end-of-duty. Schedule change penalties only if call time itself changed with insufficient notice, not from game overrun.
+
+6. REST COMPRESSION: Calculate rest window using the SHIFTED hotel arrival vs. lobby call. This IS a variance since overrun directly compresses rest. If overnightRestMinimumHours is set and the rest period is overnight, use that higher minimum.
 
 ALL dollar amounts must be INCREMENTAL — the cost ABOVE what was already budgeted for the planned end time. If currentPredictedEnd is not available or equals the planned end, report $0 across the board. When data is missing, flag as unknown.`;
 
@@ -478,6 +570,18 @@ const EVALUATE_SCHEMA = {
             },
             required: ['perDiemTriggered', 'mealAfter11h', 'mealAfter15h', 'incrementalCost'],
           },
+          overnight: {
+            type: 'OBJECT',
+            properties: {
+              overnightHoursPlanned: { type: 'NUMBER' },
+              overnightHoursActual: { type: 'NUMBER' },
+              incrementalOvernightHours: { type: 'NUMBER' },
+              incrementalOvernightCost: { type: 'NUMBER' },
+              forcedCallTriggered: { type: 'BOOLEAN' },
+              forcedCallCost: { type: 'NUMBER' },
+            },
+            required: ['overnightHoursPlanned', 'overnightHoursActual', 'incrementalOvernightHours', 'incrementalOvernightCost', 'forcedCallTriggered', 'forcedCallCost'],
+          },
           penalties: {
             type: 'OBJECT',
             properties: {
@@ -488,7 +592,7 @@ const EVALUATE_SCHEMA = {
             required: ['turnaroundPenalty', 'scheduleChangePenalty', 'totalPenalty'],
           },
         },
-        required: ['name', 'position', 'turnaround', 'overtime', 'meals', 'penalties'],
+        required: ['name', 'position', 'turnaround', 'overtime', 'meals', 'overnight', 'penalties'],
       },
     },
     totals: {
@@ -497,10 +601,12 @@ const EVALUATE_SCHEMA = {
         turnaroundPenalties: { type: 'NUMBER' },
         overtimeCost: { type: 'NUMBER' },
         mealCost: { type: 'NUMBER' },
+        overnightCost: { type: 'NUMBER' },
+        forcedCallCost: { type: 'NUMBER' },
         scheduleChangePenalties: { type: 'NUMBER' },
         totalExposure: { type: 'NUMBER' },
       },
-      required: ['turnaroundPenalties', 'overtimeCost', 'mealCost', 'scheduleChangePenalties', 'totalExposure'],
+      required: ['turnaroundPenalties', 'overtimeCost', 'mealCost', 'overnightCost', 'forcedCallCost', 'scheduleChangePenalties', 'totalExposure'],
     },
     restCompression: {
       type: 'OBJECT',
@@ -541,6 +647,14 @@ export interface ComplianceSnapshot {
       mealAfter15h: boolean;
       incrementalCost: number;
     };
+    overnight: {
+      overnightHoursPlanned: number;
+      overnightHoursActual: number;
+      incrementalOvernightHours: number;
+      incrementalOvernightCost: number;
+      forcedCallTriggered: boolean;
+      forcedCallCost: number;
+    };
     penalties: {
       turnaroundPenalty: number;
       scheduleChangePenalty: number;
@@ -551,6 +665,8 @@ export interface ComplianceSnapshot {
     turnaroundPenalties: number;
     overtimeCost: number;
     mealCost: number;
+    overnightCost: number;
+    forcedCallCost: number;
     scheduleChangePenalties: number;
     totalExposure: number;
   };
