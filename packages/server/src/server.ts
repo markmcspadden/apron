@@ -6,6 +6,8 @@ import { WebSocketServer, type WebSocket } from 'ws';
 import { Orchestrator } from '@apron/orchestrator';
 import { SpotterAgent } from '@apron/agent-spotter';
 import { TrafficAgent } from '@apron/agent-traffic';
+import type { TrafficWatchConfig, MonitoredFlight } from '@apron/agent-traffic';
+import { AviationStackClient } from '@apron/integration-aviationstack';
 import { AdvanceAgent } from '@apron/agent-advance';
 import { WranglerAgent } from '@apron/agent-wrangler';
 import { StewardAgent } from '@apron/agent-steward';
@@ -67,6 +69,10 @@ export async function createServer(opts: ServerOptions = {}) {
   const spotters = new Map<string, SpotterAgent>();
   /** Live STEWARD instances — one per watched game, keyed by gameId. */
   const stewards = new Map<string, StewardAgent>();
+  /** Live TRAFFIC instances — one per watched game, keyed by gameId. */
+  const traffics = new Map<string, TrafficAgent>();
+  /** AviationStack client — reads API key from env, never exposes it. */
+  const aviationStack = new AviationStackClient();
   orchestrator.registerAgent(new TrafficAgent());
   orchestrator.registerAgent(new AdvanceAgent());
   orchestrator.registerAgent(new WranglerAgent());
@@ -106,12 +112,89 @@ export async function createServer(opts: ServerOptions = {}) {
   // Initialize admin store eagerly so the SPOTTER watch endpoint can use it
   const adminStore = initAdminStore(firestore, gemini);
 
-  // Notify STEWARD when crew data changes (assignments, routing, nextCall)
-  setCrewChangeCallback((_accountId, gameId) => {
+  // ---- Reusable TRAFFIC (re)start — called from startWatch() and crew-change callback ----
+  async function startOrRestartTraffic(accountId: string, gameId: string): Promise<void> {
+    try {
+      const crewAssignments = await adminStore.listCrewAssignments(accountId, gameId);
+      const monitoredFlights: MonitoredFlight[] = [];
+      const seenFlights = new Set<string>();
+
+      for (const ca of crewAssignments) {
+        if (!ca.routing?.legs) continue;
+        for (const leg of ca.routing.legs) {
+          const iata = `${leg.carrier}${leg.flightNumber}`;
+          if (seenFlights.has(iata)) continue;
+          seenFlights.add(iata);
+          monitoredFlights.push({
+            flightIata: iata,
+            carrier: leg.carrier,
+            flightNumber: leg.flightNumber,
+            date: leg.departure.date,
+            depAirport: leg.departure.airport,
+            arrAirport: leg.arrival.airport,
+            scheduledDep: leg.departure.time,
+            scheduledArr: leg.arrival.time,
+          });
+        }
+      }
+
+      if (monitoredFlights.length === 0) {
+        console.log(`[traffic] No crew flights found for game ${gameId} — skipping`);
+        return;
+      }
+
+      const prevTraffic = traffics.get(gameId);
+      if (prevTraffic) prevTraffic.stopWatching();
+
+      const liveTraffic = new TrafficAgent();
+      const tNow = new Date();
+      const trafficCred: import('@apron/types').Credential = {
+        agent: 'TRAFFIC',
+        showId: gameId,
+        grant: { agent: 'TRAFFIC', capabilities: ['read:carrier-status', 'read:ground-ops'], role: 'reader', neverReceives: ['crew-identity', 'next-calls', 'fare-data'] },
+        issuedAt: tNow.toISOString(),
+        expiresAt: new Date(tNow.getTime() + 86400000).toISOString(),
+      };
+      const bus = orchestrator.getRuntime().getBus();
+      liveTraffic.bind({ bus, credential: trafficCred, showId: gameId });
+
+      const trafficConfig: TrafficWatchConfig = {
+        showId: gameId,
+        flights: monitoredFlights,
+        aviationStack: aviationStack.isEnabled() ? aviationStack : undefined,
+      };
+      liveTraffic.startWatching(trafficConfig);
+      traffics.set(gameId, liveTraffic);
+
+      const startedAt = new Date().toISOString();
+      void adminStore.setAgentAssignment(accountId, gameId, 'TRAFFIC', {
+        status: 'active', startedAt,
+      });
+      void adminStore.setAgentRecord(accountId, gameId, 'TRAFFIC', {
+        status: 'active',
+        startedAt,
+        flightCount: monitoredFlights.length,
+        apiEnabled: aviationStack.isEnabled(),
+      });
+
+      console.log(`[traffic] Monitoring ${monitoredFlights.length} flights for game ${gameId}`);
+    } catch (err) {
+      console.error('[traffic] Failed to start flight monitoring:', err);
+    }
+  }
+
+  // Notify STEWARD + TRAFFIC when crew data changes (assignments, routing, nextCall)
+  setCrewChangeCallback((accountId, gameId) => {
     const activeSteward = stewards.get(gameId);
     if (activeSteward) {
       console.log(`[steward] Crew data changed for game ${gameId} — triggering re-evaluation`);
       void activeSteward.onCrewRebooked();
+    }
+
+    // (Re)start TRAFFIC if this game is being watched — picks up new/changed flights
+    if (spotters.has(gameId)) {
+      console.log(`[traffic] Crew data changed for game ${gameId} — refreshing flight monitor`);
+      void startOrRestartTraffic(accountId, gameId);
     }
   });
 
@@ -119,6 +202,12 @@ export async function createServer(opts: ServerOptions = {}) {
     console.log(`[google-cloud] Gemini client connected (${gemini.getMode()})`);
   } else {
     console.log('[google-cloud] Fixture mode — Gemini responses are stubbed');
+  }
+
+  if (aviationStack.isEnabled()) {
+    console.log('[aviationstack] Flight status API connected');
+  } else {
+    console.log('[aviationstack] No API key — TRAFFIC will use schedule data only');
   }
 
   if (opts.demoMode) {
@@ -333,6 +422,9 @@ export async function createServer(opts: ServerOptions = {}) {
       }
     })();
 
+    // ---- Start TRAFFIC flight monitoring alongside SPOTTER ----
+    void startOrRestartTraffic(accountId, game.id);
+
     // Broadcast SPOTTER events to WebSocket clients + auto-cleanup on game end
     const watchedGameId = game.id;
     const watchedAcctId = accountId;
@@ -373,13 +465,34 @@ export async function createServer(opts: ServerOptions = {}) {
               startedAt: watchStartedAt,
               stoppedAt: new Date().toISOString(),
             });
-            // Persist the last compliance snapshot
             const lastSnap = finishedSteward.getLastSnapshot();
             if (lastSnap) {
               void adminStore.setAgentRecord(watchedAcctId, watchedGameId, 'STEWARD', {
                 lastSnapshot: lastSnap,
               });
             }
+          }
+
+          // Stop TRAFFIC when SPOTTER finishes
+          const finishedTraffic = traffics.get(watchedGameId);
+          if (finishedTraffic) {
+            const trafficSnap = finishedTraffic.getStatus();
+            const trafficLog = finishedTraffic.getLog();
+            finishedTraffic.stopWatching();
+            traffics.delete(watchedGameId);
+            const trafficStoppedAt = new Date().toISOString();
+            void adminStore.setAgentAssignment(watchedAcctId, watchedGameId, 'TRAFFIC', {
+              status: 'done',
+              startedAt: trafficSnap.startedAt ?? watchStartedAt,
+              stoppedAt: trafficStoppedAt,
+            });
+            void adminStore.setAgentRecord(watchedAcctId, watchedGameId, 'TRAFFIC', {
+              status: 'done',
+              stoppedAt: trafficStoppedAt,
+              flightSummary: trafficSnap.flightSummary,
+              flights: trafficSnap.flights,
+              log: trafficLog,
+            });
           }
 
           const stoppedAt = new Date().toISOString();
@@ -402,6 +515,14 @@ export async function createServer(opts: ServerOptions = {}) {
 
       // Forward STEWARD events to WebSocket clients
       if (event.agent === 'STEWARD' && event.showId === watchedGameId) {
+        const msg = JSON.stringify({ type: 'agent-event', event });
+        for (const ws of clients) {
+          if (ws.readyState === ws.OPEN) ws.send(msg);
+        }
+      }
+
+      // Forward TRAFFIC events to WebSocket clients
+      if (event.agent === 'TRAFFIC' && event.showId === watchedGameId) {
         const msg = JSON.stringify({ type: 'agent-event', event });
         for (const ws of clients) {
           if (ws.readyState === ws.OPEN) ws.send(msg);
@@ -643,6 +764,88 @@ export async function createServer(opts: ServerOptions = {}) {
       return;
     }
 
+    // ---- TRAFFIC flight monitoring API ----
+    if (path === '/api/traffic/status') {
+      // Active flight monitors from in-memory Map
+      const watches: Array<{ gameId: string; status: ReturnType<TrafficAgent['getStatus']> }> = [];
+      for (const [gid, t] of traffics) {
+        watches.push({ gameId: gid, status: t.getStatus() });
+      }
+
+      // Completed TRAFFIC records from Firestore
+      const completed: Array<{
+        gameId: string;
+        accountId: string;
+        title: string;
+        agent: import('./admin-store.js').AgentAssignment;
+        record?: Record<string, unknown>;
+      }> = [];
+      try {
+        const doneGames = await adminStore.listGamesByAgentStatus('TRAFFIC', ['done', 'idle']);
+        for (const g of doneGames) {
+          if (!traffics.has(g.id) && g.agents?.TRAFFIC) {
+            const record = await adminStore.getAgentRecord(g.accountId, g.id, 'TRAFFIC');
+            const summary = record ? { ...record } : undefined;
+            if (summary) delete summary['log'];
+            completed.push({
+              gameId: g.id,
+              accountId: g.accountId,
+              title: g.title,
+              agent: g.agents.TRAFFIC,
+              record: summary,
+            });
+          }
+        }
+      } catch { /* Firestore unavailable */ }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ watches, completed }));
+      return;
+    }
+
+    if (path === '/api/traffic/log') {
+      const params = new URL(req.url ?? '/', `http://${req.headers.host}`).searchParams;
+      const count = parseInt(params.get('n') ?? '200', 10);
+      const gameId = params.get('gameId');
+      if (gameId && traffics.has(gameId)) {
+        const t = traffics.get(gameId)!;
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ entries: t.getLog(count), total: t.getStatus().logTotal }));
+      } else {
+        const all: Array<ReturnType<TrafficAgent['getLog']>[number] & { gameId: string }> = [];
+        for (const [gid, t] of traffics) {
+          for (const entry of t.getLog(count)) {
+            all.push({ ...entry, gameId: gid });
+          }
+        }
+        all.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+        const total = Array.from(traffics.values()).reduce((sum, t) => sum + t.getStatus().logTotal, 0);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ entries: all.slice(-count), total }));
+      }
+      return;
+    }
+
+    if (path === '/api/traffic/record') {
+      const params = new URL(req.url ?? '/', `http://${req.headers.host}`).searchParams;
+      const accountId = params.get('accountId');
+      const gameId = params.get('gameId');
+      if (!accountId || !gameId) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'accountId and gameId required' }));
+        return;
+      }
+      try {
+        const record = await adminStore.getAgentRecord(accountId, gameId, 'TRAFFIC');
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ record }));
+      } catch {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Failed to fetch agent record' }));
+      }
+      return;
+    }
+
     // ---- STEWARD compliance dashboard API ----
     if (path === '/api/steward/status') {
       // Active compliance monitors from in-memory Map (enrich with game title + tz)
@@ -750,6 +953,29 @@ export async function createServer(opts: ServerOptions = {}) {
             log: fullLog,
           });
         }
+
+        // Also stop TRAFFIC when unwatching
+        const existingTraffic = traffics.get(gameId!);
+        if (existingTraffic) {
+          const trafficSnap = existingTraffic.getStatus();
+          const trafficLog = existingTraffic.getLog();
+          existingTraffic.stopWatching();
+          traffics.delete(gameId!);
+          const trafficStoppedAt = new Date().toISOString();
+          void adminStore.setAgentAssignment(acctId!, gameId!, 'TRAFFIC', {
+            status: 'idle',
+            startedAt: trafficSnap.startedAt ?? trafficStoppedAt,
+            stoppedAt: trafficStoppedAt,
+          });
+          void adminStore.setAgentRecord(acctId!, gameId!, 'TRAFFIC', {
+            status: 'idle',
+            stoppedAt: trafficStoppedAt,
+            flightSummary: trafficSnap.flightSummary,
+            flights: trafficSnap.flights,
+            log: trafficLog,
+          });
+        }
+
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true, watching: false }));
         return;
@@ -816,6 +1042,8 @@ export async function createServer(opts: ServerOptions = {}) {
       filePath = join(ROOT, 'packages', 'board', 'spotter.html');
     } else if (path === '/steward' || path === '/steward.html') {
       filePath = join(ROOT, 'packages', 'board', 'steward.html');
+    } else if (path === '/traffic' || path === '/traffic.html') {
+      filePath = join(ROOT, 'packages', 'board', 'traffic.html');
     } else if (path === '/demo' || path === '/demo.html') {
       filePath = join(ROOT, 'packages', 'board', 'index.html');
     } else if (path === '/login' || path === '/login.html') {

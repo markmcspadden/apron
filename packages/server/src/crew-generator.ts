@@ -19,6 +19,7 @@ import type {
 } from '@apron/types';
 import type { Game, CrewRecord } from './admin-store.js';
 import { abbrevToIANA, localTimeToUtcIso, getTimezoneOffsetDelta } from './tz-utils.js';
+import { findBestFlight, findConnectingFlights, hasDirectRoute } from '@apron/agent-traffic';
 
 // ---------------------------------------------------------------------------
 // Reference data — airports, airlines, cities, positions
@@ -576,37 +577,35 @@ function buildRouting(ctx: RoutingContext): TravelRouting {
     const fromTz = AIRPORTS[fromAirport]?.tz ?? 'ET';
     const toTz = AIRPORTS[toAirport]?.tz ?? 'ET';
     if (fromTz === toTz) return minInOriginTz;
-    // Get offset delta: e.g. ET→CT = -60 (CT is 1 hour behind ET)
     const delta = getTimezoneOffsetDelta(abbrevToIANA(fromTz), abbrevToIANA(toTz));
     return minInOriginTz + delta;
   }
 
-  // Pick a carrier
-  const carrier = pick(CARRIERS, rand);
+  const minDepTime = formatHHMM(Math.max(depWindowStart, 5 * 60 + 30));
+  const legs: TravelLeg[] = [];
 
-  // Decide direct vs connecting (30% chance of connection for longer routes)
+  // ---- Try real flight schedule first ----
+  const realRouting = buildRoutingFromSchedule(
+    originAirport, destinationAirport, departureDate, minDepTime, rand,
+  );
+  if (realRouting) return realRouting;
+
+  // ---- Fallback: synthetic routing (original logic) ----
+  const carrier = pick(CARRIERS, rand);
   const flightMin = estimateFlightMinutes(originAirport, destinationAirport, rand);
   const needsConnection = flightMin > 200 || (flightMin > 120 && rand() < 0.3);
-
-  // Departure time within the window (in origin airport's local time)
   const depMin = randInt(depWindowStart, depWindowEnd, rand);
   const depTime = formatHHMM(depMin);
 
-  const legs: TravelLeg[] = [];
-
   if (needsConnection) {
-    // Pick a hub for this carrier
     const hubs = CARRIER_HUBS[carrier.code] ?? ['ORD', 'ATL', 'DFW'];
     const hub = pick(hubs.filter(h => h !== originAirport && h !== destinationAirport), rand) ?? 'ORD';
 
     const leg1Duration = estimateFlightMinutes(originAirport, hub, rand);
-    // Arrival in hub's local time
     const leg1ArrMin = tzAdjust(originAirport, hub, depMin + leg1Duration);
     const layoverMin = randInt(45, 90, rand);
-    // Departure from hub in hub's local time
     const leg2DepMin = leg1ArrMin + layoverMin;
     const leg2Duration = estimateFlightMinutes(hub, destinationAirport, rand);
-    // Arrival in destination's local time
     const leg2ArrMin = tzAdjust(hub, destinationAirport, leg2DepMin + leg2Duration);
 
     const flightNum1 = randInt(carrier.range[0], carrier.range[1], rand).toString();
@@ -628,7 +627,6 @@ function buildRouting(ctx: RoutingContext): TravelRouting {
     });
   } else {
     const flightNum = randInt(carrier.range[0], carrier.range[1], rand).toString();
-    // Arrival in destination's local time
     const arrMin = tzAdjust(originAirport, destinationAirport, depMin + flightMin);
 
     legs.push({
@@ -640,17 +638,72 @@ function buildRouting(ctx: RoutingContext): TravelRouting {
     });
   }
 
+  return finishRouting(legs, ctx);
+}
+
+/**
+ * Build routing from the curated real flight schedule.
+ * Returns null if no suitable flight is found (falls back to synthetic).
+ */
+function buildRoutingFromSchedule(
+  origin: string,
+  destination: string,
+  date: string,
+  minDepTime: string,
+  rand: () => number,
+): TravelRouting | null {
+  // Try direct flight first
+  if (hasDirectRoute(origin, destination)) {
+    const flight = findBestFlight(origin, destination, minDepTime);
+    if (flight) {
+      const legs: TravelLeg[] = [{
+        carrier: flight.carrier,
+        flightNumber: flight.flightNumber,
+        departure: { airport: flight.dep, time: flight.depTime, date },
+        arrival: { airport: flight.arr, time: flight.arrTime, date },
+        durationMinutes: flight.durationMin,
+      }];
+      return finishRouting(legs, null);
+    }
+  }
+
+  // Try connecting flight through hubs
+  const connection = findConnectingFlights(origin, destination, minDepTime);
+  if (connection) {
+    const [leg1, leg2] = connection;
+    const legs: TravelLeg[] = [
+      {
+        carrier: leg1.carrier,
+        flightNumber: leg1.flightNumber,
+        departure: { airport: leg1.dep, time: leg1.depTime, date },
+        arrival: { airport: leg1.arr, time: leg1.arrTime, date },
+        durationMinutes: leg1.durationMin,
+      },
+      {
+        carrier: leg2.carrier,
+        flightNumber: leg2.flightNumber,
+        departure: { airport: leg2.dep, time: leg2.depTime, date },
+        arrival: { airport: leg2.arr, time: leg2.arrTime, date },
+        durationMinutes: leg2.durationMin,
+      },
+    ];
+    return finishRouting(legs, null);
+  }
+
+  return null; // No real flight found — caller uses synthetic
+}
+
+/** Assemble the final TravelRouting from a set of legs. */
+function finishRouting(legs: TravelLeg[], ctx: RoutingContext | null): TravelRouting {
   const firstLeg = legs[0]!;
   const lastLeg = legs[legs.length - 1]!;
 
-  // Compute route summary: CLE→DTW→MCI
   const routeSummary = legs.map(l => l.departure.airport).concat(lastLeg.arrival.airport).join('→');
 
-  // Compute slack against arrival deadline
   const arrivalMin = parseHHMM(lastLeg.arrival.time);
-  const slackMinutes = ctx.arrivalDeadlineMin != null
+  const slackMinutes = ctx?.arrivalDeadlineMin != null
     ? ctx.arrivalDeadlineMin - arrivalMin
-    : null; // no deadline
+    : null;
 
   return {
     legs,

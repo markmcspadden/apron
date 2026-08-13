@@ -21,6 +21,12 @@ importers:
         specifier: ^5.6.0
         version: 5.9.3
 
+  integrations/aviationstack:
+    dependencies:
+      '@apron/types':
+        specifier: workspace:*
+        version: link:../../packages/types
+
   integrations/clickhouse:
     dependencies:
       '@apron/types':
@@ -116,6 +122,9 @@ importers:
 
   packages/agents/traffic:
     dependencies:
+      '@apron/integration-aviationstack':
+        specifier: workspace:*
+        version: link:../../../integrations/aviationstack
       '@apron/orchestrator':
         specifier: workspace:*
         version: link:../../orchestrator
@@ -194,6 +203,9 @@ importers:
       '@apron/credentials':
         specifier: workspace:*
         version: link:../credentials
+      '@apron/integration-aviationstack':
+        specifier: workspace:*
+        version: link:../../integrations/aviationstack
       '@apron/integration-clickhouse':
         specifier: workspace:*
         version: link:../../integrations/clickhouse

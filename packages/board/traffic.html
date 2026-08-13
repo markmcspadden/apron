@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>APRON — TRAFFIC Dashboard</title>
+<style>
+:root{
+  --bg:#0B0B0C; --panel:#141416; --panel-2:#1B1B1E; --line:#2A2A2E; --line-2:#3A3A40;
+  --ink:#F2F1EE; --ink-2:#A9A69E; --ink-3:#6E6B65;
+  --clear:#25B04B; --clear-bg:#0E2A16;
+  --watch:#E8A81C; --watch-bg:#2E2308;
+  --risk:#EE7A3C; --risk-bg:#31190A;
+  --down:#E0403C; --down-bg:#33100F;
+  --live:#5DA9E9;
+  --f:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --m:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f);font-size:14px;
+  line-height:1.45;-webkit-font-smoothing:antialiased;display:flex;min-height:100vh}
+.mono{font-family:var(--m);font-variant-numeric:tabular-nums}
+
+/* ---------- sidebar ---------- */
+.sidebar{width:220px;min-height:100vh;background:var(--panel);border-right:1px solid var(--line);
+  position:fixed;top:0;left:0;bottom:0;z-index:90;display:flex;flex-direction:column}
+.sidebar-brand{padding:18px 20px 16px;border-bottom:1px solid var(--line)}
+.sidebar-brand b{font-size:16px;font-weight:750;letter-spacing:.13em}
+.sidebar-brand span{font-size:10px;letter-spacing:.16em;color:var(--ink-3);text-transform:uppercase;
+  margin-left:9px}
+.sidebar-nav{padding:12px 0;flex:1}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 20px;font-size:13px;font-weight:600;
+  color:var(--ink-3);cursor:pointer;transition:background .12s,color .12s;border:none;background:none;
+  width:100%;text-align:left;font-family:var(--f);letter-spacing:.02em;text-decoration:none}
+.nav-item:hover{background:var(--panel-2);color:var(--ink-2)}
+.nav-item.active{color:var(--ink);background:var(--panel-2);border-right:2px solid var(--live)}
+.nav-icon{font-size:15px;width:22px;text-align:center;opacity:.6}
+.nav-item.active .nav-icon{opacity:1}
+.sidebar-foot{padding:14px 20px;border-top:1px solid var(--line);font-size:10px;color:var(--ink-3);
+  letter-spacing:.08em;font-family:var(--m)}
+
+/* ---------- top bar ---------- */
+.topbar{position:fixed;top:0;left:220px;right:0;z-index:80;background:#0B0B0Cf2;
+  backdrop-filter:blur(10px);border-bottom:1px solid var(--line);height:52px;
+  display:flex;align-items:center;padding:0 24px;gap:16px}
+.topbar-title{font-size:12px;letter-spacing:.15em;text-transform:uppercase;color:var(--ink-2);
+  font-weight:640}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:12px}
+.topbar-pill{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  padding:3px 10px;border-radius:99px;font-family:var(--m)}
+.topbar-pill.on{background:var(--clear-bg);color:var(--clear);border:1px solid var(--clear)}
+.topbar-pill.off{background:var(--panel-2);color:var(--ink-3);border:1px solid var(--line)}
+.refresh-label{font-size:11px;color:var(--ink-3);font-family:var(--m)}
+
+/* ---------- main ---------- */
+.main{margin-left:220px;padding:68px 28px 40px;flex:1;min-width:0}
+
+/* ---------- summary cards ---------- */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px;margin-bottom:24px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.card-header{padding:12px 16px 8px;border-bottom:1px solid var(--line);display:flex;
+  align-items:center;gap:8px}
+.card-title{font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-2)}
+.card-icon{font-size:13px;opacity:.7}
+.card-body{padding:12px 16px 14px}
+.card-number{font-size:32px;font-weight:750;font-family:var(--m);font-variant-numeric:tabular-nums;
+  letter-spacing:-.02em}
+.card-label{font-size:11px;color:var(--ink-3);margin-top:2px}
+
+/* ---------- flight table ---------- */
+.flight-section{margin-bottom:24px}
+.section-title{font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--ink-2);margin-bottom:12px;display:flex;align-items:center;gap:10px}
+.section-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;font-family:var(--m)}
+
+.flight-table{width:100%;border-collapse:collapse;font-size:13px}
+.flight-table thead th{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--ink-3);padding:10px 12px;border-bottom:2px solid var(--line-2);text-align:left;
+  background:var(--panel)}
+.flight-table td{padding:8px 12px;border-bottom:1px solid var(--line);vertical-align:middle;
+  white-space:nowrap}
+.flight-table tbody tr:hover td{background:var(--panel-2)}
+
+.status-pill{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  padding:2px 8px;border-radius:4px;font-family:var(--m);display:inline-block}
+.status-pill.scheduled{background:var(--panel-2);color:var(--ink-3)}
+.status-pill.active{background:#152A42;color:var(--live);border:1px solid #1C3D5E}
+.status-pill.landed{background:var(--clear-bg);color:var(--clear)}
+.status-pill.cancelled{background:var(--down-bg);color:var(--down)}
+.status-pill.diverted{background:var(--risk-bg);color:var(--risk)}
+.status-pill.delayed{background:var(--watch-bg);color:var(--watch)}
+.status-pill.unknown{background:var(--panel-2);color:var(--ink-3)}
+
+.delay-badge{font-size:11px;font-weight:600;color:var(--watch);font-family:var(--m);margin-left:6px}
+.delay-badge.major{color:var(--risk)}
+
+/* ---------- log ---------- */
+.log-section{margin-top:24px}
+.log-filters{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+.log-filter{font-size:10px;font-weight:600;padding:3px 10px;border-radius:99px;border:1px solid var(--line);
+  background:none;color:var(--ink-3);cursor:pointer;font-family:var(--f);letter-spacing:.05em;
+  transition:all .12s}
+.log-filter:hover{background:var(--panel-2);color:var(--ink-2)}
+.log-filter.active{background:var(--panel-2);color:var(--ink);border-color:var(--line-2)}
+.log-wrap{max-height:400px;overflow-y:auto;background:var(--panel);border:1px solid var(--line);
+  border-radius:8px}
+.log-entry{padding:6px 14px;font-size:12px;font-family:var(--m);border-bottom:1px solid var(--line);
+  display:flex;gap:12px;line-height:1.5}
+.log-entry:last-child{border-bottom:none}
+.log-ts{color:var(--ink-3);flex-shrink:0;width:72px}
+.log-lvl{flex-shrink:0;width:60px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;font-size:10px;
+  padding-top:2px}
+.log-lvl.info{color:var(--ink-3)} .log-lvl.flight{color:var(--live)}
+.log-lvl.delay{color:var(--watch)} .log-lvl.cancel{color:var(--down)}
+.log-lvl.alert{color:var(--risk)} .log-lvl.error{color:var(--down)}
+.log-msg{color:var(--ink-2);flex:1;word-break:break-word}
+
+/* ---------- completed ---------- */
+.completed{margin-top:32px}
+.completed-title{font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--ink-3);margin-bottom:12px}
+.completed-list{display:flex;flex-direction:column;gap:8px}
+.completed-item{background:var(--panel);border:1px solid var(--line);border-radius:8px;
+  padding:12px 16px;display:flex;align-items:center;gap:14px;cursor:pointer;transition:background .12s}
+.completed-item:hover{background:var(--panel-2)}
+.completed-name{font-weight:600;font-size:13px;flex:1}
+.completed-meta{font-size:11px;color:var(--ink-3);font-family:var(--m)}
+.completed-badge{font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;font-family:var(--m)}
+.completed-badge.done{background:var(--clear-bg);color:var(--clear)}
+.completed-badge.idle{background:var(--panel-2);color:var(--ink-3)}
+
+.empty{text-align:center;padding:40px;color:var(--ink-3);font-size:13px}
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<div class="sidebar">
+  <div class="sidebar-brand"><b>APRON</b><span>TRAFFIC</span></div>
+  <div class="sidebar-nav">
+    <a href="/board" class="nav-item" style="text-decoration:none"><span class="nav-icon">📋</span><span>Board</span></a>
+    <a href="/admin" class="nav-item" style="text-decoration:none"><span class="nav-icon">⚙</span><span>Admin</span></a>
+    <a href="/spotter" class="nav-item" style="text-decoration:none"><span class="nav-icon">📡</span><span>SPOTTER</span></a>
+    <a href="/traffic" class="nav-item active" style="text-decoration:none"><span class="nav-icon">✈</span><span>TRAFFIC</span></a>
+    <a href="/steward" class="nav-item" style="text-decoration:none"><span class="nav-icon">📜</span><span>STEWARD</span></a>
+  </div>
+  <div class="sidebar-foot">v0.1 · flight monitoring</div>
+</div>
+
+<!-- Top bar -->
+<div class="topbar">
+  <div class="topbar-title">Flight Status Monitor</div>
+  <div class="topbar-right">
+    <span class="topbar-pill off" id="api-pill">NO API</span>
+    <span class="topbar-pill off" id="status-pill">IDLE</span>
+    <span class="refresh-label" id="refresh-ts">—</span>
+  </div>
+</div>
+
+<!-- Main content -->
+<div class="main">
+  <!-- Summary cards -->
+  <div class="cards" id="summary-cards">
+    <div class="card"><div class="card-header"><span class="card-icon">✈</span><span class="card-title">Total</span></div><div class="card-body"><div class="card-number" id="s-total">0</div><div class="card-label">tracked flights</div></div></div>
+    <div class="card"><div class="card-header"><span class="card-icon">✓</span><span class="card-title">On Time</span></div><div class="card-body"><div class="card-number" style="color:var(--clear)" id="s-ontime">0</div><div class="card-label">on schedule</div></div></div>
+    <div class="card"><div class="card-header"><span class="card-icon">⏱</span><span class="card-title">Delayed</span></div><div class="card-body"><div class="card-number" style="color:var(--watch)" id="s-delayed">0</div><div class="card-label">30+ min delay</div></div></div>
+    <div class="card"><div class="card-header"><span class="card-icon">✕</span><span class="card-title">Cancelled</span></div><div class="card-body"><div class="card-number" style="color:var(--down)" id="s-cancelled">0</div><div class="card-label">cancelled/diverted</div></div></div>
+    <div class="card"><div class="card-header"><span class="card-icon">🛬</span><span class="card-title">Landed</span></div><div class="card-body"><div class="card-number" id="s-landed">0</div><div class="card-label">arrived</div></div></div>
+    <div class="card"><div class="card-header"><span class="card-icon">🛫</span><span class="card-title">In Air</span></div><div class="card-body"><div class="card-number" style="color:var(--live)" id="s-active">0</div><div class="card-label">airborne</div></div></div>
+  </div>
+
+  <!-- Flight table -->
+  <div class="flight-section">
+    <div class="section-title">
+      <span>Tracked Flights</span>
+      <span class="section-badge" id="flight-count" style="background:var(--panel-2);color:var(--ink-3)">0</span>
+    </div>
+    <div style="overflow-x:auto;border:1px solid var(--line);border-radius:8px">
+      <table class="flight-table" id="flight-table">
+        <thead><tr>
+          <th>Flight</th><th>Route</th><th>Status</th>
+          <th>Sched Dep</th><th>Eff Dep</th><th>Sched Arr</th><th>Eff Arr</th>
+          <th>Gate</th><th>Updated</th>
+        </tr></thead>
+        <tbody id="flight-tbody"></tbody>
+      </table>
+    </div>
+    <div class="empty" id="no-flights" style="display:none">No active flight monitors. Start watching a game to begin tracking crew flights.</div>
+  </div>
+
+  <!-- Activity log -->
+  <div class="log-section">
+    <div class="section-title"><span>Activity Log</span></div>
+    <div class="log-filters">
+      <button class="log-filter active" data-level="all">All</button>
+      <button class="log-filter" data-level="flight">Flight</button>
+      <button class="log-filter" data-level="delay">Delay</button>
+      <button class="log-filter" data-level="cancel">Cancel</button>
+      <button class="log-filter" data-level="alert">Alert</button>
+      <button class="log-filter" data-level="error">Error</button>
+    </div>
+    <div class="log-wrap" id="log-wrap">
+      <div class="empty" id="no-log">No log entries yet.</div>
+    </div>
+  </div>
+
+  <!-- Completed monitors -->
+  <div class="completed" id="completed-section" style="display:none">
+    <div class="completed-title">Completed Monitors</div>
+    <div class="completed-list" id="completed-list"></div>
+  </div>
+</div>
+
+<script>
+var $ = function(id){ return document.getElementById(id); };
+var POLL_MS = 5000;
+var logFilter = 'all';
+
+// Poll status
+function poll(){
+  fetch('/api/traffic/status')
+    .then(function(r){ return r.json(); })
+    .then(render)
+    .catch(function(){ /* retry */ });
+}
+
+function render(data){
+  var watches = data.watches || [];
+  var completed = data.completed || [];
+  var hasActive = watches.length > 0;
+
+  // Status pills
+  $('status-pill').className = 'topbar-pill ' + (hasActive ? 'on' : 'off');
+  $('status-pill').textContent = hasActive ? watches.length + ' ACTIVE' : 'IDLE';
+  $('refresh-ts').textContent = new Date().toLocaleTimeString();
+
+  // Merge all flights from all watches
+  var allFlights = [];
+  var summary = { total:0, onTime:0, delayed:0, cancelled:0, landed:0, active:0 };
+  var apiEnabled = false;
+
+  for (var w of watches) {
+    var s = w.status;
+    if (s.config && s.config.apiEnabled) apiEnabled = true;
+    summary.total += s.flightSummary.total;
+    summary.onTime += s.flightSummary.onTime;
+    summary.delayed += s.flightSummary.delayed;
+    summary.cancelled += s.flightSummary.cancelled;
+    summary.landed += s.flightSummary.landed;
+    summary.active += s.flightSummary.active;
+
+    for (var f of (s.flights || [])) {
+      allFlights.push({ gameId: w.gameId, flight: f });
+    }
+  }
+
+  // API pill
+  $('api-pill').className = 'topbar-pill ' + (apiEnabled ? 'on' : 'off');
+  $('api-pill').textContent = apiEnabled ? 'API ON' : 'NO API';
+
+  // Summary cards
+  $('s-total').textContent = summary.total;
+  $('s-ontime').textContent = summary.onTime;
+  $('s-delayed').textContent = summary.delayed;
+  $('s-cancelled').textContent = summary.cancelled;
+  $('s-landed').textContent = summary.landed;
+  $('s-active').textContent = summary.active;
+
+  // Flight table
+  var tbody = $('flight-tbody');
+  $('flight-count').textContent = allFlights.length;
+
+  if (allFlights.length === 0) {
+    tbody.innerHTML = '';
+    $('no-flights').style.display = hasActive ? 'none' : '';
+  } else {
+    $('no-flights').style.display = 'none';
+    var rows = '';
+    for (var entry of allFlights) {
+      var fl = entry.flight;
+      var statusClass = fl.depDelay >= 30 ? 'delayed' : fl.status;
+      var delayHtml = '';
+      if (fl.depDelay > 0) {
+        delayHtml = '<span class="delay-badge' + (fl.depDelay >= 60 ? ' major' : '') + '">+' + fl.depDelay + 'm</span>';
+      }
+      var gateStr = fl.depGate ? fl.depGate : '—';
+      var updatedStr = fl.lastUpdated ? new Date(fl.lastUpdated).toLocaleTimeString() : '—';
+
+      rows += '<tr>'
+        + '<td class="mono" style="font-weight:600">' + esc(fl.flightIata) + '</td>'
+        + '<td>' + esc(fl.route) + '</td>'
+        + '<td><span class="status-pill ' + statusClass + '">' + esc(fl.status) + '</span>' + delayHtml + '</td>'
+        + '<td class="mono">' + esc(fl.scheduledDep) + '</td>'
+        + '<td class="mono">' + esc(fl.effectiveDep) + '</td>'
+        + '<td class="mono">' + esc(fl.scheduledArr) + '</td>'
+        + '<td class="mono">' + esc(fl.effectiveArr) + '</td>'
+        + '<td class="mono">' + esc(gateStr) + '</td>'
+        + '<td class="mono" style="color:var(--ink-3);font-size:11px">' + updatedStr + '</td>'
+        + '</tr>';
+    }
+    tbody.innerHTML = rows;
+  }
+
+  // Activity log
+  var allLogs = [];
+  for (var w2 of watches) {
+    for (var entry2 of (w2.status.log || [])) {
+      allLogs.push(entry2);
+    }
+  }
+  allLogs.sort(function(a,b){ return new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime(); });
+  renderLog(allLogs);
+
+  // Completed
+  if (completed.length > 0) {
+    $('completed-section').style.display = '';
+    var chtml = '';
+    for (var c of completed) {
+      var badge = c.agent.status === 'done' ? 'done' : 'idle';
+      var flightInfo = c.record && c.record.flightSummary
+        ? c.record.flightSummary.total + ' flights'
+        : '—';
+      chtml += '<div class="completed-item" onclick="loadCompleted(\'' + esc(c.accountId) + '\',\'' + esc(c.gameId) + '\')">'
+        + '<span class="completed-badge ' + badge + '">' + badge.toUpperCase() + '</span>'
+        + '<span class="completed-name">' + esc(c.title) + '</span>'
+        + '<span class="completed-meta">' + esc(flightInfo) + '</span>'
+        + '</div>';
+    }
+    $('completed-list').innerHTML = chtml;
+  } else {
+    $('completed-section').style.display = 'none';
+  }
+}
+
+function renderLog(entries){
+  var wrap = $('log-wrap');
+  if (!entries || entries.length === 0) {
+    wrap.innerHTML = '<div class="empty">No log entries yet.</div>';
+    return;
+  }
+  var filtered = logFilter === 'all' ? entries : entries.filter(function(e){ return e.level === logFilter; });
+  if (filtered.length === 0) {
+    wrap.innerHTML = '<div class="empty">No matching entries.</div>';
+    return;
+  }
+  var html = '';
+  for (var e of filtered) {
+    var ts = new Date(e.timestamp).toLocaleTimeString();
+    html += '<div class="log-entry">'
+      + '<span class="log-ts">' + ts + '</span>'
+      + '<span class="log-lvl ' + e.level + '">' + e.level + '</span>'
+      + '<span class="log-msg">' + esc(e.message) + '</span>'
+      + '</div>';
+  }
+  wrap.innerHTML = html;
+  wrap.scrollTop = wrap.scrollHeight;
+}
+
+function loadCompleted(acctId, gameId){
+  fetch('/api/traffic/record?accountId=' + acctId + '&gameId=' + gameId)
+    .then(function(r){ return r.json(); })
+    .then(function(data){
+      if (data.record && data.record.log) {
+        renderLog(data.record.log);
+      }
+    })
+    .catch(function(){});
+}
+
+function esc(s){
+  if (s == null) return '';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// Log filter buttons
+document.querySelectorAll('.log-filter').forEach(function(btn){
+  btn.addEventListener('click', function(){
+    document.querySelectorAll('.log-filter').forEach(function(b){ b.classList.remove('active'); });
+    btn.classList.add('active');
+    logFilter = btn.dataset.level;
+    poll(); // re-render with new filter
+  });
+});
+
+// Start polling
+poll();
+setInterval(poll, POLL_MS);
+</script>
+</body>
+</html>

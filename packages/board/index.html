@@ -439,6 +439,9 @@ tbody tr.t2{box-shadow:inset 3px 0 0 var(--line-2)}
     <div class="cell"><div class="k">Traveling crew</div>
       <div class="v" id="p-crew" style="font-size:19px">22</div>
       <div class="s" id="p-crew-s">6 hold a next call</div></div>
+    <div class="cell" id="p-traffic-cell" style="display:none"><div class="k">✈ Flights</div>
+      <div class="v" id="p-traffic" style="font-size:19px">—</div>
+      <div class="s" id="p-traffic-s">TRAFFIC idle</div></div>
   </div>
 
   <div class="pcard" id="pchain-card" style="margin-bottom:16px;display:none">
@@ -725,6 +728,45 @@ function applyAgentEvent(ev) {
     renderCrewbar(ev.agentStates);
     $('pcrewbar').innerHTML = $('crewbar').innerHTML;
     logEvent({ ts: ev.timestamp, who: ev.agent, msg: ev.message });
+  }
+
+  // TRAFFIC flight metrics — update the Flights card on production seat
+  if (ev.type === 'metrics' && ev.agent === 'TRAFFIC') {
+    $('p-traffic-cell').style.display = '';
+    var total = ev.risk !== undefined ? (147 - ev.risk) : 0; // fallback
+    // Parse counts from the message: "Flights: X on time, Y delayed, Z cancelled"
+    var mParts = (ev.message || '').match(/(\d+) on time.*?(\d+) delayed.*?(\d+) cancelled/);
+    if (mParts) {
+      var onTime = parseInt(mParts[1], 10);
+      var delayed = parseInt(mParts[2], 10);
+      var cancelled = parseInt(mParts[3], 10);
+      total = onTime + delayed + cancelled;
+      var cls = cancelled > 0 ? 'down' : delayed > 0 ? 'watch' : '';
+      $('p-traffic').textContent = total;
+      $('p-traffic').className = 'v mono' + (cls ? ' ' + cls : '');
+      var parts = [];
+      if (onTime > 0) parts.push(onTime + ' on time');
+      if (delayed > 0) parts.push(delayed + ' delayed');
+      if (cancelled > 0) parts.push(cancelled + ' cancelled');
+      $('p-traffic-s').textContent = parts.join(' · ');
+    }
+    logEvent({ ts: ev.timestamp, who: ev.agent, msg: ev.message });
+  }
+
+  // TRAFFIC crew-state — flight delay/cancellation affecting crew routing
+  if (ev.type === 'crew-state' && ev.agent === 'TRAFFIC') {
+    logEvent({ ts: ev.timestamp, who: ev.agent, msg: ev.message });
+  }
+
+  // TRAFFIC agent-status — show/hide the flights card
+  if (ev.type === 'agent-status' && ev.agent === 'TRAFFIC') {
+    if (ev.agentStates && ev.agentStates.TRAFFIC === 'on') {
+      $('p-traffic-cell').style.display = '';
+      $('p-traffic-s').textContent = 'Monitoring started';
+    }
+    if (ev.agentStates && ev.agentStates.TRAFFIC === 'done') {
+      $('p-traffic-s').textContent = 'Monitoring complete';
+    }
   }
 
   if (ev.type === 'compliance-update') {
@@ -1322,6 +1364,34 @@ if (gameParam) {
       }
     } catch(e) { /* agreement API not available */ }
   }
+
+  // Fetch initial TRAFFIC status for this game
+  try {
+    var txhr = new XMLHttpRequest();
+    txhr.open('GET', '/api/traffic/status', false);
+    txhr.send();
+    if (txhr.status === 200) {
+      var trafficData = JSON.parse(txhr.responseText);
+      // Find the active watch for this game
+      var watches = trafficData.watches || [];
+      var myWatch = watches.find(function(w) { return w.gameId === gameParam; });
+      if (myWatch && myWatch.status && myWatch.status.watching) {
+        var ts = myWatch.status.flightSummary || {};
+        $('p-traffic-cell').style.display = '';
+        var tTotal = (ts.total || 0);
+        var tDelayed = (ts.delayed || 0);
+        var tCancelled = (ts.cancelled || 0);
+        var tCls = tCancelled > 0 ? 'down' : tDelayed > 0 ? 'watch' : '';
+        $('p-traffic').textContent = tTotal;
+        $('p-traffic').className = 'v mono' + (tCls ? ' ' + tCls : '');
+        var tParts = [];
+        if (ts.onTime) tParts.push(ts.onTime + ' on time');
+        if (tDelayed) tParts.push(tDelayed + ' delayed');
+        if (tCancelled) tParts.push(tCancelled + ' cancelled');
+        $('p-traffic-s').textContent = tParts.length ? tParts.join(' · ') : 'Monitoring active';
+      }
+    }
+  } catch(e) { /* traffic API not available */ }
 }
 
 function renderBoardAgreement(agreement, rules) {

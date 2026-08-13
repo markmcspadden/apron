@@ -49,13 +49,15 @@ packages/server/           - Express-free HTTP + WebSocket server, admin API, au
   src/server.ts            - HTTP + WebSocket server with /demo route
   src/index.ts             - Dev entry point (full server)
   src/demo.ts              - Demo entry point (fixture-only, demoMode: true)
-packages/board/            - Board UI + admin console (vanilla JS, WebSocket client)
+packages/board/            - Board UI + admin console + agent dashboards (vanilla JS, WebSocket client)
   index.html               - Board view (TMC desk + production seat)
   admin.html               - Admin console (manage accounts/games/crew/assignments)
+  traffic.html             - TRAFFIC dashboard (flight status monitor)
 integrations/firebase/     - FirestoreStore wrapper (firebase-admin lives here for pnpm hoisting)
 integrations/grafana/      - Prometheus-format metrics push
 integrations/clickhouse/   - Append-only audit log (optional, needs CLICKHOUSE_URL)
 integrations/google-cloud/ - Gemini client (stubs in fixture mode)
+integrations/aviationstack/- AviationStack flight status API client (TRAFFIC agent)
 fixtures/alcs-gm4/         - ALCS Game 4 twelve-inning night scenario
 site/                      - Marketing site (static HTML)
 ```
@@ -84,6 +86,7 @@ pnpm build         # tsc -b (not required for dev)
 - **Firestore** persistence for accounts, entities, members, crew, games, and assignments
 - **Fixture mode**: `/demo` route serves the board with auto-playing fixture data, no external dependencies
 - **Game timing model**: gameType → defaults (duration, strike), with per-game overrides for the wrap-to-gate chain
+- **TRAFFIC flight monitoring**: Crew routing uses curated real flight schedule (28 airports, direct + connecting). AviationStack API integration polls live status when `FLIGHT_STATUS_API_KEY` is set. TRAFFIC is read-only per agent-separation — never receives crew identity, next calls, or fare data. Dashboard at `/traffic`.
 
 ## Deployment
 
