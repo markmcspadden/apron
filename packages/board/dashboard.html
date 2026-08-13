@@ -160,7 +160,12 @@ try{ data = JSON.parse(raw); }catch(e){
 var member = data.member;
 var account = data.account;
 var entity = data.entity;
-var games = data.games || [];
+var games = (data.games || []).sort(function(a, b){
+  // Sort by date descending (newest first), then by startTime descending
+  var dc = (b.date || '').localeCompare(a.date || '');
+  if (dc !== 0) return dc;
+  return (b.startTime || '').localeCompare(a.startTime || '');
+});
 
 // ---- Populate header ----
 $('user-name').textContent = member.name;
