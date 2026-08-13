@@ -28,6 +28,7 @@ COPY packages/types/package.json packages/types/package.json
 COPY integrations/clickhouse/package.json integrations/clickhouse/package.json
 COPY integrations/firebase/package.json integrations/firebase/package.json
 COPY integrations/google-cloud/package.json integrations/google-cloud/package.json
+COPY integrations/aviationstack/package.json integrations/aviationstack/package.json
 COPY integrations/grafana/package.json integrations/grafana/package.json
 
 # Install dependencies. The lockfile may not always be in sync (fixtures /
