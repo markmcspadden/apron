@@ -1021,12 +1021,51 @@ function renderProd() {
     $('proster').innerHTML = GAME_ROSTER.map(function(c) {
       var tierCls = tierMap[c.tier] || 'T2';
       var rowCls = tierCls === 'T1' ? 't1' : 't2';
+
+      // Next call — respect provenance for production seat
+      var callCell = '—';
+      if (c.nextCall) {
+        var prov = c.nextCall.provenance || {};
+        var isBrokerable = prov.brokerable === true;
+        var isExternal = c.nextCall.type === 'external';
+        if (isExternal && !isBrokerable) {
+          // Redact non-brokerable external calls in production seat
+          var dest = c.nextCall.destinationCity || c.nextCall.destinationAirport || '';
+          callCell = 'External call · <span class="redact">withheld</span>'
+            + (dest ? '<div class="sub2">' + esc(dest) + '</div>' : '');
+        } else {
+          var callParts = [];
+          if (c.nextCall.type === 'same-production') callParts.push('Same show');
+          else if (c.nextCall.type === 'external') callParts.push('External');
+          else if (c.nextCall.type === 'home') callParts.push('Home');
+          var callDest = c.nextCall.destinationCity || c.nextCall.destinationAirport || '';
+          if (callDest) callParts.push(esc(callDest));
+          callCell = callParts.join(' · ');
+          var callTimeDisp = c.nextCall.callTime ? c.nextCall.callTime.display || c.nextCall.callTime : '';
+          if (callTimeDisp) callCell += '<div class="sub2">' + esc(String(callTimeDisp)) + '</div>';
+        }
+      }
+
+      // Routing
+      var routeCell = '—';
+      if (c.routing) {
+        var rParts = [];
+        if (c.routing.carrierDisplay) rParts.push(esc(c.routing.carrierDisplay));
+        if (c.routing.routeSummary) rParts.push(esc(c.routing.routeSummary));
+        routeCell = '<div class="mono" style="font-size:11.5px">' + rParts.join(' · ') + '</div>';
+        if (c.routing.departureTime) {
+          routeCell += '<div class="sub2">Dep ' + esc(c.routing.departureTime)
+            + (c.routing.arrivalTime ? ' → Arr ' + esc(c.routing.arrivalTime) : '') + '</div>';
+        }
+      }
+
+      var st = c.status || 'CLEAR';
       return '<tr class="' + rowCls + '">'
         + '<td><span class="pos' + (tierCls === 'T1' ? ' key' : '') + '">' + esc(c.position) + '</span></td>'
-        + '<td><div class="nm">' + esc(c.name) + '</div><div class="sub2">' + esc(c.homeMarket) + '</div></td>'
-        + '<td style="font-size:12px">' + esc(c.callTime || '') + '</td>'
-        + '<td>—</td>'
-        + '<td><span class="st CLEAR">CLEAR</span></td>'
+        + '<td><div class="nm">' + esc(c.name) + '</div><div class="sub2">' + esc(c.homeMarket || '') + '</div></td>'
+        + '<td style="font-size:12px">' + callCell + '</td>'
+        + '<td>' + routeCell + '</td>'
+        + '<td><span class="st ' + esc(st) + '">' + esc(st) + '</span></td>'
         + '</tr>';
     }).join('');
   } else {
@@ -1204,7 +1243,25 @@ if (gameParam) {
       }
       $('p-pf-s').textContent = 'Scheduled';
 
-      if (boardData && boardData.roster && boardData.roster.length > 0) {
+      // Prefer crewAssignments (rich data with next call, routing, provenance)
+      // over roster (basic name/position only). Merge tier/department from roster.
+      if (boardData.crewAssignments && boardData.crewAssignments.length > 0) {
+        var rosterMap = {};
+        if (boardData.roster) {
+          boardData.roster.forEach(function(r) { rosterMap[r.crewId] = r; });
+        }
+        boardData.crewAssignments.forEach(function(ca) {
+          var r = rosterMap[ca.crewId] || {};
+          ca.homeMarket = r.homeMarket || ca.homeAirport || '';
+          ca.tier = r.tier || ca.tier || '';
+          ca.department = r.department || ca.department || '';
+          ca.callTime = boardGameData.callTime || '';
+        });
+        GAME_ROSTER = boardData.crewAssignments;
+
+        $('prod-sub').textContent = (boardGameData.venue || '')
+          + ' · ' + boardData.crewAssignments.length + ' traveling crew';
+      } else if (boardData && boardData.roster && boardData.roster.length > 0) {
         boardData.roster.forEach(function(c) { c.callTime = boardGameData.callTime || ''; });
         GAME_ROSTER = boardData.roster;
 

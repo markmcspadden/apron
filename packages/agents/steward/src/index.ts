@@ -25,6 +25,8 @@ export class StewardAgent extends BaseAgent {
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   /** Track the last predicted end we evaluated against — only re-evaluate on change */
   private lastPredictedEnd: string | null = null;
+  /** Pending trigger that was skipped because an evaluation was in progress */
+  private pendingTrigger: ComplianceUpdate['trigger'] | null = null;
 
   constructor() {
     super('STEWARD');
@@ -82,6 +84,7 @@ export class StewardAgent extends BaseAgent {
     this.watchConfig = null;
     this.lastSnapshot = null;
     this.lastPredictedEnd = null;
+    this.pendingTrigger = null;
   }
 
   /**
@@ -127,7 +130,8 @@ export class StewardAgent extends BaseAgent {
   private async runEvaluation(trigger: ComplianceUpdate['trigger']): Promise<void> {
     if (!this.watchConfig) return;
     if (this.evaluating) {
-      console.log(`[steward] Evaluation already in progress — skipping ${trigger}`);
+      console.log(`[steward] Evaluation already in progress — queuing ${trigger}`);
+      this.pendingTrigger = trigger;
       return;
     }
 
@@ -199,6 +203,14 @@ export class StewardAgent extends BaseAgent {
       console.error(`[steward] Evaluation error (${trigger}):`, msg);
     } finally {
       this.evaluating = false;
+
+      // If a trigger was queued while we were evaluating, run it now
+      if (this.pendingTrigger) {
+        const queued = this.pendingTrigger;
+        this.pendingTrigger = null;
+        console.log(`[steward] Running queued evaluation: ${queued}`);
+        void this.runEvaluation(queued);
+      }
     }
   }
 
