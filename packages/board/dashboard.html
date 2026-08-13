@@ -64,6 +64,12 @@ body{background:var(--bg);color:var(--ink);font-family:var(--f);font-size:14px;
 .game-top{display:flex;align-items:center;gap:10px}
 .game-network{font-family:var(--m);font-size:10px;letter-spacing:.1em;padding:4px 8px;
   border-radius:4px;background:#12212E;border:1px solid #25405A;color:#9CC6EA;text-transform:uppercase}
+.game-sport{font-family:var(--m);font-size:10px;letter-spacing:.1em;padding:4px 8px;
+  border-radius:4px;text-transform:uppercase}
+.game-sport.baseball{background:#1A2E1A;border:1px solid #2A4A2A;color:#7EBF7E}
+.game-sport.football{background:#2E2308;border:1px solid #4A3B12;color:#D4A843}
+.game-sport.basketball{background:#2E1508;border:1px solid #4A2814;color:#E08850}
+.game-sport.hockey{background:#12212E;border:1px solid #25405A;color:#9CC6EA}
 .game-title{font-size:16px;font-weight:650;letter-spacing:-.01em;flex:1}
 .game-details{display:flex;flex-wrap:wrap;gap:16px;font-size:12px;color:var(--ink-2)}
 .game-details .detail{display:flex;align-items:center;gap:5px}
@@ -196,9 +202,13 @@ if(games.length === 0){
     if(g.callTime) dateStr += ' · Call ' + g.callTime;
     var seatParam = seatType === 'tmc' ? 'tmc' : 'prod';
 
+    var sportIcons = {baseball:'⚾', football:'🏈', basketball:'🏀', hockey:'🏒'};
+    var sportLabel = g.gameType ? (sportIcons[g.gameType] || '') + ' ' + g.gameType : '';
+
     return '<div class="game-card" data-game-id="' + esc(g.id) + '">'
       + '<div class="game-top">'
       + '<span class="game-network">' + esc(g.network || '') + '</span>'
+      + (g.gameType ? '<span class="game-sport ' + esc(g.gameType) + '">' + sportLabel + '</span>' : '')
       + '<span class="game-title">' + esc(g.title || '') + '</span>'
       + '</div>'
       + '<div class="game-details">'
