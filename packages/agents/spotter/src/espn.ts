@@ -77,6 +77,12 @@ export interface VenueInfo {
 
 const BASE_URL = 'https://site.api.espn.com/apis/site/v2/sports';
 
+/** Standard browser UA — ESPN blocks bare fetch from cloud IPs */
+const FETCH_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36',
+  'Accept': 'application/json',
+};
+
 export class ESPNClient {
   /**
    * Fetch the scoreboard for a sport and find a specific game by event ID.
@@ -90,7 +96,7 @@ export class ESPNClient {
     }
 
     try {
-      const res = await fetch(`${BASE_URL}/${path}/scoreboard`);
+      const res = await fetch(`${BASE_URL}/${path}/scoreboard`, { headers: FETCH_HEADERS });
       if (!res.ok) {
         console.warn(`[espn] Scoreboard fetch failed: ${res.status}`);
         return null;
@@ -120,7 +126,7 @@ export class ESPNClient {
     if (!path) return [];
 
     try {
-      const res = await fetch(`${BASE_URL}/${path}/scoreboard`);
+      const res = await fetch(`${BASE_URL}/${path}/scoreboard`, { headers: FETCH_HEADERS });
       if (!res.ok) return [];
 
       const data = await res.json() as ESPNScoreboardResponse;
