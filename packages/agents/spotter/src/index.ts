@@ -22,7 +22,7 @@ export type { ESPNGameState, LiveGameSummary } from './espn.js';
 // ---------------------------------------------------------------------------
 
 /** How often to poll ESPN for score updates (ms) */
-const SCORE_POLL_INTERVAL = 30_000; // 30s
+const SCORE_POLL_INTERVAL = 60_000; // 1 min
 
 /** How often to poll weather (ms) — weather changes slowly */
 const WEATHER_POLL_INTERVAL = 300_000; // 5 min
