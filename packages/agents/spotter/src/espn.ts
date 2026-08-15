@@ -78,9 +78,12 @@ export interface VenueInfo {
 
 const BASE_URL = 'https://site.api.espn.com/apis/site/v2/sports';
 
-/** Standard browser UA — ESPN blocks bare fetch from cloud IPs */
+/**
+ * ESPN blocks Node's default `undici` User-Agent and browser-like UAs
+ * without real browser signals. A plain curl-style UA works reliably.
+ */
 const FETCH_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36',
+  'User-Agent': 'curl/8.7.1',
   'Accept': 'application/json',
 };
 
