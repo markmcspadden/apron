@@ -14,6 +14,7 @@ const SPORT_PATHS: Record<string, string> = {
   football: 'football/nfl',
   basketball: 'basketball/nba',
   hockey: 'hockey/nhl',
+  soccer: 'soccer/usa.1',
 };
 
 // ---------------------------------------------------------------------------

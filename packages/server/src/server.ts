@@ -271,8 +271,8 @@ export async function createServer(opts: ServerOptions = {}) {
     if (!game.espnEventId) {
       return { ok: false, error: 'Game has no espnEventId — set it in the admin console first' };
     }
-    if (!game.gameType || !['baseball', 'football', 'basketball', 'hockey'].includes(game.gameType)) {
-      return { ok: false, error: `gameType must be baseball, football, basketball, or hockey (got: ${game.gameType})` };
+    if (!game.gameType || !['baseball', 'football', 'basketball', 'hockey', 'soccer'].includes(game.gameType)) {
+      return { ok: false, error: `gameType must be baseball, football, basketball, hockey, or soccer (got: ${game.gameType})` };
     }
 
     const defaults = GAME_TYPE_DEFAULTS[game.gameType as GameType];
@@ -280,7 +280,7 @@ export async function createServer(opts: ServerOptions = {}) {
 
     const config: SpotterWatchConfig = {
       showId: game.id,
-      sport: game.gameType as 'baseball' | 'football' | 'basketball' | 'hockey',
+      sport: game.gameType as 'baseball' | 'football' | 'basketball' | 'hockey' | 'soccer',
       espnEventId: game.espnEventId,
       scheduledStart: new Date(
         localTimeToUtcMs(game.date, game.startTime ?? '19:00', resolveGameTimezone(game)),
@@ -573,7 +573,7 @@ export async function createServer(opts: ServerOptions = {}) {
         for (const game of games) {
           // Skip: no ESPN ID, wrong game type, already watching, already done
           if (!game.espnEventId) continue;
-          if (!game.gameType || !['baseball', 'football', 'basketball', 'hockey'].includes(game.gameType)) continue;
+          if (!game.gameType || !['baseball', 'football', 'basketball', 'hockey', 'soccer'].includes(game.gameType)) continue;
           if (spotters.has(game.id)) continue;
           if (game.agents?.SPOTTER?.status === 'done') continue;
 

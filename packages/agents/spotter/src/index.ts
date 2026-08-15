@@ -102,7 +102,7 @@ export interface SpotterWatchConfig {
   showId: string;
 
   /** Sport type for ESPN lookup */
-  sport: 'baseball' | 'football' | 'basketball' | 'hockey';
+  sport: 'baseball' | 'football' | 'basketball' | 'hockey' | 'soccer';
 
   /** ESPN event ID (numeric string) */
   espnEventId: string;
