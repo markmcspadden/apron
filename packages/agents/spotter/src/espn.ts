@@ -2,7 +2,11 @@
  * ESPN public API client — fetches live scores and game state.
  *
  * Uses the undocumented but stable site.api.espn.com endpoint.
- * No API key required. Supports MLB, NFL, NBA, NHL.
+ * No API key required. Supports MLB, NFL, NBA, NHL, MLS.
+ *
+ * `getGame()` uses the /summary endpoint for direct event lookup (more
+ * reliable from cloud IPs than the scoreboard endpoint).
+ * `getScoreboard()` still hits the scoreboard for multi-game listing.
  */
 
 // ---------------------------------------------------------------------------
@@ -76,7 +80,11 @@ export interface VenueInfo {
 // Client
 // ---------------------------------------------------------------------------
 
-const BASE_URL = 'https://site.api.espn.com/apis/site/v2/sports';
+/** Scoreboard endpoint — returns all games for a sport on the current day */
+const SCOREBOARD_URL = 'https://site.api.espn.com/apis/site/v2/sports';
+
+/** Summary endpoint — direct event lookup by ID, more reliable from cloud IPs */
+const SUMMARY_URL = 'https://site.api.espn.com/apis/site/v2/sports';
 
 /**
  * ESPN blocks Node's default `undici` User-Agent and browser-like UAs
@@ -89,8 +97,9 @@ const FETCH_HEADERS = {
 
 export class ESPNClient {
   /**
-   * Fetch the scoreboard for a sport and find a specific game by event ID.
-   * Returns null if the game isn't found (wrong date, bad ID, etc.).
+   * Fetch a specific game by event ID using the summary endpoint.
+   * This does a direct event lookup — no scoreboard scan needed.
+   * Returns null if the event doesn't exist or the sport is unknown.
    */
   async getGame(sport: string, eventId: string): Promise<ESPNGameState | null> {
     const path = SPORT_PATHS[sport];
@@ -100,22 +109,15 @@ export class ESPNClient {
     }
 
     try {
-      const res = await fetch(`${BASE_URL}/${path}/scoreboard`, { headers: FETCH_HEADERS });
+      const url = `${SUMMARY_URL}/${path}/summary?event=${eventId}`;
+      const res = await fetch(url, { headers: FETCH_HEADERS });
       if (!res.ok) {
-        console.warn(`[espn] Scoreboard fetch failed: ${res.status}`);
+        console.warn(`[espn] Summary fetch failed: ${res.status} for event ${eventId}`);
         return null;
       }
 
-      const data = await res.json() as ESPNScoreboardResponse;
-
-      for (const event of data.events ?? []) {
-        if (event.id === eventId) {
-          return parseEvent(event);
-        }
-      }
-
-      // Not found on today's scoreboard — might be a different date
-      return null;
+      const data = await res.json() as ESPNSummaryResponse;
+      return parseSummary(eventId, data);
     } catch (err) {
       console.warn(`[espn] Fetch error:`, err);
       return null;
@@ -130,7 +132,7 @@ export class ESPNClient {
     if (!path) return [];
 
     try {
-      const res = await fetch(`${BASE_URL}/${path}/scoreboard`, { headers: FETCH_HEADERS });
+      const res = await fetch(`${SCOREBOARD_URL}/${path}/scoreboard`, { headers: FETCH_HEADERS });
       if (!res.ok) return [];
 
       const data = await res.json() as ESPNScoreboardResponse;
@@ -200,8 +202,93 @@ export interface LiveGameSummary {
 }
 
 // ---------------------------------------------------------------------------
-// Internal parse helpers
+// Internal types & parse helpers
 // ---------------------------------------------------------------------------
+
+// ---- Summary endpoint types ----
+
+interface ESPNSummaryResponse {
+  header?: {
+    id?: string;
+    competitions?: Array<{
+      date?: string;
+      status?: {
+        type?: {
+          name?: string;
+          state?: string;
+          detail?: string;
+          shortDetail?: string;
+        };
+        period?: number;
+        displayClock?: string;
+      };
+      competitors?: Array<{
+        homeAway?: string;
+        score?: string;
+        team?: {
+          abbreviation?: string;
+          displayName?: string;
+        };
+      }>;
+    }>;
+  };
+  gameInfo?: {
+    venue?: {
+      fullName?: string;
+      indoor?: boolean;
+      address?: {
+        city?: string;
+        state?: string;
+      };
+    };
+  };
+}
+
+function parseSummary(eventId: string, data: ESPNSummaryResponse): ESPNGameState | null {
+  const header = data.header;
+  if (!header) return null;
+
+  const comp = (header.competitions ?? [])[0];
+  if (!comp) return null;
+
+  const status = comp.status ?? {};
+  const statusType = status.type ?? {};
+  const competitors = comp.competitors ?? [];
+  const venue = data.gameInfo?.venue ?? {};
+
+  const home = competitors.find(c => c.homeAway === 'home');
+  const away = competitors.find(c => c.homeAway === 'away');
+
+  return {
+    eventId,
+    shortName: `${away?.team?.abbreviation ?? '?'} @ ${home?.team?.abbreviation ?? '?'}`,
+    startTime: comp.date ?? '',
+    state: (statusType.state as 'pre' | 'in' | 'post') ?? 'pre',
+    statusName: statusType.name ?? '',
+    detail: statusType.detail ?? '',
+    shortDetail: statusType.shortDetail ?? '',
+    period: status.period ?? 0,
+    clock: status.displayClock ?? '0:00',
+    home: {
+      abbreviation: home?.team?.abbreviation ?? '',
+      displayName: home?.team?.displayName ?? '',
+      score: parseInt(home?.score ?? '0', 10) || 0,
+    },
+    away: {
+      abbreviation: away?.team?.abbreviation ?? '',
+      displayName: away?.team?.displayName ?? '',
+      score: parseInt(away?.score ?? '0', 10) || 0,
+    },
+    venue: {
+      name: venue.fullName ?? '',
+      city: venue.address?.city ?? '',
+      state: venue.address?.state ?? '',
+      indoor: venue.indoor ?? false,
+    },
+  };
+}
+
+// ---- Scoreboard endpoint types (used by getScoreboard/findLiveGames) ----
 
 interface ESPNScoreboardResponse {
   events?: ESPNEvent[];
