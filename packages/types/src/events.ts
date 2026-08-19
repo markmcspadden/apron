@@ -1,5 +1,6 @@
 import type { AgentName, ShowState, BoardStatus, ProvenanceLevel, ShowId } from './domain.js';
 import type { OptionGroup, ChainNode } from './models.js';
+import type { NextCallType } from './crew-itinerary.js';
 
 interface BaseEvent {
   id: string;
@@ -127,6 +128,68 @@ export interface ComplianceUpdate extends BaseEvent {
   summary: string;
 }
 
+// ---------------------------------------------------------------------------
+// ADVANCE — roster state with seat-aware disclosure
+// ---------------------------------------------------------------------------
+
+/** Per-crew next-call entry with separate TMC and production views. */
+export interface RosterEntry {
+  crewId: string;
+  name: string;
+  position: string;
+  keyPosition: boolean;
+  tier: 'T1' | 'T2';
+  homeAirport: string;
+
+  /** Provenance level of the next-call fact. */
+  provenanceLevel: ProvenanceLevel;
+  /** Whether FIXER/STEWARD may act on this (false for inferred/none). */
+  actionable: boolean;
+
+  /** TMC desk view — always sees full detail. */
+  tmc: {
+    nextCallType: NextCallType;
+    destination: string;
+    production: string | null;
+    network: string | null;
+    callTime: string | null;
+    source: string;
+    brokerable: boolean;
+  };
+
+  /**
+   * Production seat view — external calls that are not brokerable are redacted.
+   * "Redaction is enforced at the data layer, not the display layer."
+   */
+  production: {
+    nextCallType: NextCallType;
+    destination: string | null;
+    production: string | null;
+    callTime: string | null;
+    redacted: boolean;
+  };
+}
+
+/** ADVANCE roster snapshot — emitted on crew change or heartbeat. */
+export interface RosterUpdate extends BaseEvent {
+  type: 'roster-update';
+  /** What triggered this scan. */
+  trigger: 'game-started' | 'heartbeat' | 'crew-changed';
+  /** Per-crew entries with seat-aware views. */
+  crew: RosterEntry[];
+  /** Aggregate counts. */
+  summary: {
+    total: number;
+    withNextCall: number;
+    external: number;
+    externalDisclosed: number;
+    externalRedacted: number;
+    inferred: number;
+    sameProduction: number;
+    home: number;
+  };
+}
+
 export type AgentEvent =
   | GameStateUpdate
   | ChainUpdate
@@ -139,7 +202,8 @@ export type AgentEvent =
   | ShowClosed
   | AgentStatusChange
   | ShowStateChange
-  | ComplianceUpdate;
+  | ComplianceUpdate
+  | RosterUpdate;
 
 export interface BoardEvent {
   type: 'agent-event';

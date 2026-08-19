@@ -36,6 +36,8 @@ export type {
   AgentStatusChange,
   ComplianceUpdate,
   CrewComplianceEntry,
+  RosterUpdate,
+  RosterEntry,
   BoardEvent,
 } from './events.js';
 

@@ -690,7 +690,9 @@ export class AdminStore {
         .collection('accounts').doc(accountId)
         .collection('games').doc(gameId)
         .collection('agents').doc(agentName);
-      await ref.set({ ...data, agent: agentName, updatedAt: serverTimestamp() }, { merge: true });
+      // Strip undefined values — Firestore rejects them (e.g. optional log entry fields)
+      const clean = JSON.parse(JSON.stringify({ ...data, agent: agentName }));
+      await ref.set({ ...clean, updatedAt: serverTimestamp() }, { merge: true });
       return;
     }
     const key = `${accountId}:${gameId}`;

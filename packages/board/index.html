@@ -442,6 +442,9 @@ tbody tr.t2{box-shadow:inset 3px 0 0 var(--line-2)}
     <div class="cell" id="p-traffic-cell" style="display:none"><div class="k">✈ Flights</div>
       <div class="v" id="p-traffic" style="font-size:19px">—</div>
       <div class="s" id="p-traffic-s">TRAFFIC idle</div></div>
+    <div class="cell" id="p-advance-cell" style="display:none"><div class="k">🧭 Roster</div>
+      <div class="v" id="p-advance" style="font-size:19px">—</div>
+      <div class="s" id="p-advance-s">ADVANCE idle</div></div>
   </div>
 
   <div class="pcard" id="pchain-card" style="margin-bottom:16px;display:none">
@@ -783,6 +786,38 @@ function applyAgentEvent(ev) {
     logMsg += ' (' + crewCount + ' crew)';
 
     logEvent({ ts: ev.timestamp, who: ev.agent, msg: logMsg });
+  }
+
+  // ADVANCE roster-update — update the Roster card on production seat
+  if (ev.type === 'roster-update') {
+    $('p-advance-cell').style.display = '';
+    var rosterSummary = ev.summary || {};
+    var rTotal = rosterSummary.total || 0;
+    var rExt = rosterSummary.external || 0;
+    var rRedacted = rosterSummary.externalRedacted || 0;
+
+    $('p-advance').textContent = rTotal;
+    $('p-advance').className = 'v mono' + (rRedacted > 0 ? ' watch' : '');
+
+    var rParts = [];
+    if (rExt > 0) rParts.push(rExt + ' external');
+    if (rRedacted > 0) rParts.push(rRedacted + ' withheld');
+    else if (rExt > 0) rParts.push('all disclosed');
+    if (rosterSummary.inferred > 0) rParts.push(rosterSummary.inferred + ' inferred');
+    $('p-advance-s').textContent = rParts.length > 0 ? rParts.join(' · ') : rTotal + ' crew tracked';
+
+    logEvent({ ts: ev.timestamp, who: ev.agent, msg: ev.message || 'Roster update (' + ev.trigger + ')' });
+  }
+
+  // ADVANCE agent-status — show/hide the roster card
+  if (ev.type === 'agent-status' && ev.agent === 'ADVANCE') {
+    if (ev.agentStates && ev.agentStates.ADVANCE === 'on') {
+      $('p-advance-cell').style.display = '';
+      $('p-advance-s').textContent = 'Monitoring started';
+    }
+    if (ev.agentStates && ev.agentStates.ADVANCE === 'done') {
+      $('p-advance-s').textContent = 'Monitoring complete';
+    }
   }
 
   // Re-render production seat to pick up changes

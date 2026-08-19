@@ -71,6 +71,8 @@ export async function createServer(opts: ServerOptions = {}) {
   const stewards = new Map<string, StewardAgent>();
   /** Live TRAFFIC instances — one per watched game, keyed by gameId. */
   const traffics = new Map<string, TrafficAgent>();
+  /** Live ADVANCE instances — one per watched game, keyed by gameId. */
+  const advances = new Map<string, AdvanceAgent>();
   /** AviationStack client — reads API key from env, never exposes it. */
   const aviationStack = new AviationStackClient();
   orchestrator.registerAgent(new TrafficAgent());
@@ -183,7 +185,43 @@ export async function createServer(opts: ServerOptions = {}) {
     }
   }
 
-  // Notify STEWARD + TRAFFIC when crew data changes (assignments, routing, nextCall)
+  // ---- Reusable ADVANCE (re)start — called from startWatch() and crew-change callback ----
+  async function startOrRestartAdvance(accountId: string, gameId: string): Promise<void> {
+    try {
+      const prevAdvance = advances.get(gameId);
+      if (prevAdvance) prevAdvance.stopWatching();
+
+      const liveAdvance = new AdvanceAgent();
+      const tNow = new Date();
+      const advanceCred: import('@apron/types').Credential = {
+        agent: 'ADVANCE',
+        showId: gameId,
+        grant: { agent: 'ADVANCE', capabilities: ['read:crew-sheets', 'read:call-sheets', 'read:roster', 'write:roster-state'], role: 'state', neverReceives: ['payment-instruments', 'fare-detail', 'hr-records'] },
+        issuedAt: tNow.toISOString(),
+        expiresAt: new Date(tNow.getTime() + 86400000).toISOString(),
+      };
+      const bus = orchestrator.getRuntime().getBus();
+      liveAdvance.bind({ bus, credential: advanceCred, showId: gameId });
+
+      liveAdvance.startWatching({
+        gameId,
+        accountId,
+        getCrewAssignments: () => adminStore.listCrewAssignments(accountId, gameId),
+      });
+      advances.set(gameId, liveAdvance);
+
+      const startedAt = new Date().toISOString();
+      void adminStore.setAgentAssignment(accountId, gameId, 'ADVANCE', {
+        status: 'active', startedAt,
+      });
+
+      console.log(`[advance] Roster monitoring started for game ${gameId}`);
+    } catch (err) {
+      console.error('[advance] Failed to start roster monitoring:', err);
+    }
+  }
+
+  // Notify STEWARD + TRAFFIC + ADVANCE when crew data changes
   setCrewChangeCallback((accountId, gameId) => {
     const activeSteward = stewards.get(gameId);
     if (activeSteward) {
@@ -195,6 +233,13 @@ export async function createServer(opts: ServerOptions = {}) {
     if (spotters.has(gameId)) {
       console.log(`[traffic] Crew data changed for game ${gameId} — refreshing flight monitor`);
       void startOrRestartTraffic(accountId, gameId);
+    }
+
+    // Notify ADVANCE — triggers roster re-scan with updated disclosure model
+    const activeAdvance = advances.get(gameId);
+    if (activeAdvance) {
+      console.log(`[advance] Crew data changed for game ${gameId} — re-scanning roster`);
+      activeAdvance.onCrewChanged();
     }
   });
 
@@ -425,6 +470,9 @@ export async function createServer(opts: ServerOptions = {}) {
     // ---- Start TRAFFIC flight monitoring alongside SPOTTER ----
     void startOrRestartTraffic(accountId, game.id);
 
+    // ---- Start ADVANCE roster monitoring alongside SPOTTER ----
+    void startOrRestartAdvance(accountId, game.id);
+
     // Broadcast SPOTTER events to WebSocket clients + auto-cleanup on game end
     const watchedGameId = game.id;
     const watchedAcctId = accountId;
@@ -495,6 +543,27 @@ export async function createServer(opts: ServerOptions = {}) {
             });
           }
 
+          // Stop ADVANCE when SPOTTER finishes
+          const finishedAdvance = advances.get(watchedGameId);
+          if (finishedAdvance) {
+            const advanceLog = JSON.parse(JSON.stringify(finishedAdvance.getLog()));
+            const advanceSnapshot = JSON.parse(JSON.stringify(finishedAdvance.getLastSnapshot() ?? null));
+            finishedAdvance.stopWatching();
+            advances.delete(watchedGameId);
+            const advanceStoppedAt = new Date().toISOString();
+            void adminStore.setAgentAssignment(watchedAcctId, watchedGameId, 'ADVANCE', {
+              status: 'done',
+              startedAt: watchStartedAt,
+              stoppedAt: advanceStoppedAt,
+            });
+            void adminStore.setAgentRecord(watchedAcctId, watchedGameId, 'ADVANCE', {
+              status: 'done',
+              stoppedAt: advanceStoppedAt,
+              lastSnapshot: advanceSnapshot,
+              log: advanceLog,
+            });
+          }
+
           const stoppedAt = new Date().toISOString();
           void adminStore.setAgentAssignment(watchedAcctId, watchedGameId, 'SPOTTER', {
             status: 'done',
@@ -523,6 +592,14 @@ export async function createServer(opts: ServerOptions = {}) {
 
       // Forward TRAFFIC events to WebSocket clients
       if (event.agent === 'TRAFFIC' && event.showId === watchedGameId) {
+        const msg = JSON.stringify({ type: 'agent-event', event });
+        for (const ws of clients) {
+          if (ws.readyState === ws.OPEN) ws.send(msg);
+        }
+      }
+
+      // Forward ADVANCE events to WebSocket clients
+      if (event.agent === 'ADVANCE' && event.showId === watchedGameId) {
         const msg = JSON.stringify({ type: 'agent-event', event });
         for (const ws of clients) {
           if (ws.readyState === ws.OPEN) ws.send(msg);
@@ -890,6 +967,92 @@ export async function createServer(opts: ServerOptions = {}) {
       return;
     }
 
+    // ---- ADVANCE roster monitoring API ----
+    if (path === '/api/advance/status') {
+      // Active roster monitors from in-memory Map
+      const activeMonitors: Array<{ gameId: string; title: string; timezone: string; snapshot: ReturnType<AdvanceAgent['getLastSnapshot']> }> = [];
+      const advGameInfo = new Map<string, { title: string; timezone: string }>();
+      try {
+        const activeGames = await adminStore.listGamesByAgentStatus('ADVANCE', ['active']);
+        for (const g of activeGames) advGameInfo.set(g.id, { title: g.title, timezone: resolveGameTimezone(g) });
+      } catch { /* ok */ }
+      for (const [gid, a] of advances) {
+        const info = advGameInfo.get(gid);
+        activeMonitors.push({ gameId: gid, title: info?.title ?? gid, timezone: info?.timezone ?? 'America/New_York', snapshot: a.getLastSnapshot() });
+      }
+
+      // Completed ADVANCE agents from Firestore
+      const completed: Array<{
+        gameId: string;
+        accountId: string;
+        title: string;
+        agent: import('./admin-store.js').AgentAssignment;
+        lastSnapshot?: Record<string, unknown>;
+      }> = [];
+      try {
+        const doneGames = await adminStore.listGamesByAgentStatus('ADVANCE', ['done', 'idle']);
+        for (const g of doneGames) {
+          if (!advances.has(g.id) && g.agents?.ADVANCE) {
+            const record = await adminStore.getAgentRecord(g.accountId, g.id, 'ADVANCE');
+            completed.push({
+              gameId: g.id,
+              accountId: g.accountId,
+              title: g.title,
+              agent: g.agents.ADVANCE,
+              lastSnapshot: record?.['lastSnapshot'] as Record<string, unknown> | undefined,
+            });
+          }
+        }
+      } catch { /* Firestore unavailable */ }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ active: activeMonitors, completed }));
+      return;
+    }
+
+    if (path === '/api/advance/log') {
+      const params = new URL(req.url ?? '/', `http://${req.headers.host}`).searchParams;
+      const count = parseInt(params.get('n') ?? '200', 10);
+      const gameId = params.get('gameId');
+      if (gameId && advances.has(gameId)) {
+        const a = advances.get(gameId)!;
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ entries: a.getLog(count), total: a.getStatus().logTotal }));
+      } else {
+        const all: Array<ReturnType<AdvanceAgent['getLog']>[number] & { gameId: string }> = [];
+        for (const [gid, a] of advances) {
+          for (const entry of a.getLog(count)) {
+            all.push({ ...entry, gameId: gid });
+          }
+        }
+        all.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+        const total = Array.from(advances.values()).reduce((sum, a) => sum + a.getStatus().logTotal, 0);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ entries: all.slice(-count), total }));
+      }
+      return;
+    }
+
+    if (path === '/api/advance/record') {
+      const params = new URL(req.url ?? '/', `http://${req.headers.host}`).searchParams;
+      const accountId = params.get('accountId');
+      const gameId = params.get('gameId');
+      if (!accountId || !gameId) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'accountId and gameId required' }));
+        return;
+      }
+      try {
+        const record = await adminStore.getAgentRecord(accountId, gameId, 'ADVANCE');
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ record }));
+      } catch {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Failed to fetch agent record' }));
+      }
+      return;
+    }
+
     if (path === '/api/play' && req.method === 'POST') {
       orchestrator.play();
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -976,6 +1139,27 @@ export async function createServer(opts: ServerOptions = {}) {
           });
         }
 
+        // Also stop ADVANCE when unwatching
+        const existingAdvance = advances.get(gameId!);
+        if (existingAdvance) {
+          const advanceLog = JSON.parse(JSON.stringify(existingAdvance.getLog()));
+          const advanceSnapshot = JSON.parse(JSON.stringify(existingAdvance.getLastSnapshot() ?? null));
+          existingAdvance.stopWatching();
+          advances.delete(gameId!);
+          const advanceStoppedAt = new Date().toISOString();
+          void adminStore.setAgentAssignment(acctId!, gameId!, 'ADVANCE', {
+            status: 'idle',
+            startedAt: advanceStoppedAt,
+            stoppedAt: advanceStoppedAt,
+          });
+          void adminStore.setAgentRecord(acctId!, gameId!, 'ADVANCE', {
+            status: 'idle',
+            stoppedAt: advanceStoppedAt,
+            lastSnapshot: advanceSnapshot,
+            log: advanceLog,
+          });
+        }
+
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true, watching: false }));
         return;
@@ -1044,6 +1228,8 @@ export async function createServer(opts: ServerOptions = {}) {
       filePath = join(ROOT, 'packages', 'board', 'steward.html');
     } else if (path === '/traffic' || path === '/traffic.html') {
       filePath = join(ROOT, 'packages', 'board', 'traffic.html');
+    } else if (path === '/advance' || path === '/advance.html') {
+      filePath = join(ROOT, 'packages', 'board', 'advance.html');
     } else if (path === '/demo' || path === '/demo.html') {
       filePath = join(ROOT, 'packages', 'board', 'index.html');
     } else if (path === '/login' || path === '/login.html') {

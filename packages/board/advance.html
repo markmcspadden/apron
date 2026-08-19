@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>APRON — ADVANCE Dashboard</title>
+<style>
+:root{
+  --bg:#0B0B0C; --panel:#141416; --panel-2:#1B1B1E; --line:#2A2A2E; --line-2:#3A3A40;
+  --ink:#F2F1EE; --ink-2:#A9A69E; --ink-3:#6E6B65;
+  --clear:#25B04B; --clear-bg:#0E2A16;
+  --watch:#E8A81C; --watch-bg:#2E2308;
+  --risk:#EE7A3C; --risk-bg:#31190A;
+  --down:#E0403C; --down-bg:#33100F;
+  --live:#5DA9E9;
+  --prov-confirmed:#25B04B; --prov-sheet:#5DA9E9; --prov-external:#E8A81C;
+  --prov-inferred:#A9A69E; --prov-none:#6E6B65;
+  --f:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --m:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f);font-size:14px;
+  line-height:1.45;-webkit-font-smoothing:antialiased;display:flex;min-height:100vh}
+.mono{font-family:var(--m);font-variant-numeric:tabular-nums}
+
+/* ---------- sidebar ---------- */
+.sidebar{width:220px;min-height:100vh;background:var(--panel);border-right:1px solid var(--line);
+  position:fixed;top:0;left:0;bottom:0;z-index:90;display:flex;flex-direction:column}
+.sidebar-brand{padding:18px 20px 16px;border-bottom:1px solid var(--line)}
+.sidebar-brand b{font-size:16px;font-weight:750;letter-spacing:.13em}
+.sidebar-brand span{font-size:10px;letter-spacing:.16em;color:var(--ink-3);text-transform:uppercase;
+  margin-left:9px}
+.sidebar-nav{padding:12px 0;flex:1}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 20px;font-size:13px;font-weight:600;
+  color:var(--ink-3);cursor:pointer;transition:background .12s,color .12s;border:none;background:none;
+  width:100%;text-align:left;font-family:var(--f);letter-spacing:.02em;text-decoration:none}
+.nav-item:hover{background:var(--panel-2);color:var(--ink-2)}
+.nav-item.active{color:var(--ink);background:var(--panel-2);border-right:2px solid var(--live)}
+.nav-icon{font-size:15px;width:22px;text-align:center;opacity:.6}
+.nav-item.active .nav-icon{opacity:1}
+.sidebar-foot{padding:14px 20px;border-top:1px solid var(--line);font-size:10px;color:var(--ink-3);
+  letter-spacing:.08em;font-family:var(--m)}
+
+/* ---------- top bar ---------- */
+.topbar{position:fixed;top:0;left:220px;right:0;z-index:80;background:#0B0B0Cf2;
+  backdrop-filter:blur(10px);border-bottom:1px solid var(--line);height:52px;
+  display:flex;align-items:center;padding:0 24px;gap:16px}
+.topbar-title{font-size:12px;letter-spacing:.15em;text-transform:uppercase;color:var(--ink-2);
+  font-weight:640}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:12px}
+.topbar-pill{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  padding:3px 10px;border-radius:99px;font-family:var(--m)}
+.topbar-pill.on{background:var(--clear-bg);color:var(--clear);border:1px solid var(--clear)}
+.topbar-pill.off{background:var(--panel-2);color:var(--ink-3);border:1px solid var(--line)}
+.topbar-pill.warn{background:var(--watch-bg);color:var(--watch);border:1px solid var(--watch)}
+.refresh-label{font-size:11px;color:var(--ink-3);font-family:var(--m)}
+
+/* ---------- main ---------- */
+.main{margin-left:220px;padding:68px 28px 40px;flex:1;min-width:0}
+
+/* ---------- instance block ---------- */
+.advance-instance{margin-bottom:32px;padding-bottom:24px;border-bottom:1px solid var(--line)}
+.advance-instance:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
+.instance-header{display:flex;align-items:center;gap:10px;margin-bottom:14px;padding:10px 16px;
+  background:var(--panel);border:1px solid var(--line);border-radius:8px}
+.instance-icon{font-size:18px}
+.instance-label{font-size:14px;font-weight:700;letter-spacing:.03em;flex:1}
+.instance-uptime{font-size:11px;color:var(--ink-3)}
+
+/* ---------- summary cards ---------- */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:14px;margin-bottom:18px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.card-header{padding:12px 16px 8px;border-bottom:1px solid var(--line);display:flex;
+  align-items:center;gap:8px}
+.card-title{font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink-3)}
+.card-icon{font-size:13px;opacity:.7}
+.card-body{padding:12px 16px 14px}
+.card-big{font-size:28px;font-weight:750;font-family:var(--m);font-variant-numeric:tabular-nums}
+.card-sub{font-size:11px;color:var(--ink-3);margin-top:2px}
+
+/* ---------- view toggle ---------- */
+.view-toggle{display:flex;gap:0;margin-bottom:14px}
+.view-btn{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  padding:6px 16px;border:1px solid var(--line);background:none;color:var(--ink-3);
+  cursor:pointer;font-family:var(--f);transition:all .12s}
+.view-btn:first-child{border-radius:6px 0 0 6px}
+.view-btn:last-child{border-radius:0 6px 6px 0}
+.view-btn:not(:first-child){border-left:none}
+.view-btn:hover{background:var(--panel-2);color:var(--ink-2)}
+.view-btn.active{background:var(--panel-2);color:var(--ink);border-color:var(--line-2)}
+
+/* ---------- roster table ---------- */
+.roster-section{margin-top:12px}
+.roster-heading{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink-2);margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.roster-wrap{background:var(--panel);border:1px solid var(--line);border-radius:8px;
+  overflow:hidden;overflow-x:auto}
+.roster-table{width:100%;border-collapse:collapse;font-size:12px;font-family:var(--m);
+  font-variant-numeric:tabular-nums;min-width:700px}
+.roster-table th{position:sticky;top:0;background:var(--panel);border-bottom:1px solid var(--line);
+  padding:8px 12px;text-align:left;font-size:9px;font-weight:700;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--ink-3);z-index:2;white-space:nowrap}
+.roster-table td{padding:7px 12px;border-bottom:1px solid var(--line);vertical-align:middle;
+  white-space:nowrap}
+.roster-table tr:last-child td{border-bottom:none}
+.roster-table tr:hover{background:var(--panel-2)}
+.crew-name{font-weight:600;color:var(--ink)}
+.crew-pos{color:var(--ink-3);font-size:11px}
+
+/* provenance pills */
+.prov{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.08em;
+  text-transform:uppercase;padding:2px 7px;border-radius:3px}
+.prov-confirmed{background:var(--clear-bg);color:var(--prov-confirmed)}
+.prov-sheet{background:#0E1F33;color:var(--prov-sheet)}
+.prov-external{background:var(--watch-bg);color:var(--prov-external)}
+.prov-inferred{background:var(--panel-2);color:var(--prov-inferred);border:1px solid var(--line)}
+.prov-none{background:var(--panel-2);color:var(--prov-none);border:1px solid var(--line)}
+
+/* next-call type pills */
+.nct{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.08em;
+  text-transform:uppercase;padding:2px 7px;border-radius:3px}
+.nct-external{background:var(--watch-bg);color:var(--watch)}
+.nct-same-production{background:var(--clear-bg);color:var(--clear)}
+.nct-home{background:var(--panel-2);color:var(--ink-3)}
+
+/* redacted indicator */
+.redacted{color:var(--down);font-size:10px;font-weight:700;letter-spacing:.06em}
+.disclosed{color:var(--clear);font-size:10px;font-weight:700;letter-spacing:.06em}
+
+/* actionable pill */
+.act{display:inline-block;font-size:9px;font-weight:700;padding:2px 7px;border-radius:3px;
+  letter-spacing:.08em;text-transform:uppercase}
+.act-yes{background:var(--clear-bg);color:var(--clear)}
+.act-no{background:var(--panel-2);color:var(--ink-3);border:1px solid var(--line)}
+
+/* tier badge */
+.tier{display:inline-block;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;
+  letter-spacing:.06em;font-family:var(--m)}
+.tier-T1{background:#1A1340;color:#9B8CFF}
+.tier-T2{background:var(--panel-2);color:var(--ink-3)}
+
+/* ---------- log ---------- */
+.log-section{margin-top:24px}
+.log-heading{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink-2);margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.log-filters{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+.log-filter{font-size:10px;font-weight:600;padding:3px 10px;border-radius:99px;border:1px solid var(--line);
+  background:none;color:var(--ink-3);cursor:pointer;font-family:var(--f);letter-spacing:.05em;
+  transition:all .12s}
+.log-filter:hover{background:var(--panel-2);color:var(--ink-2)}
+.log-filter.active{background:var(--panel-2);color:var(--ink);border-color:var(--line-2)}
+.log-wrap{max-height:400px;overflow-y:auto;background:var(--panel);border:1px solid var(--line);
+  border-radius:8px}
+.log-entry{padding:6px 14px;font-size:12px;font-family:var(--m);border-bottom:1px solid var(--line);
+  display:flex;gap:12px;line-height:1.5}
+.log-entry:last-child{border-bottom:none}
+.log-ts{color:var(--ink-3);flex-shrink:0;width:72px}
+.log-lvl{flex-shrink:0;width:72px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;font-size:10px;
+  padding-top:2px}
+.log-lvl.info{color:var(--ink-3)} .log-lvl.roster{color:var(--live)}
+.log-lvl.disclosure{color:var(--watch)} .log-lvl.alert{color:var(--risk)}
+.log-lvl.error{color:var(--down)}
+.log-msg{color:var(--ink-2);flex:1;word-break:break-word}
+
+/* ---------- completed ---------- */
+.completed-section{margin-top:40px;border-top:1px solid var(--line);padding-top:24px}
+.completed-heading{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink-3);margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.completed-heading::before{content:'';flex:none;width:8px;height:8px;border-radius:50%;
+  background:var(--ink-3);opacity:.4}
+.completed-list{display:flex;flex-direction:column;gap:8px}
+.completed-card{background:var(--panel);border:1px solid var(--line);border-radius:8px;
+  padding:14px 18px;display:grid;grid-template-columns:auto 1fr auto auto;
+  gap:12px;align-items:center;opacity:.7;transition:opacity .15s;cursor:pointer}
+.completed-card:hover{opacity:1}
+.completed-icon{font-size:16px;opacity:.5}
+.completed-title{font-size:13px;font-weight:600}
+.completed-meta{font-size:12px;color:var(--ink-2);font-family:var(--m);font-variant-numeric:tabular-nums}
+.completed-badge{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;padding:2px 8px;border-radius:4px;font-family:var(--m)}
+.completed-badge.done{background:var(--clear-bg);color:var(--clear)}
+.completed-badge.idle{background:var(--panel-2);color:var(--ink-3);border:1px solid var(--line)}
+
+/* empty state */
+.empty{text-align:center;padding:60px 20px}
+.empty-icon{font-size:48px;margin-bottom:16px;opacity:.3}
+.empty-text{font-size:14px;color:var(--ink-3);margin-bottom:6px}
+.empty-sub{font-size:12px;color:var(--ink-3);opacity:.7}
+
+/* detail modal */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:100;display:none;
+  align-items:center;justify-content:center;padding:24px}
+.modal-bg.open{display:flex}
+.modal{background:var(--bg);border:1px solid var(--line);border-radius:10px;width:100%;
+  max-width:900px;max-height:90vh;display:flex;flex-direction:column}
+.modal-head{padding:16px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px}
+.modal-title{font-size:13px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2)}
+.modal-close{margin-left:auto;background:none;border:1px solid var(--line);color:var(--ink-3);
+  font-size:12px;padding:4px 12px;border-radius:4px;cursor:pointer;font-family:var(--f)}
+.modal-close:hover{border-color:var(--ink-3);color:var(--ink)}
+.modal-body{overflow-y:auto;flex:1;min-height:0;padding:20px}
+.modal-summary{font-size:13px;color:var(--ink-2);margin-bottom:16px;line-height:1.5}
+.modal-ts{font-size:11px;color:var(--ink-3);font-family:var(--m);margin-bottom:16px}
+</style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sidebar-brand"><b>APRON</b><span>Admin</span></div>
+  <nav class="sidebar-nav">
+    <a href="/admin" class="nav-item"><span class="nav-icon">⚙</span>Console</a>
+    <a href="/spotter" class="nav-item"><span class="nav-icon">📡</span>SPOTTER</a>
+    <a href="/traffic" class="nav-item"><span class="nav-icon">✈</span>TRAFFIC</a>
+    <a href="/steward" class="nav-item"><span class="nav-icon">📜</span>STEWARD</a>
+    <a href="/advance" class="nav-item active"><span class="nav-icon">🧭</span>ADVANCE</a>
+    <a href="/board" class="nav-item"><span class="nav-icon">📋</span>Board</a>
+    <a href="/demo" class="nav-item"><span class="nav-icon">▶</span>Demo</a>
+  </nav>
+  <div class="sidebar-foot">apron.show</div>
+</aside>
+
+<header class="topbar">
+  <span class="topbar-title">ADVANCE Roster Intelligence</span>
+  <div class="topbar-right">
+    <span id="status-pill" class="topbar-pill off">IDLE</span>
+    <span id="refresh-ts" class="refresh-label"></span>
+  </div>
+</header>
+
+<main class="main">
+  <!-- empty state -->
+  <div id="empty-state" class="empty">
+    <div class="empty-icon">🧭</div>
+    <div class="empty-text">No ADVANCE agent is currently monitoring rosters</div>
+    <div class="empty-sub">ADVANCE starts automatically alongside SPOTTER — it tracks crew next-call intel with provenance-aware disclosure</div>
+  </div>
+
+  <!-- active monitors -->
+  <div id="live-state" style="display:none"></div>
+
+  <!-- log -->
+  <div id="log-state" style="display:none">
+    <div class="log-section">
+      <div class="log-heading">Disclosure Log</div>
+      <div class="log-filters">
+        <button class="log-filter active" data-level="all">All</button>
+        <button class="log-filter" data-level="roster">Roster</button>
+        <button class="log-filter" data-level="disclosure">Disclosure</button>
+        <button class="log-filter" data-level="alert">Alert</button>
+        <button class="log-filter" data-level="error">Error</button>
+      </div>
+      <div class="log-wrap" id="log-list"></div>
+    </div>
+  </div>
+
+  <!-- completed monitors -->
+  <div id="completed-state" style="display:none"></div>
+</main>
+
+<!-- Snapshot detail modal -->
+<div class="modal-bg" id="detail-modal">
+  <div class="modal">
+    <div class="modal-head">
+      <span class="modal-title">Roster Snapshot</span>
+      <button class="modal-close" id="btn-close-modal">Close</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   ADVANCE Dashboard — roster state intelligence with
+   provenance-aware disclosure.
+
+   Polls /api/advance/status + /api/advance/log every 5s.
+   Renders roster tables with TMC / Production seat toggle.
+   ============================================================ */
+
+var POLL_INTERVAL = 5000;
+var pollTimer = null;
+var lastData = null;
+var currentView = 'tmc';  // 'tmc' or 'production'
+var logFilter = 'all';
+var gameTzMap = {};
+
+function $(id){ return document.getElementById(id); }
+
+// ---- IANA timezone abbreviation map ----
+var TZ_ABBREV = {
+  'America/New_York': 'ET', 'America/Chicago': 'CT',
+  'America/Denver': 'MT', 'America/Los_Angeles': 'PT',
+  'America/Phoenix': 'AZ'
+};
+function tzLabel(iana){ return TZ_ABBREV[iana] || iana; }
+
+// ---- Format helpers ----
+function fmtTime(iso, tz){
+  if(!iso) return '—';
+  var d = new Date(iso);
+  var opts = {hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false};
+  if(tz) opts.timeZone = tz;
+  return d.toLocaleTimeString('en-US', opts);
+}
+function fmtTimeShort(iso, tz){
+  if(!iso) return '—';
+  var d = new Date(iso);
+  var opts = {hour:'2-digit',minute:'2-digit',hour12:true};
+  if(tz) opts.timeZone = tz;
+  return d.toLocaleTimeString('en-US', opts);
+}
+function fmtDuration(startIso){
+  if(!startIso) return '';
+  var ms = Date.now() - new Date(startIso).getTime();
+  var m = Math.floor(ms/60000);
+  if(m < 60) return m+'m';
+  return Math.floor(m/60)+'h '+m%60+'m';
+}
+function esc(s){
+  if(!s) return '';
+  var d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+// ---- Provenance pill ----
+function provPill(level){
+  var cls = 'prov prov-'+(level||'none');
+  return '<span class="'+cls+'">'+(level||'none')+'</span>';
+}
+
+// ---- Next call type pill ----
+function nctPill(type){
+  var cls = 'nct nct-'+(type||'home');
+  var label = (type||'home').replace('-',' ');
+  return '<span class="'+cls+'">'+label+'</span>';
+}
+
+// ---- Tier badge ----
+function tierBadge(tier){
+  return '<span class="tier tier-'+(tier||'T2')+'">'+(tier||'T2')+'</span>';
+}
+
+// ---- Actionable badge ----
+function actBadge(actionable){
+  if(actionable) return '<span class="act act-yes">YES</span>';
+  return '<span class="act act-no">NO</span>';
+}
+
+// ---- Build summary cards for a roster snapshot ----
+function buildSummaryCards(snap){
+  if(!snap) return '<div style="color:var(--ink-3);padding:12px">Waiting for first roster scan…</div>';
+
+  var s = snap.summary || {};
+  var html = '<div class="cards">';
+
+  // Total crew
+  html += '<div class="card"><div class="card-header"><span class="card-icon">👥</span><span class="card-title">Crew</span></div><div class="card-body">';
+  html += '<div class="card-big">'+s.total+'</div>';
+  html += '<div class="card-sub">tracked</div>';
+  html += '</div></div>';
+
+  // External calls
+  var extColor = s.external > 0 ? 'var(--watch)' : 'var(--ink-3)';
+  html += '<div class="card"><div class="card-header"><span class="card-icon">📤</span><span class="card-title">External</span></div><div class="card-body">';
+  html += '<div class="card-big" style="color:'+extColor+'">'+s.external+'</div>';
+  html += '<div class="card-sub">external next calls</div>';
+  html += '</div></div>';
+
+  // Disclosed vs withheld
+  html += '<div class="card"><div class="card-header"><span class="card-icon">👁</span><span class="card-title">Disclosed</span></div><div class="card-body">';
+  html += '<div class="card-big" style="color:var(--clear)">'+(s.externalDisclosed||0)+'</div>';
+  html += '<div class="card-sub">'+(s.externalRedacted||0)+' withheld from production</div>';
+  html += '</div></div>';
+
+  // Inferred
+  var infColor = s.inferred > 0 ? 'var(--ink-2)' : 'var(--ink-3)';
+  html += '<div class="card"><div class="card-header"><span class="card-icon">🔮</span><span class="card-title">Inferred</span></div><div class="card-body">';
+  html += '<div class="card-big" style="color:'+infColor+'">'+s.inferred+'</div>';
+  html += '<div class="card-sub">not actionable</div>';
+  html += '</div></div>';
+
+  // Same production
+  html += '<div class="card"><div class="card-header"><span class="card-icon">🎬</span><span class="card-title">Same Show</span></div><div class="card-body">';
+  html += '<div class="card-big">'+(s.sameProduction||0)+'</div>';
+  html += '<div class="card-sub">same-production next call</div>';
+  html += '</div></div>';
+
+  // Home
+  html += '<div class="card"><div class="card-header"><span class="card-icon">🏠</span><span class="card-title">Home</span></div><div class="card-body">';
+  html += '<div class="card-big">'+(s.home||0)+'</div>';
+  html += '<div class="card-sub">heading home</div>';
+  html += '</div></div>';
+
+  html += '</div>';
+  return html;
+}
+
+// ---- Build roster table (TMC view) ----
+function buildRosterTMC(crew){
+  if(!crew || !crew.length) return '';
+
+  var html = '<div class="roster-section"><div class="roster-heading">TMC Desk View — Full Detail</div>';
+  html += '<div class="roster-wrap"><table class="roster-table"><thead><tr>';
+  html += '<th>Tier</th><th>Name</th><th>Position</th><th>Next Call</th>';
+  html += '<th>Destination</th><th>Production</th><th>Network</th><th>Call Time</th>';
+  html += '<th>Source</th><th>Provenance</th><th>Brokerable</th><th>Actionable</th>';
+  html += '</tr></thead><tbody>';
+
+  for(var i=0; i<crew.length; i++){
+    var c = crew[i];
+    var t = c.tmc || {};
+    html += '<tr>';
+    html += '<td>'+tierBadge(c.tier)+'</td>';
+    html += '<td class="crew-name">'+esc(c.name)+(c.keyPosition ? ' ⭐' : '')+'</td>';
+    html += '<td class="crew-pos">'+esc(c.position)+'</td>';
+    html += '<td>'+nctPill(t.nextCallType)+'</td>';
+    html += '<td>'+esc(t.destination||'—')+'</td>';
+    html += '<td>'+esc(t.production||'—')+'</td>';
+    html += '<td>'+esc(t.network||'—')+'</td>';
+    html += '<td>'+esc(t.callTime||'—')+'</td>';
+    html += '<td style="font-size:11px;color:var(--ink-3)">'+esc(t.source||'—')+'</td>';
+    html += '<td>'+provPill(c.provenanceLevel)+'</td>';
+    html += '<td>'+(t.brokerable ? '<span class="disclosed">YES</span>' : '<span style="color:var(--ink-3);font-size:10px">NO</span>')+'</td>';
+    html += '<td>'+actBadge(c.actionable)+'</td>';
+    html += '</tr>';
+  }
+
+  html += '</tbody></table></div></div>';
+  return html;
+}
+
+// ---- Build roster table (Production view) ----
+function buildRosterProduction(crew){
+  if(!crew || !crew.length) return '';
+
+  var html = '<div class="roster-section"><div class="roster-heading">Production Seat View — Disclosure-Filtered</div>';
+  html += '<div class="roster-wrap"><table class="roster-table"><thead><tr>';
+  html += '<th>Tier</th><th>Name</th><th>Position</th><th>Next Call</th>';
+  html += '<th>Destination</th><th>Production</th><th>Call Time</th>';
+  html += '<th>Visibility</th>';
+  html += '</tr></thead><tbody>';
+
+  for(var i=0; i<crew.length; i++){
+    var c = crew[i];
+    var p = c.production || {};
+    var isRedacted = p.redacted;
+
+    html += '<tr'+(isRedacted ? ' style="opacity:.6"' : '')+'>';
+    html += '<td>'+tierBadge(c.tier)+'</td>';
+    html += '<td class="crew-name">'+esc(c.name)+(c.keyPosition ? ' ⭐' : '')+'</td>';
+    html += '<td class="crew-pos">'+esc(c.position)+'</td>';
+    html += '<td>'+nctPill(p.nextCallType)+'</td>';
+
+    if(isRedacted){
+      html += '<td><span class="redacted">WITHHELD</span></td>';
+      html += '<td><span class="redacted">WITHHELD</span></td>';
+      html += '<td><span class="redacted">WITHHELD</span></td>';
+      html += '<td><span class="redacted">🔒 REDACTED</span></td>';
+    } else {
+      html += '<td>'+esc(p.destination||'—')+'</td>';
+      html += '<td>'+esc(p.production||'—')+'</td>';
+      html += '<td>'+esc(p.callTime||'—')+'</td>';
+      html += '<td><span class="disclosed">✓ VISIBLE</span></td>';
+    }
+
+    html += '</tr>';
+  }
+
+  html += '</tbody></table></div></div>';
+  return html;
+}
+
+// ---- Build instance HTML ----
+function buildInstanceHTML(label, snapshot, gameTz){
+  var html = '<div class="advance-instance">';
+
+  // Instance header
+  html += '<div class="instance-header">';
+  html += '<span class="instance-icon">🧭</span>';
+  html += '<span class="instance-label">'+esc(label)+'</span>';
+  if(snapshot){
+    var extR = (snapshot.summary||{}).externalRedacted || 0;
+    if(extR > 0){
+      html += '<span class="topbar-pill warn">'+extR+' WITHHELD</span>';
+    } else {
+      html += '<span class="topbar-pill on">ALL CLEAR</span>';
+    }
+  }
+  if(snapshot && snapshot.timestamp){
+    html += '<span class="instance-uptime mono">Last scan: '+fmtTime(snapshot.timestamp, gameTz)+' '+tzLabel(gameTz)+'</span>';
+  }
+  html += '</div>';
+
+  // Summary cards
+  html += buildSummaryCards(snapshot);
+
+  // View toggle
+  html += '<div class="view-toggle">';
+  html += '<button class="view-btn'+(currentView==='tmc' ? ' active' : '')+'" data-view="tmc">🖥 TMC Desk</button>';
+  html += '<button class="view-btn'+(currentView==='production' ? ' active' : '')+'" data-view="production">🎬 Production Seat</button>';
+  html += '</div>';
+
+  // Roster table
+  if(snapshot && snapshot.crew){
+    if(currentView === 'tmc'){
+      html += buildRosterTMC(snapshot.crew);
+    } else {
+      html += buildRosterProduction(snapshot.crew);
+    }
+  }
+
+  html += '</div>';
+  return html;
+}
+
+// ---- Build log entries ----
+function buildLogHTML(entries){
+  if(!entries || !entries.length) return '<div style="padding:16px;color:var(--ink-3);font-size:12px">No log entries yet</div>';
+
+  var html = '';
+  for(var i=entries.length-1; i>=0; i--){
+    var e = entries[i];
+    if(logFilter !== 'all' && e.level !== logFilter) continue;
+    html += '<div class="log-entry">';
+    html += '<span class="log-ts">'+fmtTime(e.timestamp)+'</span>';
+    html += '<span class="log-lvl '+e.level+'">'+e.level+'</span>';
+    html += '<span class="log-msg">'+esc(e.message)+'</span>';
+    html += '</div>';
+  }
+  return html || '<div style="padding:16px;color:var(--ink-3);font-size:12px">No matching entries</div>';
+}
+
+// ---- Build completed card ----
+function buildCompletedHTML(item){
+  var a = item.agent || {};
+  var snap = item.lastSnapshot;
+  var isDone = a.status === 'done';
+
+  var crewCount = snap && snap.summary ? snap.summary.total : '—';
+  var extCount = snap && snap.summary ? snap.summary.external : 0;
+
+  var html = '<div class="completed-card" data-idx="'+esc(String(item._idx))+'">';
+  html += '<span class="completed-icon">'+(isDone ? '✅' : '⏹')+'</span>';
+  html += '<span class="completed-title">'+esc(item.title || item.gameId)+'</span>';
+  html += '<span class="completed-meta">'+crewCount+' crew · '+extCount+' external</span>';
+  html += '<span class="completed-badge '+(isDone?'done':'idle')+'">'+(isDone ? 'DONE' : 'IDLE')+'</span>';
+  html += '</div>';
+  return html;
+}
+
+// ---- Render ----
+function render(statusResp, logResp){
+  lastData = statusResp;
+  $('refresh-ts').textContent = 'Updated ' + fmtTime(new Date().toISOString());
+
+  var active = statusResp.active || [];
+  var completed = statusResp.completed || [];
+
+  var hasActive = active.length > 0;
+  var hasCompleted = completed.length > 0;
+
+  if(!hasActive && !hasCompleted){
+    $('empty-state').style.display = '';
+    $('live-state').style.display = 'none';
+    $('log-state').style.display = 'none';
+    $('completed-state').style.display = 'none';
+    $('status-pill').className = 'topbar-pill off';
+    $('status-pill').textContent = 'IDLE';
+    return;
+  }
+
+  $('empty-state').style.display = 'none';
+
+  // ---- Active monitors ----
+  if(hasActive){
+    $('live-state').style.display = '';
+
+    // Determine pill status
+    var totalRedacted = 0;
+    for(var i=0; i<active.length; i++){
+      var snap = active[i].snapshot;
+      if(snap && snap.summary) totalRedacted += snap.summary.externalRedacted || 0;
+    }
+
+    if(totalRedacted > 0){
+      $('status-pill').className = 'topbar-pill warn';
+      $('status-pill').textContent = active.length > 1 ? active.length+' · '+totalRedacted+' WITHHELD' : totalRedacted+' WITHHELD';
+    } else {
+      $('status-pill').className = 'topbar-pill on';
+      $('status-pill').textContent = active.length > 1 ? active.length+' MONITORING' : 'MONITORING';
+    }
+
+    var html = '';
+    for(var j=0; j<active.length; j++){
+      var tz = active[j].timezone || 'America/New_York';
+      gameTzMap[active[j].gameId] = tz;
+      html += buildInstanceHTML(active[j].title || active[j].gameId, active[j].snapshot, tz);
+    }
+    $('live-state').innerHTML = html;
+  } else {
+    $('live-state').style.display = 'none';
+    $('status-pill').className = 'topbar-pill off';
+    $('status-pill').textContent = 'IDLE';
+  }
+
+  // ---- Log ----
+  if(logResp && logResp.entries && logResp.entries.length > 0){
+    $('log-state').style.display = '';
+    $('log-list').innerHTML = buildLogHTML(logResp.entries);
+  } else if(!hasActive){
+    $('log-state').style.display = 'none';
+  }
+
+  // ---- Completed monitors ----
+  if(hasCompleted){
+    $('completed-state').style.display = '';
+    var chtml = '<div class="completed-section">';
+    chtml += '<div class="completed-heading">Completed Roster Monitors</div>';
+    chtml += '<div class="completed-list">';
+    completed.sort(function(a,b){
+      var ta = a.agent && a.agent.stoppedAt || ''; var tb = b.agent && b.agent.stoppedAt || '';
+      return tb.localeCompare(ta);
+    });
+    for(var k=0; k<completed.length; k++){
+      completed[k]._idx = k;
+      chtml += buildCompletedHTML(completed[k]);
+    }
+    chtml += '</div></div>';
+    $('completed-state').innerHTML = chtml;
+  } else {
+    $('completed-state').style.display = 'none';
+  }
+}
+
+// ---- View toggle handler (delegated) ----
+document.addEventListener('click', function(e){
+  var btn = e.target.closest('.view-btn');
+  if(btn){
+    var v = btn.dataset.view;
+    if(v && v !== currentView){
+      currentView = v;
+      // Re-render with existing data
+      if(lastData) render(lastData, lastLogData);
+    }
+  }
+});
+
+// ---- Log filter handler ----
+document.addEventListener('click', function(e){
+  var btn = e.target.closest('.log-filter');
+  if(btn){
+    logFilter = btn.dataset.level || 'all';
+    document.querySelectorAll('.log-filter').forEach(function(f){ f.classList.remove('active'); });
+    btn.classList.add('active');
+    if(lastLogData) $('log-list').innerHTML = buildLogHTML(lastLogData.entries);
+  }
+});
+
+// ---- Detail modal ----
+function showSnapshotModal(snap, title, gameTz){
+  if(!snap) return;
+  var tz = gameTz || 'America/New_York';
+  var html = '';
+  if(title) html += '<div style="font-size:15px;font-weight:700;margin-bottom:8px">'+esc(title)+'</div>';
+  if(snap.timestamp) html += '<div class="modal-ts">Scanned: '+fmtTime(snap.timestamp, tz)+' '+tzLabel(tz)+'</div>';
+  html += buildSummaryCards(snap);
+  html += buildRosterTMC(snap.crew);
+  $('modal-body').innerHTML = html;
+  $('detail-modal').classList.add('open');
+}
+
+$('btn-close-modal').addEventListener('click', function(){ $('detail-modal').classList.remove('open'); });
+$('detail-modal').addEventListener('click', function(e){ if(e.target === $('detail-modal')) $('detail-modal').classList.remove('open'); });
+document.addEventListener('keydown', function(e){ if(e.key === 'Escape') $('detail-modal').classList.remove('open'); });
+
+// Delegated click for completed cards
+$('completed-state').addEventListener('click', function(e){
+  var card = e.target.closest('.completed-card');
+  if(!card || !lastData) return;
+  var idx = parseInt(card.dataset.idx, 10);
+  var item = lastData.completed[idx];
+  if(item && item.lastSnapshot){
+    showSnapshotModal(item.lastSnapshot, item.title || item.gameId, gameTzMap[item.gameId]);
+  }
+});
+
+// ---- Polling ----
+var lastLogData = null;
+
+async function poll(){
+  try{
+    var [statusRes, logRes] = await Promise.all([
+      fetch('/api/advance/status'),
+      fetch('/api/advance/log?n=100')
+    ]);
+    var statusData = await statusRes.json();
+    var logData = await logRes.json();
+    lastLogData = logData;
+    render(statusData, logData);
+  } catch(err){
+    console.warn('ADVANCE poll error:', err);
+  }
+}
+
+function startPolling(){
+  poll();
+  pollTimer = setInterval(poll, POLL_INTERVAL);
+}
+
+// ---- Boot ----
+startPolling();
+</script>
+</body>
+</html>
