@@ -109,6 +109,7 @@ export interface ConstraintSnapshot {
   summary: {
     total: number;
     needsOutreach: number;
+    ready: number;
     pending: number;
     confirmed: number;
     declined: number;
@@ -267,6 +268,53 @@ export class WranglerAgent extends BaseAgent {
     return this.watchConfig !== null;
   }
 
+  /**
+   * Request outreach for a specific crew member.
+   *
+   * Called when the operator clicks "Request Next Call" in the dashboard.
+   * Transitions a 'ready' record to 'pending' and runs the simulation.
+   */
+  async requestOutreach(crewId: string): Promise<{ ok: boolean; error?: string }> {
+    if (!this.watchConfig) {
+      return { ok: false, error: 'WRANGLER is not watching' };
+    }
+
+    const record = this.outreachMap.get(crewId);
+    if (!record) {
+      return { ok: false, error: `No outreach record for crew ${crewId}` };
+    }
+
+    if (record.status === 'pending' || record.status === 'confirmed') {
+      return { ok: false, error: `Crew ${record.name} is already ${record.status}` };
+    }
+
+    // Transition to pending (from ready, not-needed, expired, or declined)
+    const previousStatus = record.status;
+    record.status = 'pending';
+    record.sentAt = new Date().toISOString();
+
+    this.log('outreach', `${record.name} (${record.position}): operator requested outreach via ${record.channel}`, {
+      crewId: record.crewId,
+      inferredDestination: record.inferredDestination,
+      inferredCallTime: record.inferredCallTime,
+    });
+
+    // Find the matching crew assignment for full context
+    const assignments = await this.watchConfig.getCrewAssignments();
+    const ca = assignments.find(a => a.crewId === crewId);
+
+    if (!ca) {
+      record.status = previousStatus;
+      record.sentAt = null;
+      return { ok: false, error: `Crew ${crewId} not found in assignments` };
+    }
+
+    // Fire and forget — initiateOutreach will update the record and emit events
+    void this.initiateOutreach(record, ca);
+
+    return { ok: true };
+  }
+
   // ---- Core logic ----
 
   /**
@@ -343,16 +391,16 @@ export class WranglerAgent extends BaseAgent {
           continue;
         }
 
-        // New outreach needed
+        // New outreach needed — mark as ready (operator triggers via button)
         if (!existing || existing.status === 'expired') {
           const record: OutreachRecord = {
             crewId: ca.crewId,
             name: ca.name,
             position: ca.position,
             homeAirport: ca.homeAirport,
-            status: 'pending',
+            status: 'ready',
             channel: this.watchConfig.channel ?? 'simulated',
-            sentAt: now.toISOString(),
+            sentAt: null,
             respondedAt: null,
             inferredDestination: ca.nextCall.destinationCity || ca.nextCall.destinationAirport || null,
             inferredCallTime: ca.nextCall.callTime?.display ?? null,
@@ -363,14 +411,11 @@ export class WranglerAgent extends BaseAgent {
 
           this.outreachMap.set(ca.crewId, record);
 
-          this.log('outreach', `${ca.name} (${ca.position}): initiating constraint outreach via ${record.channel}`, {
+          this.log('outreach', `${ca.name} (${ca.position}): ready for constraint outreach`, {
             crewId: ca.crewId,
             inferredDestination: record.inferredDestination,
             inferredCallTime: record.inferredCallTime,
           });
-
-          // Initiate outreach (simulated for now)
-          void this.initiateOutreach(record, ca);
         }
       }
 
@@ -379,6 +424,7 @@ export class WranglerAgent extends BaseAgent {
       const summary = {
         total: crewEntries.length,
         needsOutreach: crewEntries.filter(c => c.status !== 'not-needed').length,
+        ready: crewEntries.filter(c => c.status === 'ready').length,
         pending: crewEntries.filter(c => c.status === 'pending').length,
         confirmed: crewEntries.filter(c => c.status === 'confirmed').length,
         declined: crewEntries.filter(c => c.status === 'declined').length,
@@ -390,6 +436,7 @@ export class WranglerAgent extends BaseAgent {
       if (summary.needsOutreach > 0) {
         parts.push(`${summary.needsOutreach} need${summary.needsOutreach !== 1 ? '' : 's'} outreach`);
       }
+      if (summary.ready > 0) parts.push(`${summary.ready} ready`);
       if (summary.pending > 0) parts.push(`${summary.pending} pending`);
       if (summary.confirmed > 0) parts.push(`${summary.confirmed} confirmed`);
       if (summary.declined > 0) parts.push(`${summary.declined} declined`);

@@ -105,6 +105,15 @@ body{background:var(--bg);color:var(--ink);font-family:var(--f);font-size:14px;
 .os-declined{background:var(--risk-bg);color:var(--risk)}
 .os-expired{background:var(--panel-2);color:var(--ink-3);border:1px solid var(--line)}
 .os-not-needed{background:var(--panel-2);color:var(--ink-3);border:1px solid var(--line)}
+.os-ready{background:#1A1830;color:#9B8AE8;border:1px solid #3D3570}
+
+/* request call button */
+.btn-request{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  padding:4px 12px;border-radius:4px;border:1px solid #3D3570;background:#1A1830;color:#9B8AE8;
+  cursor:pointer;font-family:var(--m);transition:all .15s;white-space:nowrap}
+.btn-request:hover{background:#2A2550;border-color:#5B4FC4;color:#BEB0F5}
+.btn-request:disabled{opacity:.4;cursor:not-allowed}
+.btn-request.calling{background:var(--watch-bg);border-color:var(--watch);color:var(--watch)}
 
 /* provenance pills */
 .prov{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.08em;
@@ -333,17 +342,17 @@ function renderInstance(m) {
   h += '<div class="cards">';
   h += card('👥', 'Crew', sum.total ?? 0, 'total tracked');
   h += card('📨', 'Outreach', sum.needsOutreach ?? 0, 'need outreach');
+  h += card('🔔', 'Ready', sum.ready ?? 0, 'awaiting request');
   h += card('⏳', 'Pending', sum.pending ?? 0, 'awaiting reply');
   h += card('✅', 'Confirmed', sum.confirmed ?? 0, 'constraints');
   h += card('🚫', 'Declined', sum.declined ?? 0, 'declined');
-  h += card('⏰', 'Expired', sum.expired ?? 0, 'timed out');
   h += '</div>';
 
   // Outreach table
   if (crew.length > 0) {
     h += '<div class="outreach-section">';
     h += '<div class="outreach-heading">📋 Crew Constraint Status</div>';
-    h += renderOutreachTable(crew);
+    h += renderOutreachTable(crew, m.gameId);
     h += '</div>';
   }
 
@@ -358,26 +367,39 @@ function card(icon, title, value, sub) {
   </div>`;
 }
 
-function renderOutreachTable(crew) {
+function renderOutreachTable(crew, gameId) {
   let h = '<div class="outreach-wrap"><table class="outreach-table"><thead><tr>';
-  h += '<th>Name</th><th>Position</th><th>Status</th><th>Channel</th>';
+  h += '<th>Name</th><th>Position</th><th>Status</th><th>Action</th>';
   h += '<th>Prev Prov</th><th></th><th>New Prov</th>';
   h += '<th>Constraint</th>';
   h += '</tr></thead><tbody>';
 
-  // Sort: pending first, then confirmed, then declined/expired, then not-needed
-  const order = { pending: 0, confirmed: 1, declined: 2, expired: 3, 'not-needed': 4 };
-  const sorted = [...crew].sort((a, b) => (order[a.outreach?.status] ?? 5) - (order[b.outreach?.status] ?? 5));
+  // Sort: ready first, then pending, then confirmed, then declined/expired, then not-needed
+  // Status is at c.status (snapshot) or c.outreach?.status (event) — normalize
+  const order = { ready: 0, pending: 1, confirmed: 2, declined: 3, expired: 4, 'not-needed': 5 };
+  const getStatus = (c) => c.status ?? c.outreach?.status ?? 'not-needed';
+  const sorted = [...crew].sort((a, b) => (order[getStatus(a)] ?? 6) - (order[getStatus(b)] ?? 6));
 
   for (const c of sorted) {
-    const st = c.outreach?.status ?? 'not-needed';
+    const st = getStatus(c);
     const upgraded = c.newProvenance !== c.previousProvenance && st === 'confirmed';
 
     h += '<tr>';
     h += `<td class="crew-name">${esc(c.name)}</td>`;
     h += `<td class="crew-pos">${esc(c.position)}</td>`;
     h += `<td><span class="os os-${st}">${st.replace('-', ' ')}</span></td>`;
-    h += `<td><span class="channel">${esc(c.outreach?.channel ?? 'sim')}</span></td>`;
+
+    // Action cell — "Request Next Call" button for anyone not already pending/confirmed
+    if (st === 'pending') {
+      h += `<td><span class="channel">${esc(c.channel ?? c.outreach?.channel ?? 'sim')} · awaiting…</span></td>`;
+    } else if (st === 'confirmed') {
+      h += `<td><span class="os os-confirmed">done</span></td>`;
+    } else if (st === 'declined') {
+      h += `<td><button class="btn-request" onclick="requestCall('${esc(gameId)}','${esc(c.crewId)}',this)">Retry Call</button></td>`;
+    } else {
+      h += `<td><button class="btn-request" onclick="requestCall('${esc(gameId)}','${esc(c.crewId)}',this)">Request Next Call</button></td>`;
+    }
+
     h += `<td><span class="prov prov-${c.previousProvenance}">${c.previousProvenance}</span></td>`;
     h += `<td><span class="prov-arrow${upgraded ? '' : ''}">${upgraded ? '→' : '·'}</span></td>`;
     h += `<td><span class="prov prov-${c.newProvenance}">${c.newProvenance}</span></td>`;
@@ -391,10 +413,12 @@ function renderOutreachTable(crew) {
       h += `<td>${ct}</td>`;
     } else if (st === 'pending') {
       h += '<td><span class="no-constraint">awaiting response…</span></td>';
+    } else if (st === 'ready') {
+      h += '<td><span class="no-constraint">click to request</span></td>';
     } else if (st === 'declined') {
       h += '<td><span class="no-constraint">declined to share</span></td>';
     } else if (st === 'expired') {
-      h += '<td><span class="no-constraint">no response</span></td>';
+      h += '<td><span class="no-constraint">no response — retry?</span></td>';
     } else {
       h += '<td><span class="no-constraint">—</span></td>';
     }
@@ -513,6 +537,42 @@ document.getElementById('modal-close').onclick = () => {
 document.getElementById('modal-bg').onclick = (e) => {
   if (e.target === e.currentTarget) e.currentTarget.classList.remove('open');
 };
+
+// ---- Request outreach ----
+
+async function requestCall(gameId, crewId, btn) {
+  btn.disabled = true;
+  btn.classList.add('calling');
+  btn.textContent = 'Calling…';
+
+  try {
+    const res = await fetch(`${API_BASE}/api/wrangler/outreach`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gameId, crewId }),
+    });
+    const data = await res.json();
+    if (data.ok) {
+      btn.textContent = 'Requested ✓';
+      // Refresh immediately to show updated status
+      setTimeout(() => refresh(), 500);
+    } else {
+      btn.textContent = data.error || 'Failed';
+      btn.classList.remove('calling');
+      setTimeout(() => {
+        btn.disabled = false;
+        btn.textContent = 'Request Next Call';
+      }, 3000);
+    }
+  } catch (e) {
+    btn.textContent = 'Error';
+    btn.classList.remove('calling');
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.textContent = 'Request Next Call';
+    }, 3000);
+  }
+}
 
 // ---- Helpers ----
 

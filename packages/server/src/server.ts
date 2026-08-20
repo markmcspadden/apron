@@ -1219,6 +1219,35 @@ export async function createServer(opts: ServerOptions = {}) {
       return;
     }
 
+    // ---- WRANGLER manual outreach trigger ----
+    if (path === '/api/wrangler/outreach' && req.method === 'POST') {
+      let body = '';
+      req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+      req.on('end', async () => {
+        try {
+          const { gameId, crewId } = JSON.parse(body);
+          if (!gameId || !crewId) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'gameId and crewId required' }));
+            return;
+          }
+          const w = wranglers.get(gameId);
+          if (!w) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: `No active WRANGLER for game ${gameId}` }));
+            return;
+          }
+          const result = await w.requestOutreach(crewId);
+          res.writeHead(result.ok ? 200 : 400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(result));
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+        }
+      });
+      return;
+    }
+
     if (path === '/api/play' && req.method === 'POST') {
       orchestrator.play();
       res.writeHead(200, { 'Content-Type': 'application/json' });

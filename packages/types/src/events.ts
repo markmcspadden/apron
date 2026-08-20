@@ -196,6 +196,7 @@ export interface RosterUpdate extends BaseEvent {
 
 /** Status of an individual constraint outreach to a crew member. */
 export type OutreachStatus =
+  | 'ready'        // needs outreach — waiting for operator to request
   | 'pending'      // message sent, awaiting reply
   | 'confirmed'    // crew confirmed a constraint
   | 'declined'     // crew declined to share
