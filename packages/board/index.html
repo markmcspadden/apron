@@ -445,6 +445,9 @@ tbody tr.t2{box-shadow:inset 3px 0 0 var(--line-2)}
     <div class="cell" id="p-advance-cell" style="display:none"><div class="k">🧭 Roster</div>
       <div class="v" id="p-advance" style="font-size:19px">—</div>
       <div class="s" id="p-advance-s">ADVANCE idle</div></div>
+    <div class="cell" id="p-wrangler-cell" style="display:none"><div class="k">🤝 Constraints</div>
+      <div class="v" id="p-wrangler" style="font-size:19px">—</div>
+      <div class="s" id="p-wrangler-s">WRANGLER idle</div></div>
   </div>
 
   <div class="pcard" id="pchain-card" style="margin-bottom:16px;display:none">
@@ -817,6 +820,36 @@ function applyAgentEvent(ev) {
     }
     if (ev.agentStates && ev.agentStates.ADVANCE === 'done') {
       $('p-advance-s').textContent = 'Monitoring complete';
+    }
+  }
+
+  // WRANGLER constraint-update — update the Constraints card on production seat
+  if (ev.type === 'constraint-update') {
+    $('p-wrangler-cell').style.display = '';
+    var wSum = ev.summary || {};
+    var wConfirmed = wSum.confirmed || 0;
+    var wPending = wSum.pending || 0;
+    var wDeclined = wSum.declined || 0;
+    $('p-wrangler').textContent = wConfirmed;
+    $('p-wrangler').className = 'v mono' + (wPending > 0 ? ' watch' : '');
+    var wParts = [];
+    if (wPending > 0) wParts.push(wPending + ' pending');
+    if (wDeclined > 0) wParts.push(wDeclined + ' declined');
+    $('p-wrangler-s').textContent = wParts.length > 0
+      ? wConfirmed + ' confirmed · ' + wParts.join(' · ')
+      : wConfirmed + ' constraints confirmed';
+
+    logEvent({ ts: ev.timestamp, who: ev.agent, msg: ev.message || 'Constraint update (' + ev.trigger + ')' });
+  }
+
+  // WRANGLER agent-status — show/hide the constraints card
+  if (ev.type === 'agent-status' && ev.agent === 'WRANGLER') {
+    if (ev.agentStates && ev.agentStates.WRANGLER === 'on') {
+      $('p-wrangler-cell').style.display = '';
+      $('p-wrangler-s').textContent = 'Gathering constraints';
+    }
+    if (ev.agentStates && ev.agentStates.WRANGLER === 'done') {
+      $('p-wrangler-s').textContent = 'Gathering complete';
     }
   }
 

@@ -38,6 +38,9 @@ export type {
   CrewComplianceEntry,
   RosterUpdate,
   RosterEntry,
+  ConstraintUpdate,
+  CrewConstraintEntry,
+  OutreachStatus,
   BoardEvent,
 } from './events.js';
 

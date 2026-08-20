@@ -10,6 +10,7 @@ import type { TrafficWatchConfig, MonitoredFlight } from '@apron/agent-traffic';
 import { AviationStackClient } from '@apron/integration-aviationstack';
 import { AdvanceAgent } from '@apron/agent-advance';
 import { WranglerAgent } from '@apron/agent-wrangler';
+import type { WranglerWatchConfig } from '@apron/agent-wrangler';
 import { StewardAgent } from '@apron/agent-steward';
 import { FixerAgent } from '@apron/agent-fixer';
 import { RunnerAgent } from '@apron/agent-runner';
@@ -73,6 +74,8 @@ export async function createServer(opts: ServerOptions = {}) {
   const traffics = new Map<string, TrafficAgent>();
   /** Live ADVANCE instances — one per watched game, keyed by gameId. */
   const advances = new Map<string, AdvanceAgent>();
+  /** Live WRANGLER instances — one per watched game, keyed by gameId. */
+  const wranglers = new Map<string, WranglerAgent>();
   /** AviationStack client — reads API key from env, never exposes it. */
   const aviationStack = new AviationStackClient();
   orchestrator.registerAgent(new TrafficAgent());
@@ -221,7 +224,46 @@ export async function createServer(opts: ServerOptions = {}) {
     }
   }
 
-  // Notify STEWARD + TRAFFIC + ADVANCE when crew data changes
+  // ---- Reusable WRANGLER (re)start — called from startWatch() and crew-change callback ----
+  async function startOrRestartWrangler(accountId: string, gameId: string): Promise<void> {
+    try {
+      const prevWrangler = wranglers.get(gameId);
+      if (prevWrangler) prevWrangler.stopWatching();
+
+      const liveWrangler = new WranglerAgent();
+      const tNow = new Date();
+      const wranglerCred: import('@apron/types').Credential = {
+        agent: 'WRANGLER',
+        showId: gameId,
+        grant: { agent: 'WRANGLER', capabilities: ['read:constraints', 'write:constraints'], role: 'state', neverReceives: ['undisclosed-next-call', 'third-party-call-sheets'] },
+        issuedAt: tNow.toISOString(),
+        expiresAt: new Date(tNow.getTime() + 86400000).toISOString(),
+      };
+      const bus = orchestrator.getRuntime().getBus();
+      liveWrangler.bind({ bus, credential: wranglerCred, showId: gameId });
+
+      const wranglerConfig: WranglerWatchConfig = {
+        gameId,
+        accountId,
+        gemini,
+        getCrewAssignments: () => adminStore.listCrewAssignments(accountId, gameId),
+        channel: gemini.isEnabled() ? 'simulated' : 'simulated',
+      };
+      liveWrangler.startWatching(wranglerConfig);
+      wranglers.set(gameId, liveWrangler);
+
+      const startedAt = new Date().toISOString();
+      void adminStore.setAgentAssignment(accountId, gameId, 'WRANGLER', {
+        status: 'active', startedAt,
+      });
+
+      console.log(`[wrangler] Constraint monitoring started for game ${gameId}`);
+    } catch (err) {
+      console.error('[wrangler] Failed to start constraint monitoring:', err);
+    }
+  }
+
+  // Notify STEWARD + TRAFFIC + ADVANCE + WRANGLER when crew data changes
   setCrewChangeCallback((accountId, gameId) => {
     const activeSteward = stewards.get(gameId);
     if (activeSteward) {
@@ -240,6 +282,13 @@ export async function createServer(opts: ServerOptions = {}) {
     if (activeAdvance) {
       console.log(`[advance] Crew data changed for game ${gameId} — re-scanning roster`);
       activeAdvance.onCrewChanged();
+    }
+
+    // Notify WRANGLER — triggers constraint re-scan
+    const activeWrangler = wranglers.get(gameId);
+    if (activeWrangler) {
+      console.log(`[wrangler] Crew data changed for game ${gameId} — re-scanning constraints`);
+      activeWrangler.onCrewChanged();
     }
   });
 
@@ -473,6 +522,9 @@ export async function createServer(opts: ServerOptions = {}) {
     // ---- Start ADVANCE roster monitoring alongside SPOTTER ----
     void startOrRestartAdvance(accountId, game.id);
 
+    // ---- Start WRANGLER constraint monitoring alongside SPOTTER ----
+    void startOrRestartWrangler(accountId, game.id);
+
     // Broadcast SPOTTER events to WebSocket clients + auto-cleanup on game end
     const watchedGameId = game.id;
     const watchedAcctId = accountId;
@@ -564,6 +616,27 @@ export async function createServer(opts: ServerOptions = {}) {
             });
           }
 
+          // Stop WRANGLER when SPOTTER finishes
+          const finishedWrangler = wranglers.get(watchedGameId);
+          if (finishedWrangler) {
+            const wranglerLog = JSON.parse(JSON.stringify(finishedWrangler.getLog()));
+            const wranglerSnapshot = JSON.parse(JSON.stringify(finishedWrangler.getLastSnapshot() ?? null));
+            finishedWrangler.stopWatching();
+            wranglers.delete(watchedGameId);
+            const wranglerStoppedAt = new Date().toISOString();
+            void adminStore.setAgentAssignment(watchedAcctId, watchedGameId, 'WRANGLER', {
+              status: 'done',
+              startedAt: watchStartedAt,
+              stoppedAt: wranglerStoppedAt,
+            });
+            void adminStore.setAgentRecord(watchedAcctId, watchedGameId, 'WRANGLER', {
+              status: 'done',
+              stoppedAt: wranglerStoppedAt,
+              lastSnapshot: wranglerSnapshot,
+              log: wranglerLog,
+            });
+          }
+
           const stoppedAt = new Date().toISOString();
           void adminStore.setAgentAssignment(watchedAcctId, watchedGameId, 'SPOTTER', {
             status: 'done',
@@ -600,6 +673,14 @@ export async function createServer(opts: ServerOptions = {}) {
 
       // Forward ADVANCE events to WebSocket clients
       if (event.agent === 'ADVANCE' && event.showId === watchedGameId) {
+        const msg = JSON.stringify({ type: 'agent-event', event });
+        for (const ws of clients) {
+          if (ws.readyState === ws.OPEN) ws.send(msg);
+        }
+      }
+
+      // Forward WRANGLER events to WebSocket clients
+      if (event.agent === 'WRANGLER' && event.showId === watchedGameId) {
         const msg = JSON.stringify({ type: 'agent-event', event });
         for (const ws of clients) {
           if (ws.readyState === ws.OPEN) ws.send(msg);
@@ -1053,6 +1134,91 @@ export async function createServer(opts: ServerOptions = {}) {
       return;
     }
 
+    // ---- WRANGLER constraint monitoring API ----
+    if (path === '/api/wrangler/status') {
+      // Active constraint monitors from in-memory Map
+      const activeMonitors: Array<{ gameId: string; title: string; snapshot: ReturnType<WranglerAgent['getLastSnapshot']> }> = [];
+      const wrGameInfo = new Map<string, string>();
+      try {
+        const activeGames = await adminStore.listGamesByAgentStatus('WRANGLER', ['active']);
+        for (const g of activeGames) wrGameInfo.set(g.id, g.title);
+      } catch { /* ok */ }
+      for (const [gid, w] of wranglers) {
+        activeMonitors.push({ gameId: gid, title: wrGameInfo.get(gid) ?? gid, snapshot: w.getLastSnapshot() });
+      }
+
+      // Completed WRANGLER agents from Firestore
+      const completed: Array<{
+        gameId: string;
+        accountId: string;
+        title: string;
+        agent: import('./admin-store.js').AgentAssignment;
+        lastSnapshot?: Record<string, unknown>;
+      }> = [];
+      try {
+        const doneGames = await adminStore.listGamesByAgentStatus('WRANGLER', ['done', 'idle']);
+        for (const g of doneGames) {
+          if (!wranglers.has(g.id) && g.agents?.WRANGLER) {
+            const record = await adminStore.getAgentRecord(g.accountId, g.id, 'WRANGLER');
+            completed.push({
+              gameId: g.id,
+              accountId: g.accountId,
+              title: g.title,
+              agent: g.agents.WRANGLER,
+              lastSnapshot: record?.['lastSnapshot'] as Record<string, unknown> | undefined,
+            });
+          }
+        }
+      } catch { /* Firestore unavailable */ }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ active: activeMonitors, completed }));
+      return;
+    }
+
+    if (path === '/api/wrangler/log') {
+      const params = new URL(req.url ?? '/', `http://${req.headers.host}`).searchParams;
+      const count = parseInt(params.get('n') ?? '200', 10);
+      const gameId = params.get('gameId');
+      if (gameId && wranglers.has(gameId)) {
+        const w = wranglers.get(gameId)!;
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ entries: w.getLog(count), total: w.getStatus().logTotal }));
+      } else {
+        const all: Array<ReturnType<WranglerAgent['getLog']>[number] & { gameId: string }> = [];
+        for (const [gid, w] of wranglers) {
+          for (const entry of w.getLog(count)) {
+            all.push({ ...entry, gameId: gid });
+          }
+        }
+        all.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+        const total = Array.from(wranglers.values()).reduce((sum, w) => sum + w.getStatus().logTotal, 0);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ entries: all.slice(-count), total }));
+      }
+      return;
+    }
+
+    if (path === '/api/wrangler/record') {
+      const params = new URL(req.url ?? '/', `http://${req.headers.host}`).searchParams;
+      const accountId = params.get('accountId');
+      const gameId = params.get('gameId');
+      if (!accountId || !gameId) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'accountId and gameId required' }));
+        return;
+      }
+      try {
+        const record = await adminStore.getAgentRecord(accountId, gameId, 'WRANGLER');
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ record }));
+      } catch {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Failed to fetch agent record' }));
+      }
+      return;
+    }
+
     if (path === '/api/play' && req.method === 'POST') {
       orchestrator.play();
       res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -1160,6 +1326,27 @@ export async function createServer(opts: ServerOptions = {}) {
           });
         }
 
+        // Also stop WRANGLER when unwatching
+        const existingWrangler = wranglers.get(gameId!);
+        if (existingWrangler) {
+          const wranglerLog = JSON.parse(JSON.stringify(existingWrangler.getLog()));
+          const wranglerSnapshot = JSON.parse(JSON.stringify(existingWrangler.getLastSnapshot() ?? null));
+          existingWrangler.stopWatching();
+          wranglers.delete(gameId!);
+          const wranglerStoppedAt = new Date().toISOString();
+          void adminStore.setAgentAssignment(acctId!, gameId!, 'WRANGLER', {
+            status: 'idle',
+            startedAt: wranglerStoppedAt,
+            stoppedAt: wranglerStoppedAt,
+          });
+          void adminStore.setAgentRecord(acctId!, gameId!, 'WRANGLER', {
+            status: 'idle',
+            stoppedAt: wranglerStoppedAt,
+            lastSnapshot: wranglerSnapshot,
+            log: wranglerLog,
+          });
+        }
+
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ ok: true, watching: false }));
         return;
@@ -1230,6 +1417,8 @@ export async function createServer(opts: ServerOptions = {}) {
       filePath = join(ROOT, 'packages', 'board', 'traffic.html');
     } else if (path === '/advance' || path === '/advance.html') {
       filePath = join(ROOT, 'packages', 'board', 'advance.html');
+    } else if (path === '/wrangler' || path === '/wrangler.html') {
+      filePath = join(ROOT, 'packages', 'board', 'wrangler.html');
     } else if (path === '/demo' || path === '/demo.html') {
       filePath = join(ROOT, 'packages', 'board', 'index.html');
     } else if (path === '/login' || path === '/login.html') {

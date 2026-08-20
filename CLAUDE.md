@@ -53,6 +53,7 @@ packages/board/            - Board UI + admin console + agent dashboards (vanill
   index.html               - Board view (TMC desk + production seat)
   admin.html               - Admin console (manage accounts/games/crew/assignments)
   traffic.html             - TRAFFIC dashboard (flight status monitor)
+  wrangler.html            - WRANGLER dashboard (constraint gathering)
 integrations/firebase/     - FirestoreStore wrapper (firebase-admin lives here for pnpm hoisting)
 integrations/grafana/      - Prometheus-format metrics push
 integrations/clickhouse/   - Append-only audit log (optional, needs CLICKHOUSE_URL)
@@ -87,6 +88,7 @@ pnpm build         # tsc -b (not required for dev)
 - **Fixture mode**: `/demo` route serves the board with auto-playing fixture data, no external dependencies
 - **Game timing model**: gameType → defaults (duration, strike), with per-game overrides for the wrap-to-gate chain
 - **TRAFFIC flight monitoring**: Crew routing uses curated real flight schedule (28 airports, direct + connecting). AviationStack API integration polls live status when `FLIGHT_STATUS_API_KEY` is set. TRAFFIC is read-only per agent-separation — never receives crew identity, next calls, or fare data. Dashboard at `/traffic`.
+- **WRANGLER constraint gathering**: Reaches out to crew with inferred/unknown next calls to gather confirmed constraints — "must be at MCI by Mon 13:00 CT" — without requiring them to disclose who they work for. Gemini integration parses natural-language crew responses into structured constraints. Dashboard at `/wrangler`.
 
 ## Deployment
 

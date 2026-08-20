@@ -190,6 +190,76 @@ export interface RosterUpdate extends BaseEvent {
   };
 }
 
+// ---------------------------------------------------------------------------
+// WRANGLER — constraint gathering from crew
+// ---------------------------------------------------------------------------
+
+/** Status of an individual constraint outreach to a crew member. */
+export type OutreachStatus =
+  | 'pending'      // message sent, awaiting reply
+  | 'confirmed'    // crew confirmed a constraint
+  | 'declined'     // crew declined to share
+  | 'expired'      // timed out without response
+  | 'not-needed';  // no inferred data to confirm
+
+/** A single crew constraint gathered or attempted by WRANGLER. */
+export interface CrewConstraintEntry {
+  crewId: string;
+  name: string;
+  position: string;
+
+  /** What WRANGLER is trying to confirm. */
+  outreach: {
+    status: OutreachStatus;
+    /** When the outreach was initiated. */
+    sentAt: string | null;
+    /** When a response was received. */
+    respondedAt: string | null;
+    /** The channel used (sms, email, in-app, simulated). */
+    channel: string;
+  };
+
+  /** The constraint, if gathered. */
+  constraint: {
+    /** e.g. "must be at MCI by Mon 13:00 CT" */
+    text: string;
+    /** Destination airport IATA if parseable. */
+    destinationAirport: string | null;
+    /** Deadline ISO if parseable. */
+    deadlineIso: string | null;
+    /** Deadline display (e.g. "Mon 13:00 CT"). */
+    deadlineDisplay: string | null;
+    /** Whether crew attributed the constraint (named the show). */
+    attributed: boolean;
+    /** Attribution text if crew chose to disclose (e.g. "MNF · Kansas City"). */
+    attribution: string | null;
+  } | null;
+
+  /** Previous provenance level before WRANGLER's outreach. */
+  previousProvenance: string;
+  /** New provenance level after WRANGLER's work. */
+  newProvenance: string;
+}
+
+/** WRANGLER constraint snapshot — emitted when outreach results change. */
+export interface ConstraintUpdate extends BaseEvent {
+  type: 'constraint-update';
+  /** What triggered this update. */
+  trigger: 'game-started' | 'heartbeat' | 'outreach-result' | 'crew-changed';
+  /** Per-crew constraint entries. */
+  crew: CrewConstraintEntry[];
+  /** Aggregate counts. */
+  summary: {
+    total: number;
+    needsOutreach: number;
+    pending: number;
+    confirmed: number;
+    declined: number;
+    expired: number;
+    notNeeded: number;
+  };
+}
+
 export type AgentEvent =
   | GameStateUpdate
   | ChainUpdate
@@ -203,7 +273,8 @@ export type AgentEvent =
   | AgentStatusChange
   | ShowStateChange
   | ComplianceUpdate
-  | RosterUpdate;
+  | RosterUpdate
+  | ConstraintUpdate;
 
 export interface BoardEvent {
   type: 'agent-event';

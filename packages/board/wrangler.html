@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>APRON — WRANGLER Dashboard</title>
+<style>
+:root{
+  --bg:#0B0B0C; --panel:#141416; --panel-2:#1B1B1E; --line:#2A2A2E; --line-2:#3A3A40;
+  --ink:#F2F1EE; --ink-2:#A9A69E; --ink-3:#6E6B65;
+  --clear:#25B04B; --clear-bg:#0E2A16;
+  --watch:#E8A81C; --watch-bg:#2E2308;
+  --risk:#EE7A3C; --risk-bg:#31190A;
+  --down:#E0403C; --down-bg:#33100F;
+  --live:#5DA9E9;
+  --prov-confirmed:#25B04B; --prov-sheet:#5DA9E9; --prov-external:#E8A81C;
+  --prov-inferred:#A9A69E; --prov-none:#6E6B65;
+  --f:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --m:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f);font-size:14px;
+  line-height:1.45;-webkit-font-smoothing:antialiased;display:flex;min-height:100vh}
+.mono{font-family:var(--m);font-variant-numeric:tabular-nums}
+
+/* ---------- sidebar ---------- */
+.sidebar{width:220px;min-height:100vh;background:var(--panel);border-right:1px solid var(--line);
+  position:fixed;top:0;left:0;bottom:0;z-index:90;display:flex;flex-direction:column}
+.sidebar-brand{padding:18px 20px 16px;border-bottom:1px solid var(--line)}
+.sidebar-brand b{font-size:16px;font-weight:750;letter-spacing:.13em}
+.sidebar-brand span{font-size:10px;letter-spacing:.16em;color:var(--ink-3);text-transform:uppercase;
+  margin-left:9px}
+.sidebar-nav{padding:12px 0;flex:1}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 20px;font-size:13px;font-weight:600;
+  color:var(--ink-3);cursor:pointer;transition:background .12s,color .12s;border:none;background:none;
+  width:100%;text-align:left;font-family:var(--f);letter-spacing:.02em;text-decoration:none}
+.nav-item:hover{background:var(--panel-2);color:var(--ink-2)}
+.nav-item.active{color:var(--ink);background:var(--panel-2);border-right:2px solid var(--live)}
+.nav-icon{font-size:15px;width:22px;text-align:center;opacity:.6}
+.nav-item.active .nav-icon{opacity:1}
+.sidebar-foot{padding:14px 20px;border-top:1px solid var(--line);font-size:10px;color:var(--ink-3);
+  letter-spacing:.08em;font-family:var(--m)}
+
+/* ---------- top bar ---------- */
+.topbar{position:fixed;top:0;left:220px;right:0;z-index:80;background:#0B0B0Cf2;
+  backdrop-filter:blur(10px);border-bottom:1px solid var(--line);height:52px;
+  display:flex;align-items:center;padding:0 24px;gap:16px}
+.topbar-title{font-size:12px;letter-spacing:.15em;text-transform:uppercase;color:var(--ink-2);
+  font-weight:640}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:12px}
+.topbar-pill{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  padding:3px 10px;border-radius:99px;font-family:var(--m)}
+.topbar-pill.on{background:var(--clear-bg);color:var(--clear);border:1px solid var(--clear)}
+.topbar-pill.off{background:var(--panel-2);color:var(--ink-3);border:1px solid var(--line)}
+.topbar-pill.warn{background:var(--watch-bg);color:var(--watch);border:1px solid var(--watch)}
+.refresh-label{font-size:11px;color:var(--ink-3);font-family:var(--m)}
+
+/* ---------- main ---------- */
+.main{margin-left:220px;padding:68px 28px 40px;flex:1;min-width:0}
+
+/* ---------- instance block ---------- */
+.wrangler-instance{margin-bottom:32px;padding-bottom:24px;border-bottom:1px solid var(--line)}
+.wrangler-instance:last-child{border-bottom:none;margin-bottom:0;padding-bottom:0}
+.instance-header{display:flex;align-items:center;gap:10px;margin-bottom:14px;padding:10px 16px;
+  background:var(--panel);border:1px solid var(--line);border-radius:8px}
+.instance-icon{font-size:18px}
+.instance-label{font-size:14px;font-weight:700;letter-spacing:.03em;flex:1}
+.instance-uptime{font-size:11px;color:var(--ink-3)}
+
+/* ---------- summary cards ---------- */
+.cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px;margin-bottom:18px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.card-header{padding:12px 16px 8px;border-bottom:1px solid var(--line);display:flex;
+  align-items:center;gap:8px}
+.card-title{font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink-3)}
+.card-icon{font-size:13px;opacity:.7}
+.card-body{padding:12px 16px 14px}
+.card-big{font-size:28px;font-weight:750;font-family:var(--m);font-variant-numeric:tabular-nums}
+.card-sub{font-size:11px;color:var(--ink-3);margin-top:2px}
+
+/* ---------- outreach table ---------- */
+.outreach-section{margin-top:12px}
+.outreach-heading{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink-2);margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.outreach-wrap{background:var(--panel);border:1px solid var(--line);border-radius:8px;
+  overflow:hidden;overflow-x:auto}
+.outreach-table{width:100%;border-collapse:collapse;font-size:12px;font-family:var(--m);
+  font-variant-numeric:tabular-nums;min-width:700px}
+.outreach-table th{position:sticky;top:0;background:var(--panel);border-bottom:1px solid var(--line);
+  padding:8px 12px;text-align:left;font-size:9px;font-weight:700;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--ink-3);z-index:2;white-space:nowrap}
+.outreach-table td{padding:7px 12px;border-bottom:1px solid var(--line);vertical-align:middle;
+  white-space:nowrap}
+.outreach-table tr:last-child td{border-bottom:none}
+.outreach-table tr:hover{background:var(--panel-2)}
+.crew-name{font-weight:600;color:var(--ink)}
+.crew-pos{color:var(--ink-3);font-size:11px}
+
+/* outreach status pills */
+.os{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.08em;
+  text-transform:uppercase;padding:2px 7px;border-radius:3px}
+.os-confirmed{background:var(--clear-bg);color:var(--prov-confirmed)}
+.os-pending{background:var(--watch-bg);color:var(--watch)}
+.os-declined{background:var(--risk-bg);color:var(--risk)}
+.os-expired{background:var(--panel-2);color:var(--ink-3);border:1px solid var(--line)}
+.os-not-needed{background:var(--panel-2);color:var(--ink-3);border:1px solid var(--line)}
+
+/* provenance pills */
+.prov{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.08em;
+  text-transform:uppercase;padding:2px 7px;border-radius:3px}
+.prov-confirmed{background:var(--clear-bg);color:var(--prov-confirmed)}
+.prov-sheet{background:#0E1F33;color:var(--prov-sheet)}
+.prov-external{background:var(--watch-bg);color:var(--prov-external)}
+.prov-inferred{background:var(--panel-2);color:var(--prov-inferred);border:1px solid var(--line)}
+.prov-none{background:var(--panel-2);color:var(--prov-none);border:1px solid var(--line)}
+
+/* provenance upgrade arrow */
+.prov-arrow{color:var(--ink-3);margin:0 4px;font-size:12px}
+.prov-upgrade .prov-arrow{color:var(--clear)}
+
+/* constraint text */
+.constraint-text{color:var(--ink);font-weight:600;font-size:11px}
+.attribution{color:var(--prov-external);font-size:10px;font-style:italic}
+.no-constraint{color:var(--ink-3);font-style:italic;font-size:11px}
+
+/* channel badge */
+.channel{display:inline-block;font-size:9px;font-weight:600;padding:2px 6px;border-radius:3px;
+  background:var(--panel-2);color:var(--ink-3);border:1px solid var(--line);letter-spacing:.05em}
+
+/* ---------- log ---------- */
+.log-section{margin-top:24px}
+.log-heading{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink-2);margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.log-filters{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+.log-filter{font-size:10px;font-weight:600;padding:3px 10px;border-radius:99px;border:1px solid var(--line);
+  background:none;color:var(--ink-3);cursor:pointer;font-family:var(--f);letter-spacing:.05em;
+  transition:all .12s}
+.log-filter:hover{background:var(--panel-2);color:var(--ink-2)}
+.log-filter.active{background:var(--panel-2);color:var(--ink);border-color:var(--line-2)}
+.log-wrap{max-height:400px;overflow-y:auto;background:var(--panel);border:1px solid var(--line);
+  border-radius:8px}
+.log-entry{padding:6px 14px;font-size:12px;font-family:var(--m);border-bottom:1px solid var(--line);
+  display:flex;gap:12px;line-height:1.5}
+.log-entry:last-child{border-bottom:none}
+.log-ts{color:var(--ink-3);flex-shrink:0;width:72px}
+.log-lvl{flex-shrink:0;width:72px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;font-size:10px;
+  padding-top:2px}
+.log-lvl.info{color:var(--ink-3)} .log-lvl.outreach{color:var(--live)}
+.log-lvl.constraint{color:var(--clear)} .log-lvl.alert{color:var(--risk)}
+.log-lvl.error{color:var(--down)}
+.log-msg{color:var(--ink-2);flex:1;word-break:break-word}
+
+/* ---------- completed ---------- */
+.completed-section{margin-top:40px;border-top:1px solid var(--line);padding-top:24px}
+.completed-heading{font-size:11px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:var(--ink-3);margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.completed-heading::before{content:'';flex:none;width:8px;height:8px;border-radius:50%;
+  background:var(--ink-3);opacity:.4}
+.completed-list{display:flex;flex-direction:column;gap:8px}
+.completed-card{background:var(--panel);border:1px solid var(--line);border-radius:8px;
+  padding:14px 18px;display:grid;grid-template-columns:auto 1fr auto auto;
+  gap:12px;align-items:center;opacity:.7;transition:opacity .15s;cursor:pointer}
+.completed-card:hover{opacity:1}
+.completed-icon{font-size:16px;opacity:.5}
+.completed-title{font-size:13px;font-weight:600}
+.completed-meta{font-size:12px;color:var(--ink-2);font-family:var(--m);font-variant-numeric:tabular-nums}
+.completed-badge{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;padding:2px 8px;border-radius:4px;font-family:var(--m)}
+.completed-badge.done{background:var(--clear-bg);color:var(--clear)}
+.completed-badge.idle{background:var(--panel-2);color:var(--ink-3);border:1px solid var(--line)}
+
+/* empty state */
+.empty{text-align:center;padding:60px 20px}
+.empty-icon{font-size:48px;margin-bottom:16px;opacity:.3}
+.empty-text{font-size:14px;color:var(--ink-3);margin-bottom:6px}
+.empty-sub{font-size:12px;color:var(--ink-3);opacity:.7}
+
+/* detail modal */
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:100;display:none;
+  align-items:center;justify-content:center;padding:24px}
+.modal-bg.open{display:flex}
+.modal{background:var(--bg);border:1px solid var(--line);border-radius:10px;width:100%;
+  max-width:900px;max-height:90vh;display:flex;flex-direction:column}
+.modal-head{padding:16px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px}
+.modal-title{font-size:13px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-2)}
+.modal-close{margin-left:auto;background:none;border:1px solid var(--line);color:var(--ink-3);
+  padding:4px 12px;border-radius:4px;cursor:pointer;font-family:var(--f);font-size:12px;
+  transition:all .12s}
+.modal-close:hover{background:var(--panel-2);color:var(--ink)}
+.modal-body{padding:20px;overflow-y:auto;flex:1}
+</style>
+</head>
+<body>
+
+<aside class="sidebar">
+  <div class="sidebar-brand"><b>APRON</b><span>Admin</span></div>
+  <nav class="sidebar-nav">
+    <a href="/admin" class="nav-item"><span class="nav-icon">⚙</span>Console</a>
+    <a href="/spotter" class="nav-item"><span class="nav-icon">📡</span>SPOTTER</a>
+    <a href="/traffic" class="nav-item"><span class="nav-icon">✈</span>TRAFFIC</a>
+    <a href="/steward" class="nav-item"><span class="nav-icon">📜</span>STEWARD</a>
+    <a href="/advance" class="nav-item"><span class="nav-icon">🧭</span>ADVANCE</a>
+    <a href="/wrangler" class="nav-item active"><span class="nav-icon">🤝</span>WRANGLER</a>
+    <a href="/board" class="nav-item"><span class="nav-icon">📋</span>Board</a>
+    <a href="/demo" class="nav-item"><span class="nav-icon">▶</span>Demo</a>
+  </nav>
+  <div class="sidebar-foot">apron.show</div>
+</aside>
+
+<header class="topbar">
+  <div class="topbar-title">🤝 WRANGLER — Constraint Gathering</div>
+  <div class="topbar-right">
+    <span class="topbar-pill off" id="status-pill">IDLE</span>
+    <span class="refresh-label" id="refresh-label">—</span>
+  </div>
+</header>
+
+<main class="main">
+  <div id="main-content"></div>
+  <div id="log-content"></div>
+</main>
+
+<!-- Detail modal -->
+<div class="modal-bg" id="modal-bg">
+  <div class="modal">
+    <div class="modal-head">
+      <span class="modal-title" id="modal-title">Constraint Detail</span>
+      <button class="modal-close" id="modal-close">Close</button>
+    </div>
+    <div class="modal-body" id="modal-body"></div>
+  </div>
+</div>
+
+<script>
+const API_BASE = location.origin;
+let refreshTimer;
+let activeFilter = 'all';
+
+// ---- Polling ----
+
+async function refresh() {
+  try {
+    const [statusRes, logRes] = await Promise.all([
+      fetch(`${API_BASE}/api/wrangler/status`),
+      fetch(`${API_BASE}/api/wrangler/log`),
+    ]);
+    const status = await statusRes.json();
+    const logData = await logRes.json();
+
+    renderStatus(status);
+    renderLog(logData);
+
+    document.getElementById('refresh-label').textContent =
+      new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  } catch (e) {
+    console.error('Refresh failed:', e);
+  }
+}
+
+// ---- Render status ----
+
+function renderStatus(data) {
+  const pill = document.getElementById('status-pill');
+  const main = document.getElementById('main-content');
+
+  const hasActive = data.active && data.active.length > 0;
+  const hasCompleted = data.completed && data.completed.length > 0;
+
+  if (hasActive) {
+    pill.className = 'topbar-pill on';
+    pill.textContent = `${data.active.length} ACTIVE`;
+  } else {
+    pill.className = 'topbar-pill off';
+    pill.textContent = 'IDLE';
+  }
+
+  let html = '';
+
+  if (!hasActive && !hasCompleted) {
+    html += `<div class="empty">
+      <div class="empty-icon">🤝</div>
+      <div class="empty-text">No active constraint monitors</div>
+      <div class="empty-sub">WRANGLER starts when a game is watched — gathering constraints from crew with inferred or unknown next calls.</div>
+    </div>`;
+    main.innerHTML = html;
+    return;
+  }
+
+  // Active monitors
+  for (const m of (data.active || [])) {
+    html += renderInstance(m);
+  }
+
+  // Completed monitors
+  if (hasCompleted) {
+    html += '<div class="completed-section">';
+    html += '<div class="completed-heading">Completed Constraint Monitors</div>';
+    html += '<div class="completed-list">';
+    for (const c of data.completed) {
+      const badge = c.agent?.status === 'done' ? 'done' : 'idle';
+      const label = badge === 'done' ? 'DONE' : 'STOPPED';
+      const snap = c.lastSnapshot;
+      const confirmed = snap?.summary?.confirmed ?? '—';
+      html += `<div class="completed-card" onclick="showDetail('${c.accountId}','${c.gameId}')">
+        <span class="completed-icon">🤝</span>
+        <span class="completed-title">${esc(c.title)}</span>
+        <span class="completed-meta">${confirmed} confirmed</span>
+        <span class="completed-badge ${badge}">${label}</span>
+      </div>`;
+    }
+    html += '</div></div>';
+  }
+
+  main.innerHTML = html;
+}
+
+function renderInstance(m) {
+  const snap = m.snapshot;
+  const sum = snap?.summary ?? {};
+  const crew = snap?.crew ?? [];
+
+  let h = `<div class="wrangler-instance">`;
+
+  // Header
+  h += `<div class="instance-header">
+    <span class="instance-icon">🤝</span>
+    <span class="instance-label">${esc(m.title)}</span>
+    <span class="instance-uptime mono">${m.gameId}</span>
+  </div>`;
+
+  // Summary cards
+  h += '<div class="cards">';
+  h += card('👥', 'Crew', sum.total ?? 0, 'total tracked');
+  h += card('📨', 'Outreach', sum.needsOutreach ?? 0, 'need outreach');
+  h += card('⏳', 'Pending', sum.pending ?? 0, 'awaiting reply');
+  h += card('✅', 'Confirmed', sum.confirmed ?? 0, 'constraints');
+  h += card('🚫', 'Declined', sum.declined ?? 0, 'declined');
+  h += card('⏰', 'Expired', sum.expired ?? 0, 'timed out');
+  h += '</div>';
+
+  // Outreach table
+  if (crew.length > 0) {
+    h += '<div class="outreach-section">';
+    h += '<div class="outreach-heading">📋 Crew Constraint Status</div>';
+    h += renderOutreachTable(crew);
+    h += '</div>';
+  }
+
+  h += '</div>';
+  return h;
+}
+
+function card(icon, title, value, sub) {
+  return `<div class="card">
+    <div class="card-header"><span class="card-icon">${icon}</span><span class="card-title">${title}</span></div>
+    <div class="card-body"><div class="card-big">${value}</div><div class="card-sub">${sub}</div></div>
+  </div>`;
+}
+
+function renderOutreachTable(crew) {
+  let h = '<div class="outreach-wrap"><table class="outreach-table"><thead><tr>';
+  h += '<th>Name</th><th>Position</th><th>Status</th><th>Channel</th>';
+  h += '<th>Prev Prov</th><th></th><th>New Prov</th>';
+  h += '<th>Constraint</th>';
+  h += '</tr></thead><tbody>';
+
+  // Sort: pending first, then confirmed, then declined/expired, then not-needed
+  const order = { pending: 0, confirmed: 1, declined: 2, expired: 3, 'not-needed': 4 };
+  const sorted = [...crew].sort((a, b) => (order[a.outreach?.status] ?? 5) - (order[b.outreach?.status] ?? 5));
+
+  for (const c of sorted) {
+    const st = c.outreach?.status ?? 'not-needed';
+    const upgraded = c.newProvenance !== c.previousProvenance && st === 'confirmed';
+
+    h += '<tr>';
+    h += `<td class="crew-name">${esc(c.name)}</td>`;
+    h += `<td class="crew-pos">${esc(c.position)}</td>`;
+    h += `<td><span class="os os-${st}">${st.replace('-', ' ')}</span></td>`;
+    h += `<td><span class="channel">${esc(c.outreach?.channel ?? 'sim')}</span></td>`;
+    h += `<td><span class="prov prov-${c.previousProvenance}">${c.previousProvenance}</span></td>`;
+    h += `<td><span class="prov-arrow${upgraded ? '' : ''}">${upgraded ? '→' : '·'}</span></td>`;
+    h += `<td><span class="prov prov-${c.newProvenance}">${c.newProvenance}</span></td>`;
+
+    // Constraint cell
+    if (c.constraint) {
+      let ct = `<span class="constraint-text">${esc(c.constraint.text)}</span>`;
+      if (c.constraint.attributed && c.constraint.attribution) {
+        ct += `<br><span class="attribution">${esc(c.constraint.attribution)}</span>`;
+      }
+      h += `<td>${ct}</td>`;
+    } else if (st === 'pending') {
+      h += '<td><span class="no-constraint">awaiting response…</span></td>';
+    } else if (st === 'declined') {
+      h += '<td><span class="no-constraint">declined to share</span></td>';
+    } else if (st === 'expired') {
+      h += '<td><span class="no-constraint">no response</span></td>';
+    } else {
+      h += '<td><span class="no-constraint">—</span></td>';
+    }
+
+    h += '</tr>';
+  }
+
+  h += '</tbody></table></div>';
+  return h;
+}
+
+// ---- Render log ----
+
+function renderLog(data) {
+  const logContainer = document.getElementById('log-content');
+
+  const entries = (data.entries || []).filter(e =>
+    activeFilter === 'all' || e.level === activeFilter
+  );
+
+  let h = '<div class="log-heading">📝 Constraint Log</div>';
+
+  // Filters
+  h += '<div class="log-filters">';
+  for (const f of ['all', 'outreach', 'constraint', 'alert', 'error', 'info']) {
+    h += `<button class="log-filter${activeFilter === f ? ' active' : ''}" onclick="setFilter('${f}')">${f}</button>`;
+  }
+  h += '</div>';
+
+  h += '<div class="log-wrap">';
+  if (entries.length === 0) {
+    h += '<div class="log-entry"><span class="log-msg" style="color:var(--ink-3);font-style:italic">No log entries yet</span></div>';
+  } else {
+    // Newest first
+    for (const e of [...entries].reverse()) {
+      const ts = new Date(e.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      h += `<div class="log-entry">
+        <span class="log-ts">${ts}</span>
+        <span class="log-lvl ${e.level}">${e.level}</span>
+        <span class="log-msg">${esc(e.message)}</span>
+      </div>`;
+    }
+  }
+  h += '</div>';
+
+  logContainer.innerHTML = h;
+}
+
+function setFilter(f) {
+  activeFilter = f;
+  refresh();
+}
+
+// ---- Detail modal ----
+
+async function showDetail(accountId, gameId) {
+  const modal = document.getElementById('modal-bg');
+  const body = document.getElementById('modal-body');
+  const title = document.getElementById('modal-title');
+
+  title.textContent = 'Loading...';
+  body.innerHTML = '<div style="text-align:center;padding:40px;color:var(--ink-3)">Loading record...</div>';
+  modal.classList.add('open');
+
+  try {
+    const res = await fetch(`${API_BASE}/api/wrangler/record?accountId=${accountId}&gameId=${gameId}`);
+    const data = await res.json();
+    const record = data.record || {};
+
+    title.textContent = `WRANGLER · ${gameId}`;
+
+    let h = '';
+
+    if (record.lastSnapshot) {
+      const snap = record.lastSnapshot;
+      const sum = snap.summary || {};
+
+      h += `<div style="margin-bottom:16px;font-size:12px;color:var(--ink-2)">
+        <strong>Timestamp:</strong> ${snap.timestamp ?? '—'} ·
+        <strong>Crew:</strong> ${sum.total ?? '—'} ·
+        <strong>Confirmed:</strong> ${sum.confirmed ?? 0} ·
+        <strong>Declined:</strong> ${sum.declined ?? 0} ·
+        <strong>Pending:</strong> ${sum.pending ?? 0}
+      </div>`;
+
+      if (snap.crew && snap.crew.length > 0) {
+        h += renderOutreachTable(snap.crew);
+      }
+    }
+
+    if (record.log && record.log.length > 0) {
+      h += '<div style="margin-top:20px">';
+      h += '<div class="log-heading">📝 Archived Log</div>';
+      h += '<div class="log-wrap">';
+      for (const e of [...record.log].reverse()) {
+        const ts = new Date(e.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        h += `<div class="log-entry">
+          <span class="log-ts">${ts}</span>
+          <span class="log-lvl ${e.level}">${e.level}</span>
+          <span class="log-msg">${esc(e.message)}</span>
+        </div>`;
+      }
+      h += '</div></div>';
+    }
+
+    if (!h) h = '<div style="color:var(--ink-3);text-align:center;padding:40px">No record data available</div>';
+    body.innerHTML = h;
+  } catch (e) {
+    body.innerHTML = `<div style="color:var(--down);text-align:center;padding:40px">Failed to load record: ${esc(e.message)}</div>`;
+  }
+}
+
+document.getElementById('modal-close').onclick = () => {
+  document.getElementById('modal-bg').classList.remove('open');
+};
+document.getElementById('modal-bg').onclick = (e) => {
+  if (e.target === e.currentTarget) e.currentTarget.classList.remove('open');
+};
+
+// ---- Helpers ----
+
+function esc(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// ---- Init ----
+
+refresh();
+refreshTimer = setInterval(refresh, 5000);
+</script>
+
+</body>
+</html>
