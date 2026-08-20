@@ -911,9 +911,20 @@ function loadScenario(sc) {
   $('btn-runner').disabled = true;
   $('m-risk').textContent = '0'; $('m-risk').className = 'v mono';
   $('m-exposed').textContent = '0'; $('m-exposed').className = 'v mono';
-  $('m-clear').textContent = '147';
-  $('boardnote').textContent = 'Sunday 18 October · all productions nominal';
+  $('m-clear').textContent = '' + (sc.crew?.length || 147);
+  var boardDate = sc.title || new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' });
+  $('boardnote').textContent = boardDate + ' · all productions nominal';
   $('detail').classList.remove('open');
+
+  // Set production seat header from hero show
+  var hero = SHOWS.find(function(s){ return s.hero; }) || SHOWS[0];
+  if (hero) {
+    $('prod-net').textContent = (hero.net || '') + ' · PRODUCTION SEAT';
+    $('prod-title').textContent = hero.title;
+    $('prod-sub').textContent = (hero.venue || '') + ' · ' + hero.crew + ' traveling crew';
+    $('p-gs').textContent = hero.gs || 'Pre-game';
+    $('p-gs-s').textContent = (hero.venue || '') + (hero.live ? ' · live' : '');
+  }
 
   renderBoard(); renderChain(0); renderRoster(); renderCrewbar({});
   $('btn-play').textContent = 'Run the night';
@@ -930,9 +941,20 @@ function fmtSlack(m) {
 function slackCls(m) { return m < 0 ? 'bad' : m < 90 ? 'warn' : 'ok'; }
 
 function renderBoard() {
+  var heroId = SHOWS.length > 0 && SHOWS[0].hero ? SHOWS[0].id : 'alcs';
+  // Update summary metrics
+  var liveCount = SHOWS.filter(function(s){ return s.live; }).length;
+  var totalCrew = SHOWS.reduce(function(a,s){ return a + s.crew; }, 0);
+  $('m-shows').textContent = '' + SHOWS.length;
+  $('m-shows').parentElement.querySelector('.s').textContent =
+    new Date().toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' }) +
+    ' · ' + liveCount + ' live';
+  $('m-pos').textContent = '' + totalCrew;
+  $('m-pos').parentElement.querySelector('.s').textContent = 'Across ' + SHOWS.length + ' productions';
+
   $('board').innerHTML = SHOWS.map(function(s) {
-    var st = s.id === 'alcs' ? SHOWS[0].state : s.state;
-    return '<button class="show ' + (s.id==='alcs'&&st!=='clear'?'sel':'') + '" data-id="' + s.id + '">'
+    var st = s.id === heroId ? SHOWS[0].state : s.state;
+    return '<button class="show ' + (s.hero&&st!=='clear'?'sel':'') + '" data-id="' + s.id + '">'
       + '<div class="show-top"><div class="show-net"><span class="net">' + s.net + '</span>'
       + '<span class="state ' + st + '">' + st.toUpperCase() + '</span></div>'
       + '<h3>' + s.title + '</h3><div class="venue">' + s.venue + '</div></div>'
@@ -940,11 +962,11 @@ function renderBoard() {
       + '<div class="val ' + (s.live?'live':'') + '">' + s.gs + '</div></div>'
       + '<div class="crewn"><div class="big">' + s.crew + '</div><div class="lab">Traveling</div></div></div>'
       + (s.note ? '<div class="alert watchy"><span>' + s.note + '</span></div>' : '')
-      + (s.id==='alcs'&&s.alert ? '<div class="alert"><span>' + s.alert + '</span></div>' : '')
+      + (s.hero&&s.alert ? '<div class="alert"><span>' + s.alert + '</span></div>' : '')
       + '</button>';
   }).join('');
   document.querySelectorAll('.show').forEach(function(b) {
-    b.addEventListener('click', function() { if(b.dataset.id==='alcs') openDetail(); });
+    b.addEventListener('click', function() { if(b.dataset.id===heroId) openDetail(); });
   });
 }
 
@@ -1099,8 +1121,11 @@ function logEvent(s) {
 function openDetail() {
   var d = $('detail');
   d.classList.add('open');
-  $('d-title').textContent = 'ALCS Gm 4 · Rangers @ Guardians';
-  $('d-sub').innerHTML = 'FOX · Progressive Field, Cleveland · <b>22 traveling crew</b> · 6 hold a next call';
+  var hero = SHOWS.find(function(s){ return s.hero; }) || SHOWS[0];
+  if (hero) {
+    $('d-title').textContent = hero.title;
+    $('d-sub').innerHTML = (hero.net || '') + ' · ' + (hero.venue || '') + ' · <b>' + hero.crew + ' traveling crew</b>';
+  }
 }
 
 /* ============ PRODUCTION SEAT ============ */
@@ -1205,7 +1230,7 @@ function renderProd() {
     var sh = SHOWS[0];
     $('p-gs').innerHTML = (sh.live ? '<span style="color:var(--live)">● </span>' : '') + sh.gs;
     $('p-gs').className = 'v';
-    $('p-gs-s').textContent = sh.live ? 'Progressive Field · live' : 'Progressive Field · ' + (sh.gsNote || 'wrapped');
+    $('p-gs-s').textContent = sh.live ? (sh.venue || '') + ' · live' : (sh.venue || '') + ' · ' + (sh.gsNote || 'wrapped');
     var pf = chainLevel >= 2 ? '01:05' : chainLevel === 1 ? '00:35' : '22:58';
     $('p-pf').textContent = pf;
     $('p-pf').className = 'v' + (chainLevel >= 1 ? ' watch' : '');

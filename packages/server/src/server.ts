@@ -61,7 +61,7 @@ interface ServerOptions {
 }
 
 export async function createServer(opts: ServerOptions = {}) {
-  const scenario = await loadScenario();
+  let scenario = await loadScenario();
   const orchestrator = new Orchestrator('alcs-gm4', ['CUSTOMS']);
 
   const demoSpotter = new SpotterAgent();
@@ -758,15 +758,140 @@ export async function createServer(opts: ServerOptions = {}) {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Build a live board scenario from today's Firestore games, replacing the
+  // fixture scenario so the board grid shows real productions.
+  // ---------------------------------------------------------------------------
+  async function buildLiveScenario(): Promise<void> {
+    try {
+      const accounts = await adminStore.listAccounts();
+      if (!accounts.length) return;
+
+      const today = new Date().toISOString().slice(0, 10);
+      const allShows: import('@apron/types').Show[] = [];
+      const allCrew: import('@apron/types').CrewMember[] = [];
+      let firstChain: import('@apron/types').ChainNode[] | null = null;
+
+      for (const acct of accounts) {
+        const games = await adminStore.listGames(acct.id);
+        const todayGames = games.filter(g => g.date === today);
+        if (!todayGames.length) continue;
+
+        const crew = await adminStore.listCrew(acct.id);
+        const crewMap = new Map(crew.map(c => [c.id, c]));
+
+        for (const game of todayGames) {
+          // Determine game state label
+          const spotter = spotters.get(game.id);
+          const snap = spotter?.getStatus();
+          let gameState = 'Pre-game';
+          let live = false;
+          if (snap?.prediction) {
+            gameState = snap.prediction.showState ?? 'In progress';
+            live = true;
+          } else if (game.agents?.SPOTTER?.status === 'done') {
+            gameState = 'Final';
+            live = false;
+          }
+
+          // Count assigned crew
+          let crewCount = 0;
+          try {
+            const assignments = await adminStore.listAssignments(acct.id, game.id);
+            crewCount = assignments.length;
+
+            // Build crew roster for the first/hero game
+            if (allShows.length === 0) {
+              const crewAssignments = await adminStore.listCrewAssignments(acct.id, game.id);
+              for (const ca of crewAssignments) {
+                const member = crewMap.get(ca.crewId);
+                allCrew.push({
+                  id: ca.crewId,
+                  position: ca.position ?? 'UTIL',
+                  keyPosition: ['TD', 'A1', 'DIR', 'LEAD EVS', 'EIC'].includes(ca.position ?? ''),
+                  name: member?.name ?? ca.crewId,
+                  externalCall: ca.nextCall?.type === 'external',
+                  disclosed: ca.nextCall?.disclosed ?? false,
+                  provenance: ca.nextCall?.provenance
+                    ? [ca.nextCall.provenance.level as import('@apron/types').ProvenanceLevel, '▪', `${ca.nextCall.provenance.level} source`]
+                    : ['none' as import('@apron/types').ProvenanceLevel, '—', 'No provenance data'],
+                  homeMarket: member?.homeMarket ?? ca.department ?? '',
+                  tier: (member?.tier ?? 'A-list') as import('@apron/types').CrewTier,
+                  nextCall: ca.nextCall
+                    ? `${ca.nextCall.production?.name ?? ca.nextCall.type}<br><span class="sub2">${ca.nextCall.callTime?.display ?? ''}</span>`
+                    : 'No next call',
+                  routing: ca.routing
+                    ? `${ca.routing.carrierDisplay ?? ''} · ${ca.routing.routeSummary ?? ''}`
+                    : '—',
+                  arrival: ca.routing?.arrivalTime ? `arr ${ca.routing.arrivalTime}` : '—',
+                  slackMinutes: ca.routing?.slackMinutes ?? 0,
+                });
+              }
+            }
+          } catch { /* no assignments yet */ }
+
+          const defaults = GAME_TYPE_DEFAULTS[game.gameType as GameType] ?? GAME_TYPE_DEFAULTS.baseball;
+          if (!firstChain) {
+            firstChain = buildGameChain(game, defaults);
+          }
+
+          allShows.push({
+            id: game.id,
+            net: game.network ?? '',
+            title: game.title,
+            venue: game.venue ?? '',
+            gameState,
+            live,
+            crewCount: crewCount || 22,
+            state: 'clear',
+            alert: null,
+            hero: allShows.length === 0,
+          });
+        }
+      }
+
+      if (allShows.length === 0) return;
+
+      const dayName = new Intl.DateTimeFormat('en-US', { weekday: 'long', day: 'numeric', month: 'long' })
+        .format(new Date());
+
+      scenario = {
+        id: `live-${today}`,
+        title: `${dayName} · Live`,
+        description: `Live board for ${dayName}`,
+        shows: allShows,
+        crew: allCrew,
+        chain: firstChain ?? [{ label: 'Final out', baseTime: '22:00', revisedTime: '22:00' }],
+        offlineAgents: {},
+        crewNote: '',
+        handoffText: '',
+        optionGroups: [],
+        steps: [],
+      };
+
+      orchestrator.loadScenario(scenario);
+
+      // Push to all connected WebSocket clients
+      const initMsg = JSON.stringify({ type: 'reset', scenario });
+      for (const ws of clients) {
+        if (ws.readyState === ws.OPEN) ws.send(initMsg);
+      }
+
+      console.log(`[live-board] Built scenario from ${allShows.length} games for ${today}`);
+    } catch (err) {
+      console.error('[live-board] Error building live scenario:', err);
+    }
+  }
+
   // Start the scheduler unless in demo mode (no Firestore to scan)
   if (!opts.demoMode) {
     // Run once at startup (delayed 5s to let Firestore settle)
     setTimeout(() => {
-      void scanAndStartGames();
+      void scanAndStartGames().then(() => buildLiveScenario());
     }, 5_000);
     // Then every 60s
     const schedulerTimer = setInterval(() => {
-      void scanAndStartGames();
+      void scanAndStartGames().then(() => buildLiveScenario());
     }, SCHEDULER_INTERVAL_MS);
     // Don't keep the process alive just for the scheduler
     schedulerTimer.unref();
