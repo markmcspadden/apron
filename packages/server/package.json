@@ -23,6 +23,7 @@
     "@apron/integration-google-cloud": "workspace:*",
     "@apron/integration-firebase": "workspace:*",
     "@apron/integration-aviationstack": "workspace:*",
+    "@apron/integration-twilio": "workspace:*",
     "ws": "^8.18.0"
   }
 }

@@ -27,6 +27,7 @@
 import { BaseAgent } from '@apron/orchestrator';
 import type { FixtureStep, CrewGameAssignment, OutreachStatus } from '@apron/types';
 import type { GeminiClient } from '@apron/integration-google-cloud';
+import type { TwilioClient } from '@apron/integration-twilio';
 
 // ---------------------------------------------------------------------------
 // Config
@@ -65,6 +66,8 @@ export interface WranglerWatchConfig {
   accountId: string;
   /** Gemini client for response parsing + simulated outreach. */
   gemini: GeminiClient;
+  /** Twilio client for SMS outreach (optional — falls back to simulated). */
+  twilio?: TwilioClient;
   /** Injected by server — loads current crew assignments from the store. */
   getCrewAssignments: () => Promise<CrewGameAssignment[]>;
   /** Outreach channel — defaults to 'simulated'. */
@@ -77,6 +80,8 @@ export interface OutreachRecord {
   name: string;
   position: string;
   homeAirport: string;
+  /** E.164 phone number for SMS outreach. */
+  phone: string | null;
 
   status: OutreachStatus;
   channel: string;
@@ -315,6 +320,82 @@ export class WranglerAgent extends BaseAgent {
     return { ok: true };
   }
 
+  /**
+   * Handle an incoming SMS response from a crew member.
+   *
+   * Called by the webhook when Twilio delivers a reply. Matches the phone
+   * number to a pending outreach record, logs the raw text, and passes it
+   * to Gemini for constraint extraction.
+   */
+  async handleIncomingSms(phone: string, text: string): Promise<{ ok: boolean; crewId?: string; error?: string }> {
+    if (!this.watchConfig) {
+      return { ok: false, error: 'WRANGLER is not watching' };
+    }
+
+    // Find the pending outreach record for this phone number
+    let record: OutreachRecord | null = null;
+    for (const r of this.outreachMap.values()) {
+      if (r.phone === phone && r.status === 'pending' && r.channel === 'sms') {
+        record = r;
+        break;
+      }
+    }
+
+    if (!record) {
+      this.log('info', `Incoming SMS from ${phone} — no matching pending outreach`, { phone });
+      return { ok: false, error: `No pending SMS outreach for phone ${phone}` };
+    }
+
+    this.log('outreach', `${record.name} responded via SMS: "${text}"`, {
+      crewId: record.crewId,
+      phone,
+      rawResponse: text,
+    });
+
+    // Parse the response with Gemini
+    const { gemini } = this.watchConfig;
+    if (gemini.isEnabled()) {
+      try {
+        await this.parseAndApplyResponse(gemini, record, text);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.log('error', `SMS response parsing failed for ${record.name}: ${msg}`);
+      }
+    } else {
+      // Fixture mode — auto-confirm
+      record.respondedAt = new Date().toISOString();
+      record.status = 'confirmed';
+      record.newProvenance = 'confirmed';
+      record.constraint = {
+        text,
+        destinationAirport: null,
+        deadlineIso: null,
+        deadlineDisplay: null,
+        attributed: false,
+        attribution: null,
+      };
+      this.log('constraint', `${record.name}: SMS response auto-confirmed (no Gemini) — "${text}"`, {
+        crewId: record.crewId,
+      });
+      void this.scanAndOutreach('outreach-result');
+    }
+
+    return { ok: true, crewId: record.crewId };
+  }
+
+  /**
+   * Find a crew member's outreach record by phone number.
+   * Used by the server to route incoming SMS to the correct WRANGLER instance.
+   */
+  findByPhone(phone: string): OutreachRecord | null {
+    for (const r of this.outreachMap.values()) {
+      if (r.phone === phone && r.status === 'pending' && r.channel === 'sms') {
+        return r;
+      }
+    }
+    return null;
+  }
+
   // ---- Core logic ----
 
   /**
@@ -357,6 +438,7 @@ export class WranglerAgent extends BaseAgent {
               name: ca.name,
               position: ca.position,
               homeAirport: ca.homeAirport,
+              phone: ca.phone ?? null,
               status: 'not-needed',
               channel: this.watchConfig.channel ?? 'simulated',
               sentAt: null,
@@ -398,6 +480,7 @@ export class WranglerAgent extends BaseAgent {
             name: ca.name,
             position: ca.position,
             homeAirport: ca.homeAirport,
+            phone: ca.phone ?? null,
             status: 'ready',
             channel: this.watchConfig.channel ?? 'simulated',
             sentAt: null,
@@ -501,8 +584,36 @@ export class WranglerAgent extends BaseAgent {
    */
   private async initiateOutreach(record: OutreachRecord, ca: CrewGameAssignment): Promise<void> {
     if (!this.watchConfig) return;
-    const { gemini } = this.watchConfig;
+    const { gemini, twilio } = this.watchConfig;
+    const channel = record.channel;
 
+    // SMS channel — send a real text message via Twilio
+    if (channel === 'sms' && twilio?.isEnabled() && record.phone) {
+      try {
+        const smsBody = `Hey ${record.name.split(' ')[0]}, it's the travel desk. Where do you need to be after tonight's show? Just the city and time is all we need.`;
+        const result = await twilio.sendSms(record.phone, smsBody);
+        if (result.ok) {
+          this.log('outreach', `${record.name}: SMS sent to ${record.phone} (SID: ${result.sid})`, {
+            crewId: record.crewId,
+            phone: record.phone,
+            smsSid: result.sid,
+          });
+          // Now waiting for webhook callback — record stays pending
+        } else {
+          this.log('error', `${record.name}: SMS failed — ${result.error}`, { crewId: record.crewId });
+          // Fall back to simulated
+          record.channel = 'simulated';
+          this.log('info', `${record.name}: falling back to simulated outreach`);
+          void this.initiateOutreach(record, ca);
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.log('error', `SMS outreach failed for ${record.name}: ${msg}`);
+      }
+      return;
+    }
+
+    // Simulated channel — Gemini or fixture mode
     if (!gemini.isEnabled()) {
       // Fixture mode — simulate a quick confirmation after a short delay
       setTimeout(() => {

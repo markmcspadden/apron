@@ -1037,6 +1037,10 @@ tbody tr.sel{background:var(--panel-2);box-shadow:inset 3px 0 0 var(--live)}
         <input type="text" id="crew-market" placeholder="e.g. Los Angeles, CA">
       </div>
       <div class="form-group">
+        <label>Phone</label>
+        <input type="tel" id="crew-phone" placeholder="e.g. +14155551234">
+      </div>
+      <div class="form-group">
         <label>Tier</label>
         <select id="crew-tier">
           <option value="">Select...</option>
@@ -1062,6 +1066,7 @@ tbody tr.sel{background:var(--panel-2);box-shadow:inset 3px 0 0 var(--live)}
           <th>Position</th>
           <th>Department</th>
           <th>Home Market</th>
+          <th>Phone</th>
           <th>Tier</th>
         </tr>
       </thead>
@@ -1936,6 +1941,7 @@ async function loadCrew(){
         + '<td><span class="tag pos">' + esc(c.position || '') + '</span></td>'
         + '<td>' + esc(c.department || '') + '</td>'
         + '<td>' + esc(c.homeMarket || '') + '</td>'
+        + '<td style="font-family:monospace;font-size:0.85em">' + esc(c.phone || '—') + '</td>'
         + '<td><span class="tag ' + tierCls + '">' + esc(c.tier || '') + '</span></td></tr>';
     }).join('');
     $('crew-table-wrap').style.display = '';
@@ -1960,18 +1966,20 @@ $('btn-save-crew').addEventListener('click', async function(){
   var position = $('crew-position').value;
   var department = $('crew-department').value;
   var homeMarket = $('crew-market').value.trim();
+  var phone = $('crew-phone').value.trim();
   var tier = $('crew-tier').value;
   if(!name){ showErr('err-crew', 'Name is required.'); return; }
   clearErr('err-crew');
+  var body = { name: name, position: position, department: department, homeMarket: homeMarket, tier: tier };
+  if(phone) body.phone = phone;
   try{
-    await api('POST', '/api/admin/accounts/' + selectedAccountId + '/crew', {
-      name: name, position: position, department: department, homeMarket: homeMarket, tier: tier
-    });
+    await api('POST', '/api/admin/accounts/' + selectedAccountId + '/crew', body);
     $('form-new-crew').classList.remove('open');
     $('crew-name').value = '';
     $('crew-position').value = '';
     $('crew-department').value = '';
     $('crew-market').value = '';
+    $('crew-phone').value = '';
     $('crew-tier').value = '';
     loadCrew();
   }catch(e){

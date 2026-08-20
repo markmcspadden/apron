@@ -557,6 +557,7 @@ async function routeCrew(
         department: body['department'] as string,
         homeMarket: body['homeMarket'] as string,
         tier: typeof body['tier'] === 'string' ? body['tier'] : undefined,
+        phone: typeof body['phone'] === 'string' ? body['phone'] : undefined,
       });
       return json(res, 201, crew);
     }
@@ -574,7 +575,7 @@ async function routeCrew(
     if (method === 'PATCH') {
       const body = await readBody(req);
       const patch: Record<string, unknown> = {};
-      for (const field of ['name', 'position', 'department', 'homeMarket', 'tier'] as const) {
+      for (const field of ['name', 'position', 'department', 'homeMarket', 'tier', 'phone'] as const) {
         if (typeof body[field] === 'string') patch[field] = body[field];
       }
       const crew = await store!.updateCrew(accountId, crewId, patch);
@@ -988,12 +989,12 @@ async function routeSeed(
 
   // 4. Crew
   const crewData = [
-    { id: 'crew-callahan', name: 'Mike Callahan', position: 'TD', department: 'Truck', homeMarket: 'New York, NY', tier: 'A-list' },
-    { id: 'crew-vasquez', name: 'Sarah Vasquez', position: 'DIR', department: 'Truck', homeMarket: 'Los Angeles, CA', tier: 'A-list' },
-    { id: 'crew-kessler', name: 'Dave Kessler', position: 'A1', department: 'Audio booth', homeMarket: 'Chicago, IL', tier: 'A-list' },
-    { id: 'crew-rinaldi', name: 'Tony Rinaldi', position: 'EIC', department: 'Engineering', homeMarket: 'New York, NY', tier: 'A-list' },
-    { id: 'crew-nguyen', name: 'Beth Nguyen', position: 'GFX', department: 'Graphics', homeMarket: 'Atlanta, GA', tier: 'B-list' },
-    { id: 'crew-wright', name: 'James Wright', position: 'LEAD EVS', department: 'Tape room', homeMarket: 'Dallas, TX', tier: 'A-list' },
+    { id: 'crew-callahan', name: 'Mike Callahan', position: 'TD', department: 'Truck', homeMarket: 'New York, NY', tier: 'A-list', phone: '+14698930779' },
+    { id: 'crew-vasquez', name: 'Sarah Vasquez', position: 'DIR', department: 'Truck', homeMarket: 'Los Angeles, CA', tier: 'A-list', phone: '+14698930779' },
+    { id: 'crew-kessler', name: 'Dave Kessler', position: 'A1', department: 'Audio booth', homeMarket: 'Chicago, IL', tier: 'A-list', phone: '+14698930779' },
+    { id: 'crew-rinaldi', name: 'Tony Rinaldi', position: 'EIC', department: 'Engineering', homeMarket: 'New York, NY', tier: 'A-list', phone: '+14698930779' },
+    { id: 'crew-nguyen', name: 'Beth Nguyen', position: 'GFX', department: 'Graphics', homeMarket: 'Atlanta, GA', tier: 'B-list', phone: '+14698930779' },
+    { id: 'crew-wright', name: 'James Wright', position: 'LEAD EVS', department: 'Tape room', homeMarket: 'Dallas, TX', tier: 'A-list', phone: '+14698930779' },
   ] as const;
 
   const crew = [];

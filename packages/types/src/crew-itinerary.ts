@@ -208,6 +208,8 @@ export interface CrewGameAssignment {
   homeAirport: string;
   /** Crew tier for prioritization. */
   tier: 'T1' | 'T2';
+  /** E.164 phone number for SMS outreach (e.g. "+14155551234"). */
+  phone?: string;
 
   /** What they do after this show. */
   nextCall: NextCall;

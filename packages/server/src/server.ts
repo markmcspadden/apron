@@ -19,6 +19,7 @@ import { AuditLog } from './audit.js';
 import { GrafanaReporter } from '@apron/integration-grafana';
 import { ClickhouseAuditStore } from '@apron/integration-clickhouse';
 import { GeminiClient } from '@apron/integration-google-cloud';
+import { TwilioClient } from '@apron/integration-twilio';
 import type { AgentEvent, FixtureScenario, ChainNode } from '@apron/types';
 import type { SpotterWatchConfig } from '@apron/agent-spotter';
 import type { StewardWatchConfig } from '@apron/agent-steward';
@@ -97,6 +98,7 @@ export async function createServer(opts: ServerOptions = {}) {
   const grafana = new GrafanaReporter();
   const clickhouse = new ClickhouseAuditStore();
   const gemini = new GeminiClient();
+  const twilioClient = new TwilioClient();
 
   // Firebase integration — skip entirely in demo mode so the demo never
   // accidentally writes to Firestore even if ADC is configured locally.
@@ -246,8 +248,9 @@ export async function createServer(opts: ServerOptions = {}) {
         gameId,
         accountId,
         gemini,
+        twilio: twilioClient.isEnabled() ? twilioClient : undefined,
         getCrewAssignments: () => adminStore.listCrewAssignments(accountId, gameId),
-        channel: gemini.isEnabled() ? 'simulated' : 'simulated',
+        channel: twilioClient.isEnabled() ? 'sms' : 'simulated',
       };
       liveWrangler.startWatching(wranglerConfig);
       wranglers.set(gameId, liveWrangler);
@@ -1243,6 +1246,60 @@ export async function createServer(opts: ServerOptions = {}) {
         } catch (err) {
           res.writeHead(500, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+        }
+      });
+      return;
+    }
+
+    // ---- Twilio SMS webhook — incoming crew replies ----
+    if (path === '/api/wrangler/sms-webhook' && req.method === 'POST') {
+      let body = '';
+      req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+      req.on('end', async () => {
+        try {
+          // Validate webhook signature if Twilio is configured
+          if (twilioClient.isEnabled()) {
+            const sig = req.headers['x-twilio-signature'] as string ?? '';
+            const webhookUrl = `https://${req.headers.host}${path}`;
+            const params: Record<string, string> = {};
+            for (const [k, v] of new URLSearchParams(body)) params[k] = v;
+            if (!twilioClient.validateWebhook(sig, webhookUrl, params)) {
+              console.warn('[twilio] Webhook signature validation failed');
+              // Don't reject — signature may fail behind proxies; log and continue
+            }
+          }
+
+          const parsed = TwilioClient.parseIncomingSms(body);
+          if (!parsed) {
+            res.writeHead(400, { 'Content-Type': 'text/xml' });
+            res.end('<Response/>');
+            return;
+          }
+
+          console.log(`[twilio] Incoming SMS from ${parsed.from}: "${parsed.text}"`);
+
+          // Find which WRANGLER instance has a pending outreach for this phone
+          let handled = false;
+          for (const [_gid, w] of wranglers) {
+            const match = w.findByPhone(parsed.from);
+            if (match) {
+              await w.handleIncomingSms(parsed.from, parsed.text);
+              handled = true;
+              break;
+            }
+          }
+
+          if (!handled) {
+            console.log(`[twilio] No pending outreach found for ${parsed.from}`);
+          }
+
+          // Respond with empty TwiML (required by Twilio)
+          res.writeHead(200, { 'Content-Type': 'text/xml' });
+          res.end('<Response/>');
+        } catch (err) {
+          console.error('[twilio] Webhook error:', err);
+          res.writeHead(200, { 'Content-Type': 'text/xml' });
+          res.end('<Response/>');
         }
       });
       return;

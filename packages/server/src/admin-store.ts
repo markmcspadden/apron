@@ -156,6 +156,8 @@ export interface CrewRecord {
   department: string;
   homeMarket: string;
   tier?: string;
+  /** E.164 phone number for SMS outreach (e.g. "+14155551234"). */
+  phone?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -748,6 +750,7 @@ export class AdminStore {
       department: string;
       homeMarket: string;
       tier?: string;
+      phone?: string;
       id?: string;
     },
   ): Promise<CrewRecord> {
@@ -767,6 +770,7 @@ export class AdminStore {
         updatedAt: ts,
       };
       if (data.tier != null) record['tier'] = data.tier;
+      if (data.phone != null) record['phone'] = data.phone;
       await db.collection('accounts').doc(accountId).collection('crew').doc(id).set(record);
       return { id, accountId, ...data, createdAt: now, updatedAt: now };
     }

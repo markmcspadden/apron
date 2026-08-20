@@ -347,7 +347,7 @@ export function generateCrewAssignments(
         : undefined,
     });
 
-    assignments.push({
+    const assignment: CrewGameAssignment = {
       crewId: member.id,
       name: member.name,
       position,
@@ -358,7 +358,9 @@ export function generateCrewAssignments(
       nextCall,
       routing,
       status: 'CLEAR' as BoardStatus,
-    });
+    };
+    if (member.phone) assignment.phone = member.phone;
+    assignments.push(assignment);
   }
 
   return assignments;
