@@ -515,6 +515,10 @@ export class WranglerAgent extends BaseAgent {
     try {
       const response = await this.generateCrewResponse(gemini, record, ca);
       if (response) {
+        this.log('outreach', `${record.name} responded: "${response}"`, {
+          crewId: record.crewId,
+          rawResponse: response,
+        });
         await this.parseAndApplyResponse(gemini, record, response);
       }
     } catch (err) {
@@ -621,6 +625,12 @@ Respond with ONLY the JSON, no other text.`;
 
       if (!parsed) return;
 
+      // Log the extraction result
+      this.log('constraint',
+        `${record.name}: extraction → status=${parsed.status}, constraint="${parsed.constraintText ?? '—'}", dest=${parsed.destinationAirport ?? '—'}, deadline=${parsed.deadlineDisplay ?? '—'}, attributed=${parsed.attributed}${parsed.attribution ? ` (${parsed.attribution})` : ''}`,
+        { crewId: record.crewId, parsed },
+      );
+
       record.respondedAt = new Date().toISOString();
 
       if (parsed.status === 'confirmed' && parsed.constraintText) {
@@ -689,16 +699,19 @@ Respond with ONLY the JSON, no other text.`;
 
     if (roll < 0.10) {
       // 10% decline
+      const declineText = 'Haven\'t confirmed my next one yet, I\'ll sort it out';
+      this.log('outreach', `${record.name} responded: "${declineText}" (simulated)`, {
+        crewId: record.crewId, rawResponse: declineText,
+      });
+
       record.status = 'declined';
       record.newProvenance = record.previousProvenance;
-      this.log('outreach', `${record.name} (${record.position}): declined to share constraint (simulated)`, {
+
+      this.log('constraint', `${record.name}: extraction → status=declined (simulated)`, {
         crewId: record.crewId,
       });
     } else {
       // 90% confirm (70% constraint only, 20% attributed)
-      record.status = 'confirmed';
-      record.newProvenance = 'confirmed';
-
       const dest = ca.nextCall.destinationCity || ca.nextCall.destinationAirport || 'unknown';
       const callTime = ca.nextCall.callTime?.display ?? 'TBD';
       const destAirport = ca.nextCall.destinationAirport;
@@ -709,6 +722,17 @@ Respond with ONLY the JSON, no other text.`;
         ? `${ca.nextCall.production.shortName ?? ca.nextCall.production.name} · ${ca.nextCall.destinationCity ?? ''}`
         : null;
 
+      // Log the simulated crew text message
+      const simText = attributed && attribution
+        ? `Yeah I've got ${attribution}, need to be there by ${callTime}`
+        : `Need to be in ${dest} by ${callTime}`;
+      this.log('outreach', `${record.name} responded: "${simText}" (simulated)`, {
+        crewId: record.crewId, rawResponse: simText,
+      });
+
+      record.status = 'confirmed';
+      record.newProvenance = 'confirmed';
+
       record.constraint = {
         text: constraintText,
         destinationAirport: destAirport,
@@ -718,12 +742,9 @@ Respond with ONLY the JSON, no other text.`;
         attribution,
       };
 
-      const attrSuffix = attributed && attribution
-        ? ` (attributed: ${attribution})`
-        : ' (constraint only)';
-
+      // Log the extraction
       this.log('constraint',
-        `${record.name} (${record.position}): constraint confirmed — "${constraintText}"${attrSuffix} (simulated)`,
+        `${record.name}: extraction → status=confirmed, constraint="${constraintText}", dest=${destAirport ?? '—'}, deadline=${callTime}${attributed && attribution ? `, attributed (${attribution})` : ', constraint only'} (simulated)`,
         { crewId: record.crewId, constraint: constraintText, attributed },
       );
 
