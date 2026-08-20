@@ -553,6 +553,8 @@ ${ca.nextCall.callTime ? `Their actual call time: ${ca.nextCall.callTime.display
 
 IMPORTANT: The crew member should respond naturally as a person would to a text message. They should share their CONSTRAINT (when and where they need to be) but may or may not name the specific production — that's their choice.
 
+Do NOT include timezone abbreviations (PT, CT, ET, MT, etc.) in the response — real crew just say the time without the timezone, e.g. "by Monday 1pm" not "by Monday 1pm CT". The constraint system infers timezone from the destination city.
+
 About 70% of the time, crew share just the constraint: "Need to be in KC by Monday 1pm"
 About 20% of the time, they attribute it: "Yeah I've got MNF in KC, call is 2pm Monday"
 About 10% of the time, they decline: "I'll sort it out myself" or "Haven't confirmed yet"
@@ -722,10 +724,11 @@ Respond with ONLY the JSON, no other text.`;
         ? `${ca.nextCall.production.shortName ?? ca.nextCall.production.name} · ${ca.nextCall.destinationCity ?? ''}`
         : null;
 
-      // Log the simulated crew text message
+      // Log the simulated crew text message — strip timezone abbreviations
+      const callTimeNoTz = callTime.replace(/\s+[A-Z]{2,4}$/, '');
       const simText = attributed && attribution
-        ? `Yeah I've got ${attribution}, need to be there by ${callTime}`
-        : `Need to be in ${dest} by ${callTime}`;
+        ? `Yeah I've got ${attribution}, need to be there by ${callTimeNoTz}`
+        : `Need to be in ${dest} by ${callTimeNoTz}`;
       this.log('outreach', `${record.name} responded: "${simText}" (simulated)`, {
         crewId: record.crewId, rawResponse: simText,
       });
