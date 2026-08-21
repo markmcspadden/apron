@@ -84,6 +84,21 @@ body{background:var(--bg);color:var(--ink);font-family:var(--f);font-size:14px;
 .btn-board:hover{background:#234770;border-color:#7ABFEE}
 .btn-board .arrow{font-size:14px}
 
+/* ---- section groups ---- */
+.game-section{margin-bottom:32px}
+.game-section:last-child{margin-bottom:0}
+.sec-divider{display:flex;align-items:center;gap:12px;margin:32px 0 16px}
+.sec-divider h2{font-size:12px;letter-spacing:.15em;text-transform:uppercase;color:var(--ink-2);font-weight:640;white-space:nowrap}
+.sec-divider .n{font-family:var(--m);font-size:11px;color:var(--ink-3)}
+.sec-divider::after{content:'';flex:1;height:1px;background:var(--line)}
+.past-section .game-card{opacity:.7;transition:opacity .15s,border-color .15s,transform .12s}
+.past-section .game-card:hover{opacity:.9}
+
+/* ---- time display ---- */
+.game-time{font-family:var(--m);font-size:13px;font-weight:600;color:var(--ink);
+  letter-spacing:.02em}
+.game-time-label{font-size:10px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.08em}
+
 /* ---- empty state ---- */
 .empty{padding:48px 20px;text-align:center;color:var(--ink-3);font-size:14px;
   border:1px dashed var(--line-2);border-radius:12px}
@@ -136,7 +151,7 @@ body{background:var(--bg);color:var(--ink);font-family:var(--f);font-size:14px;
     <span class="n" id="games-count"></span>
   </div>
 
-  <div id="games-grid" class="game-grid"></div>
+  <div id="games-sections"></div>
   <div id="games-empty" class="empty" style="display:none">
     <b>No games scheduled</b>
     Your admin hasn't added any games to this account yet.
@@ -195,35 +210,113 @@ $('seat-label').textContent = seatType === 'tmc' ? 'TMC Desk' : 'Production';
 // ---- Games ----
 $('games-count').textContent = games.length + ' game' + (games.length !== 1 ? 's' : '');
 
+// Today's date string for comparison (YYYY-MM-DD)
+var now = new Date();
+var todayStr = now.getFullYear() + '-'
+  + String(now.getMonth() + 1).padStart(2, '0') + '-'
+  + String(now.getDate()).padStart(2, '0');
+
+// Split games into today/upcoming vs past
+var upcoming = [];
+var past = [];
+games.forEach(function(g) {
+  if ((g.date || '') >= todayStr) {
+    upcoming.push(g);
+  } else {
+    past.push(g);
+  }
+});
+
+// Sort upcoming: today first, then ascending date/time
+upcoming.sort(function(a, b) {
+  var dc = (a.date || '').localeCompare(b.date || '');
+  if (dc !== 0) return dc;
+  return (a.startTime || '').localeCompare(b.startTime || '');
+});
+
+// Sort past: most recent first
+past.sort(function(a, b) {
+  var dc = (b.date || '').localeCompare(a.date || '');
+  if (dc !== 0) return dc;
+  return (b.startTime || '').localeCompare(a.startTime || '');
+});
+
+function formatDate(dateStr) {
+  if (!dateStr) return '';
+  var parts = dateStr.split('-');
+  var d = new Date(+parts[0], +parts[1] - 1, +parts[2]);
+  var days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  var months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  if (dateStr === todayStr) return 'Today';
+  // Tomorrow check
+  var tmrw = new Date(now);
+  tmrw.setDate(tmrw.getDate() + 1);
+  var tmrwStr = tmrw.getFullYear() + '-'
+    + String(tmrw.getMonth() + 1).padStart(2, '0') + '-'
+    + String(tmrw.getDate()).padStart(2, '0');
+  if (dateStr === tmrwStr) return 'Tomorrow';
+  return days[d.getDay()] + ', ' + months[d.getMonth()] + ' ' + d.getDate();
+}
+
+function formatTime(t) {
+  if (!t) return '';
+  var parts = t.split(':');
+  var h = parseInt(parts[0], 10);
+  var m = parts[1] || '00';
+  var ampm = h >= 12 ? 'PM' : 'AM';
+  var h12 = h % 12 || 12;
+  return h12 + ':' + m + ' ' + ampm;
+}
+
+function renderCard(g) {
+  var dateLabel = formatDate(g.date);
+  var timeLabel = formatTime(g.startTime);
+  var seatParam = seatType === 'tmc' ? 'tmc' : 'prod';
+
+  var sportIcons = {baseball:'⚾', football:'🏈', basketball:'🏀', hockey:'🏒', soccer:'⚽'};
+  var sportLabel = g.gameType ? (sportIcons[g.gameType] || '') + ' ' + g.gameType : '';
+
+  return '<div class="game-card" data-game-id="' + esc(g.id) + '">'
+    + '<div class="game-top">'
+    + '<span class="game-network">' + esc(g.network || '') + '</span>'
+    + (g.gameType ? '<span class="game-sport ' + esc(g.gameType) + '">' + sportLabel + '</span>' : '')
+    + '<span class="game-title">' + esc(g.title || '') + '</span>'
+    + '</div>'
+    + '<div class="game-details">'
+    + '<span class="detail"><span class="icon">📍</span> ' + esc(g.venue || '') + '</span>'
+    + '<span class="detail"><span class="icon">📅</span> ' + esc(dateLabel) + '</span>'
+    + (timeLabel ? '<span class="detail"><span class="icon">🕐</span> <span class="game-time">' + esc(timeLabel) + '</span></span>' : '')
+    + (g.callTime ? '<span class="detail"><span class="game-time-label">Call</span> ' + esc(g.callTime) + '</span>' : '')
+    + '</div>'
+    + '<div class="game-bottom">'
+    + '<span class="game-crew">' + (g.crewCount || 0) + ' crew assigned</span>'
+    + '<div class="game-action">'
+    + '<a href="/board?seat=' + seatParam + '&game=' + encodeURIComponent(g.id) + '" class="btn-board">Open Board <span class="arrow">→</span></a>'
+    + '</div>'
+    + '</div>'
+    + '</div>';
+}
+
 if(games.length === 0){
   $('games-empty').style.display = '';
 } else {
-  $('games-grid').innerHTML = games.map(function(g){
-    var dateStr = g.date || '';
-    if(g.callTime) dateStr += ' · Call ' + g.callTime;
-    var seatParam = seatType === 'tmc' ? 'tmc' : 'prod';
+  var html = '';
 
-    var sportIcons = {baseball:'⚾', football:'🏈', basketball:'🏀', hockey:'🏒', soccer:'⚽'};
-    var sportLabel = g.gameType ? (sportIcons[g.gameType] || '') + ' ' + g.gameType : '';
-
-    return '<div class="game-card" data-game-id="' + esc(g.id) + '">'
-      + '<div class="game-top">'
-      + '<span class="game-network">' + esc(g.network || '') + '</span>'
-      + (g.gameType ? '<span class="game-sport ' + esc(g.gameType) + '">' + sportLabel + '</span>' : '')
-      + '<span class="game-title">' + esc(g.title || '') + '</span>'
-      + '</div>'
-      + '<div class="game-details">'
-      + '<span class="detail"><span class="icon">📍</span> ' + esc(g.venue || '') + '</span>'
-      + '<span class="detail"><span class="icon">📅</span> ' + esc(dateStr) + '</span>'
-      + '</div>'
-      + '<div class="game-bottom">'
-      + '<span class="game-crew">' + (g.crewCount || 0) + ' crew assigned</span>'
-      + '<div class="game-action">'
-      + '<a href="/board?seat=' + seatParam + '&game=' + encodeURIComponent(g.id) + '" class="btn-board">Open Board <span class="arrow">→</span></a>'
-      + '</div>'
-      + '</div>'
+  if (upcoming.length > 0) {
+    html += '<div class="game-section">'
+      + '<div class="sec-divider"><h2>Today & Upcoming</h2><span class="n">' + upcoming.length + '</span></div>'
+      + '<div class="game-grid">' + upcoming.map(renderCard).join('') + '</div>'
       + '</div>';
-  }).join('');
+  }
+
+  if (past.length > 0) {
+    html += '<div class="game-section past-section">'
+      + '<div class="sec-divider"><h2>Past</h2><span class="n">' + past.length + '</span></div>'
+      + '<div class="game-grid">' + past.map(renderCard).join('') + '</div>'
+      + '</div>';
+  }
+
+  $('games-sections').innerHTML = html;
 }
 
 // ---- Sign out ----
