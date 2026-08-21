@@ -30,6 +30,7 @@ COPY integrations/firebase/package.json integrations/firebase/package.json
 COPY integrations/google-cloud/package.json integrations/google-cloud/package.json
 COPY integrations/aviationstack/package.json integrations/aviationstack/package.json
 COPY integrations/grafana/package.json integrations/grafana/package.json
+COPY integrations/twilio/package.json integrations/twilio/package.json
 
 # Install dependencies. The lockfile may not always be in sync (fixtures /
 # newly added workspace members), so don't hard-fail on a frozen lockfile.
