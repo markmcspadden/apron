@@ -16,7 +16,7 @@ import { FixerAgent } from '@apron/agent-fixer';
 import { RunnerAgent } from '@apron/agent-runner';
 import { CustomsAgent } from '@apron/agent-customs';
 import { AuditLog } from './audit.js';
-import { GrafanaReporter } from '@apron/integration-grafana';
+import { GrafanaReporter, LokiLogger, registerAgents, CloseoutBuilder } from '@apron/integration-grafana';
 import { ClickhouseAuditStore } from '@apron/integration-clickhouse';
 import { GeminiClient } from '@apron/integration-google-cloud';
 import { TwilioClient } from '@apron/integration-twilio';
@@ -96,7 +96,14 @@ export async function createServer(opts: ServerOptions = {}) {
 
   const audit = new AuditLog();
   const grafana = new GrafanaReporter();
+  const loki = new LokiLogger();
+  const closeout = new CloseoutBuilder(loki);
   const clickhouse = new ClickhouseAuditStore();
+
+  // Register agents with Grafana Agent Observability (fire-and-forget)
+  void registerAgents().catch(err => {
+    console.error('[grafana-agento11y] Registration error:', err);
+  });
   const gemini = new GeminiClient();
   const twilioClient = new TwilioClient();
 
@@ -326,6 +333,7 @@ export async function createServer(opts: ServerOptions = {}) {
   orchestrator.onEvent((event: AgentEvent) => {
     audit.append(event);
     grafana.recordEvent(event);
+    loki.logAgentEvent(event.agent, event.type, event.showId, event as unknown as Record<string, unknown>);
     clickhouse.record(event);
     firestore?.recordAuditEvent({
       ...event,
@@ -1598,6 +1606,26 @@ export async function createServer(opts: ServerOptions = {}) {
         res.end(JSON.stringify({ error: 'Failed to start SPOTTER watch' }));
         return;
       }
+    }
+
+    // Closeout report — post-game operational chronology from Loki
+    if (path.startsWith('/api/closeout/') && req.method === 'GET') {
+      const gameId = path.replace('/api/closeout/', '');
+      if (!gameId) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Missing gameId' }));
+        return;
+      }
+      try {
+        const report = await closeout.generate(gameId);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(report));
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: `Closeout generation failed: ${msg}` }));
+      }
+      return;
     }
 
     // Admin API routes

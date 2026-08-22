@@ -1,9 +1,25 @@
+/**
+ * Prometheus metrics reporter for Grafana Cloud.
+ *
+ * Pushes metrics in Prometheus remote-write exposition format.
+ * Supports both Grafana Cloud (Basic auth) and local Prometheus (Bearer/no auth).
+ *
+ * Grafana Cloud requires:
+ *   GRAFANA_PROM_URL   — Remote Write endpoint (e.g. https://prometheus-prod-24-prod-us-east-0.grafana.net)
+ *   GRAFANA_PROM_USER  — Prometheus username (numeric)
+ *   GRAFANA_CLOUD_API_KEY — Grafana Cloud API key (shared with Loki)
+ *
+ * Legacy env vars (GRAFANA_ENDPOINT, GRAFANA_API_KEY) still work for local setups.
+ */
+
 import type { AgentEvent } from '@apron/types';
 
 interface GrafanaConfig {
   endpoint: string;
-  apiKey?: string;
-  orgId?: string;
+  /** Grafana Cloud username (numeric) — null for local/Bearer setups */
+  user: string | null;
+  apiKey: string | null;
+  orgId: string | null;
 }
 
 interface MetricPoint {
@@ -21,14 +37,25 @@ export class GrafanaReporter {
 
   constructor(config?: Partial<GrafanaConfig>) {
     this.config = {
-      endpoint: config?.endpoint ?? process.env['GRAFANA_ENDPOINT'] ?? 'http://localhost:3100',
-      apiKey: config?.apiKey ?? process.env['GRAFANA_API_KEY'],
-      orgId: config?.orgId ?? process.env['GRAFANA_ORG_ID'],
+      // Grafana Cloud → local fallback
+      endpoint: config?.endpoint
+        ?? process.env['GRAFANA_PROM_URL']
+        ?? process.env['GRAFANA_ENDPOINT']
+        ?? 'http://localhost:3100',
+      user: process.env['GRAFANA_PROM_USER'] ?? null,
+      apiKey: config?.apiKey
+        ?? process.env['GRAFANA_CLOUD_API_KEY']
+        ?? process.env['GRAFANA_API_KEY']
+        ?? null,
+      orgId: config?.orgId ?? process.env['GRAFANA_ORG_ID'] ?? null,
     };
     this.enabled = !!this.config.apiKey;
 
     if (this.enabled) {
-      this.flushInterval = setInterval(() => this.flush(), 10_000);
+      this.flushInterval = setInterval(() => void this.flush(), 10_000);
+      console.log('[grafana-prom] Enabled — pushing to', this.config.endpoint);
+    } else {
+      console.log('[grafana-prom] Disabled — no GRAFANA_CLOUD_API_KEY or GRAFANA_API_KEY');
     }
   }
 
@@ -83,7 +110,7 @@ export class GrafanaReporter {
 
   private push(point: MetricPoint): void {
     this.buffer.push(point);
-    if (this.buffer.length >= 100) this.flush();
+    if (this.buffer.length >= 100) void this.flush();
   }
 
   async flush(): Promise<void> {
@@ -107,20 +134,33 @@ export class GrafanaReporter {
       const headers: Record<string, string> = {
         'Content-Type': 'text/plain',
       };
-      if (this.config.apiKey) {
+
+      // Grafana Cloud: Basic auth (user:apiKey)
+      // Local: Bearer token
+      if (this.config.user && this.config.apiKey) {
+        const auth = Buffer.from(`${this.config.user}:${this.config.apiKey}`).toString('base64');
+        headers['Authorization'] = `Basic ${auth}`;
+      } else if (this.config.apiKey) {
         headers['Authorization'] = `Bearer ${this.config.apiKey}`;
       }
+
       if (this.config.orgId) {
         headers['X-Scope-OrgID'] = this.config.orgId;
       }
 
-      await fetch(`${this.config.endpoint}/api/v1/push`, {
+      const res = await fetch(`${this.config.endpoint}/api/v1/push`, {
         method: 'POST',
         headers,
         body,
       });
+
+      if (!res.ok) {
+        const text = await res.text();
+        console.error(`[grafana-prom] Push failed: ${res.status} ${text}`);
+        this.buffer.unshift(...batch);
+      }
     } catch (err) {
-      console.error('[grafana] Failed to push metrics:', err);
+      console.error('[grafana-prom] Failed to push metrics:', err);
       this.buffer.unshift(...batch);
     }
   }

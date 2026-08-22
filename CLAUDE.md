@@ -55,7 +55,7 @@ packages/board/            - Board UI + admin console + agent dashboards (vanill
   traffic.html             - TRAFFIC dashboard (flight status monitor)
   wrangler.html            - WRANGLER dashboard (constraint gathering)
 integrations/firebase/     - FirestoreStore wrapper (firebase-admin lives here for pnpm hoisting)
-integrations/grafana/      - Prometheus-format metrics push
+integrations/grafana/      - Grafana Cloud: Prometheus metrics, Loki logs, Agent O11y, Closeout
 integrations/clickhouse/   - Append-only audit log (optional, needs CLICKHOUSE_URL)
 integrations/google-cloud/ - Gemini client (stubs in fixture mode)
 integrations/aviationstack/- AviationStack flight status API client (TRAFFIC agent)
@@ -97,6 +97,15 @@ pnpm build         # tsc -b (not required for dev)
 - **Firestore:** Native mode, `us-central1`
 - **Cloud Run:** https://apron-203460075246.us-central1.run.app
 - **Local auth:** Application Default Credentials via `gcloud auth application-default login`
+
+## Grafana Cloud Integration
+
+- **Stack:** `modestsalmon3417` on Grafana Cloud
+- **Prometheus metrics:** Agent events, crew-at-risk, call-times-exposed, show-state-changes pushed via remote write
+- **Loki structured logs:** Every agent event logged with labels (agent, game_id, event_type). Forms the epistemic history trail — tracks how operational facts evolve over time
+- **Agent Observability:** All 8 agents registered at startup with system prompts and tool schemas
+- **Closeout report:** `GET /api/closeout/:gameId` — queries Loki for a game's full agent decision trail, builds a chronological operational report with timeline, decisions, compliance summary, flight summary, and an operational grade
+- **Env vars:** `GRAFANA_PROM_URL`, `GRAFANA_PROM_USER`, `GRAFANA_LOKI_URL`, `GRAFANA_LOKI_USER`, `GRAFANA_URL`, `GRAFANA_CLOUD_API_KEY` (see `.env.example`)
 
 ## Hackathon
 
