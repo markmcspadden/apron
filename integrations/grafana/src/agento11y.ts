@@ -118,6 +118,35 @@ const APRON_AGENTS: AgentDefinition[] = [
   },
 ];
 
+// ---------------------------------------------------------------------------
+// Health tracking
+// ---------------------------------------------------------------------------
+
+export interface AgentO11yHealth {
+  enabled: boolean;
+  url: string | null;
+  status: 'not_configured' | 'pending' | 'registered' | 'partial' | 'failed';
+  registered: number;
+  total: number;
+  lastError: string | null;
+  attemptedAt: string | null;
+}
+
+const _health: AgentO11yHealth = {
+  enabled: !!(process.env['GRAFANA_URL'] && process.env['GRAFANA_CLOUD_API_KEY']),
+  url: process.env['GRAFANA_URL'] ?? null,
+  status: (process.env['GRAFANA_URL'] && process.env['GRAFANA_CLOUD_API_KEY']) ? 'pending' : 'not_configured',
+  registered: 0,
+  total: APRON_AGENTS.length,
+  lastError: null,
+  attemptedAt: null,
+};
+
+/** Return the current Agent O11y health state. */
+export function getAgentO11yHealth(): AgentO11yHealth {
+  return { ..._health };
+}
+
 /**
  * Register all Apron agents with Grafana Agent Observability.
  *
@@ -132,11 +161,14 @@ export async function registerAgents(): Promise<number> {
 
   if (!grafanaUrl || !apiKey) {
     console.log('[grafana-agento11y] Disabled — missing GRAFANA_URL or GRAFANA_CLOUD_API_KEY');
+    _health.status = 'not_configured';
     return 0;
   }
 
+  _health.attemptedAt = new Date().toISOString();
   const config: AgentO11yConfig = { grafanaUrl, apiKey };
   let registered = 0;
+  let lastErr: string | null = null;
 
   for (const agent of APRON_AGENTS) {
     try {
@@ -145,7 +177,18 @@ export async function registerAgents(): Promise<number> {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[grafana-agento11y] Failed to register ${agent.name}: ${msg}`);
+      lastErr = `${agent.name}: ${msg}`;
     }
+  }
+
+  _health.registered = registered;
+  _health.lastError = lastErr;
+  if (registered === APRON_AGENTS.length) {
+    _health.status = 'registered';
+  } else if (registered > 0) {
+    _health.status = 'partial';
+  } else {
+    _health.status = 'failed';
   }
 
   console.log(`[grafana-agento11y] Registered ${registered}/${APRON_AGENTS.length} agents`);

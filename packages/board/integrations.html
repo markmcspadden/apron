@@ -159,8 +159,10 @@ body{background:var(--bg);color:var(--ink);font-family:var(--f);font-size:14px;
       </div>
       <div class="card-rows" id="o11y-rows">
         <div class="card-row"><span class="label">Grafana URL</span><span class="value" id="o11y-url">—</span></div>
-        <div class="card-row"><span class="label">Agents</span><span class="value num">8 defined</span></div>
+        <div class="card-row"><span class="label">Registered</span><span class="value num" id="o11y-registered">—</span></div>
+        <div class="card-row"><span class="label">Attempted</span><span class="value" id="o11y-attempted">—</span></div>
       </div>
+      <div class="error-box" id="o11y-error" style="display:none"></div>
     </div>
   </div>
 
@@ -282,10 +284,24 @@ function render(d){
 
   // Agent O11y
   var o = d.grafana.agentO11y;
-  $('o11y-status').className = 'status-label ' + (o.enabled ? 'ok' : 'off');
-  $('o11y-status').textContent = o.enabled ? 'registered' : 'disabled';
+  var o11yClass = o.status === 'registered' ? 'ok'
+    : o.status === 'partial' ? 'warn'
+    : o.status === 'failed' ? 'err'
+    : o.status === 'pending' ? 'warn'
+    : 'off';
+  $('o11y-status').className = 'status-label ' + o11yClass;
+  $('o11y-status').textContent = o.status === 'not_configured' ? 'disabled' : o.status;
   $('o11y-url').textContent = truncUrl(o.url);
   $('o11y-url').title = o.url || '';
+  $('o11y-registered').textContent = o.registered + ' / ' + o.total + ' agents';
+  $('o11y-registered').style.color = o.status === 'registered' ? 'var(--ok)' : o.registered > 0 ? 'var(--warn)' : '';
+  $('o11y-attempted').textContent = ago(o.attemptedAt);
+  if(o.lastError){
+    $('o11y-error').style.display = 'block';
+    $('o11y-error').textContent = o.lastError;
+  } else {
+    $('o11y-error').style.display = 'none';
+  }
 
   // Firebase
   var fb = d.firebase;

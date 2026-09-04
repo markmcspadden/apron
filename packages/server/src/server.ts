@@ -16,7 +16,7 @@ import { FixerAgent } from '@apron/agent-fixer';
 import { RunnerAgent } from '@apron/agent-runner';
 import { CustomsAgent } from '@apron/agent-customs';
 import { AuditLog } from './audit.js';
-import { GrafanaReporter, LokiLogger, registerAgents, CloseoutBuilder } from '@apron/integration-grafana';
+import { GrafanaReporter, LokiLogger, registerAgents, getAgentO11yHealth, CloseoutBuilder } from '@apron/integration-grafana';
 import { ClickhouseAuditStore } from '@apron/integration-clickhouse';
 import { GeminiClient } from '@apron/integration-google-cloud';
 import { TwilioClient } from '@apron/integration-twilio';
@@ -948,10 +948,7 @@ export async function createServer(opts: ServerOptions = {}) {
         grafana: {
           prometheus: grafana.getHealth(),
           loki: loki.getHealth(),
-          agentO11y: {
-            enabled: !!process.env['GRAFANA_URL'] && !!process.env['GRAFANA_CLOUD_API_KEY'],
-            url: process.env['GRAFANA_URL'] ?? null,
-          },
+          agentO11y: getAgentO11yHealth(),
         },
         clickhouse: {
           enabled: !!process.env['CLICKHOUSE_URL'],
