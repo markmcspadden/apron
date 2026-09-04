@@ -138,12 +138,17 @@ export class GrafanaReporter {
     }
 
     const batch = this.buffer.splice(0);
+
+    // Influx line protocol: measurement,tag1=v1,tag2=v2 field=value timestamp_ns
+    // Grafana Cloud accepts this at /api/prom/push/influx/write
     const body = batch
       .map(p => {
-        const labels = Object.entries(p.labels)
-          .map(([k, v]) => `${k}="${v}"`)
+        const tags = Object.entries(p.labels)
+          .map(([k, v]) => `${k}=${v.replace(/ /g, '\\ ').replace(/,/g, '\\,').replace(/=/g, '\\=')}`)
           .join(',');
-        return `${p.name}{${labels}} ${p.value} ${p.timestamp}`;
+        // Influx line protocol expects nanosecond timestamps
+        const tsNs = p.timestamp * 1_000_000;
+        return `${p.name},${tags} value=${p.value} ${tsNs}`;
       })
       .join('\n');
 
@@ -165,10 +170,10 @@ export class GrafanaReporter {
         headers['X-Scope-OrgID'] = this.config.orgId;
       }
 
-      // Grafana Cloud endpoint already includes /api/prom — just append /push.
-      // Strip any trailing slash to avoid double-slash in the URL.
+      // Grafana Cloud: use Influx write endpoint which accepts text line protocol.
+      // The GRAFANA_PROM_URL secret includes /api/prom already.
       const base = this.config.endpoint.replace(/\/+$/, '');
-      const res = await fetch(`${base}/push`, {
+      const res = await fetch(`${base}/push/influx/write`, {
         method: 'POST',
         headers,
         body,
