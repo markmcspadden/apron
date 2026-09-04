@@ -16,7 +16,7 @@ import { FixerAgent } from '@apron/agent-fixer';
 import { RunnerAgent } from '@apron/agent-runner';
 import { CustomsAgent } from '@apron/agent-customs';
 import { AuditLog } from './audit.js';
-import { GrafanaReporter, LokiLogger, registerAgents, getAgentO11yHealth, CloseoutBuilder } from '@apron/integration-grafana';
+import { GrafanaReporter, LokiLogger, initAgentO11y, getAgentO11yHealth, getAgentToolDefs, recordGenerationExported, recordGenerationError, CloseoutBuilder } from '@apron/integration-grafana';
 import { ClickhouseAuditStore } from '@apron/integration-clickhouse';
 import { GeminiClient } from '@apron/integration-google-cloud';
 import { TwilioClient } from '@apron/integration-twilio';
@@ -100,11 +100,18 @@ export async function createServer(opts: ServerOptions = {}) {
   const closeout = new CloseoutBuilder(loki);
   const clickhouse = new ClickhouseAuditStore();
 
-  // Register agents with Grafana Agent Observability (fire-and-forget)
-  void registerAgents().catch(err => {
-    console.error('[grafana-agento11y] Registration error:', err);
-  });
+  // Initialize Grafana Agent Observability SDK
+  const o11yClient = initAgentO11y();
+
   const gemini = new GeminiClient();
+
+  // Attach Agent O11y tracing to Gemini calls
+  if (o11yClient) {
+    gemini.attachO11y(o11yClient, getAgentToolDefs, {
+      onExported: () => recordGenerationExported(),
+      onError: (err) => recordGenerationError(err),
+    });
+  }
   const twilioClient = new TwilioClient();
 
   // Firebase integration — skip entirely in demo mode so the demo never

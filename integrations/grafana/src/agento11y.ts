@@ -1,13 +1,30 @@
 /**
- * Grafana Agent Observability registration.
+ * Grafana Agent Observability — real SDK integration.
  *
- * Registers Apron's 8 agents with Grafana's Agent Observability product,
- * providing the system prompt and tool schema for each agent. This lets
- * Grafana's AI tools understand what each agent does, and enables eval
- * rules for quality tracking.
+ * Uses @grafana/agento11y to trace every Gemini generation, sending
+ * normalized LLM telemetry (input/output, tokens, latency, model) to
+ * Grafana Cloud Agent Observability.
  *
- * Requires: GRAFANA_URL (Grafana instance), GRAFANA_CLOUD_API_KEY
+ * The SDK auto-reads AGENTO11Y_* env vars when constructed with no args,
+ * but we configure explicitly for clarity.
+ *
+ * Env vars:
+ *   AGENTO11Y_ENDPOINT   — e.g. https://agento11y-prod-us-east-3.grafana.net
+ *   AGENTO11Y_PROTOCOL   — "http" (default)
+ *   AGENTO11Y_AUTH_MODE   — "basic"
+ *   AGENTO11Y_AUTH_TENANT_ID — Grafana Cloud instance ID
+ *   AGENTO11Y_AUTH_TOKEN  — Grafana Cloud API token
  */
+
+import { Agento11yClient } from '@grafana/agento11y';
+import type { GenerationRecorder, GenerationStart, GenerationResult } from '@grafana/agento11y';
+
+// Re-export the recorder types for use in GeminiClient
+export type { GenerationRecorder, GenerationStart, GenerationResult };
+
+// ---------------------------------------------------------------------------
+// Agent definitions — metadata for tagging generations
+// ---------------------------------------------------------------------------
 
 interface AgentDefinition {
   /** Agent name (e.g. "SPOTTER") */
@@ -17,20 +34,7 @@ interface AgentDefinition {
   /** System prompt or role summary */
   systemPrompt: string;
   /** Tools/capabilities this agent has */
-  tools: ToolDefinition[];
-}
-
-interface ToolDefinition {
-  name: string;
-  description: string;
-  parameters?: Record<string, unknown>;
-}
-
-interface AgentO11yConfig {
-  /** Grafana instance URL (e.g. https://modestsalmon3417.grafana.net) */
-  grafanaUrl: string;
-  /** API key with agent-observability write scope */
-  apiKey: string;
+  tools: { name: string; description: string }[];
 }
 
 /**
@@ -63,7 +67,7 @@ const APRON_AGENTS: AgentDefinition[] = [
   {
     name: 'ADVANCE',
     description: 'Roster state intelligence with provenance-aware disclosure. Manages what each seat can see.',
-    systemPrompt: `ADVANCE reads crew sheets, call sheets, and roster data to determine where each crew member is heading next. Its core job is enforcing the disclosure model: what it can tell which audience about a crew member's next call, based on how that information was gathered. Redaction is enforced at the data layer, not the display layer. Disclosure rules: next call on own show → full detail; external disclosed → full detail; external not disclosed → "External call · withheld"; brokered → constraint only; inferred → marked inferred.`,
+    systemPrompt: `ADVANCE reads crew sheets, call sheets, and roster data to determine where each crew member is heading next. Its core job is enforcing the disclosure model: what it can tell which audience about a crew member's next call, based on how that information was gathered. Redaction is enforced at the data layer, not the display layer.`,
     tools: [
       { name: 'scanRoster', description: 'Scan all crew assignments and build a provenance-aware roster snapshot' },
       { name: 'applyDisclosure', description: 'Apply seat-aware disclosure rules to a roster entry' },
@@ -73,7 +77,7 @@ const APRON_AGENTS: AgentDefinition[] = [
   {
     name: 'WRANGLER',
     description: 'Constraint gathering via crew outreach. Moves facts up the provenance table.',
-    systemPrompt: `WRANGLER moves facts up the provenance table by turning unconfirmed inferences into confirmed constraints through crew outreach. It contacts crew members whose next calls are inferred or unknown and gathers confirmed constraints ("must be at MCI by Mon 13:00 CT") without requiring them to disclose who they work for. Supports simulated outreach (Gemini for demo) and SMS (Twilio for production). Gemini parses natural-language crew responses into structured constraints.`,
+    systemPrompt: `WRANGLER moves facts up the provenance table by turning unconfirmed inferences into confirmed constraints through crew outreach. It contacts crew members whose next calls are inferred or unknown and gathers confirmed constraints ("must be at MCI by Mon 13:00 CT") without requiring them to disclose who they work for.`,
     tools: [
       { name: 'scanForOutreach', description: 'Identify crew members with inferred/unknown next calls needing outreach' },
       { name: 'initiateOutreach', description: 'Send outreach message to crew member via configured channel (simulated/SMS)' },
@@ -84,7 +88,7 @@ const APRON_AGENTS: AgentDefinition[] = [
   {
     name: 'STEWARD',
     description: 'Compliance monitoring for labor agreements. Tracks turnaround, overtime, and rest compression.',
-    systemPrompt: `STEWARD monitors compliance with collective bargaining agreements (NABET-CWA Art. 8.3). It evaluates crew turnaround times, overtime exposure, meal penalties, and rest compression using Gemini to analyze the operational context against extracted agreement rules. Evaluations are triggered by game state changes, chain updates, and crew rebooking events. STEWARD escalates show state when violations are detected.`,
+    systemPrompt: `STEWARD monitors compliance with collective bargaining agreements (NABET-CWA Art. 8.3). It evaluates crew turnaround times, overtime exposure, meal penalties, and rest compression using Gemini to analyze the operational context against extracted agreement rules.`,
     tools: [
       { name: 'runEvaluation', description: 'Evaluate compliance for all crew against agreement rules using Gemini' },
       { name: 'evaluateImpact', description: 'Calculate turnaround, overtime, meal, and penalty impact for each crew member' },
@@ -94,7 +98,7 @@ const APRON_AGENTS: AgentDefinition[] = [
   {
     name: 'FIXER',
     description: 'Generates rebooking options for at-risk crew. Works with tokenized travelers.',
-    systemPrompt: `FIXER generates rebooking options when crew members are at risk of missing their next call. It works with tokenized travelers (never sees identity directly) to find alternative routes using the curated flight schedule. Options are grouped and presented to the TMC desk for human approval. Nothing irreversible happens without explicit human confirmation.`,
+    systemPrompt: `FIXER generates rebooking options when crew members are at risk of missing their next call. It works with tokenized travelers (never sees identity directly) to find alternative routes using the curated flight schedule.`,
     tools: [
       { name: 'generateOptions', description: 'Generate rebooking option groups for at-risk crew using flight schedule' },
       { name: 'emitOptions', description: 'Present rebooking options to TMC desk for approval' },
@@ -104,7 +108,7 @@ const APRON_AGENTS: AgentDefinition[] = [
   {
     name: 'RUNNER',
     description: 'Composes and delivers post-game handoff communications.',
-    systemPrompt: `RUNNER composes the handoff communication — the final operational summary that goes to crew after a game wraps. It aggregates state from all other agents (game result, chain times, rebookings, compliance status) into a structured handoff document. RUNNER is the last agent to act after a show closes.`,
+    systemPrompt: `RUNNER composes the handoff communication — the final operational summary that goes to crew after a game wraps. It aggregates state from all other agents (game result, chain times, rebookings, compliance status) into a structured handoff document.`,
     tools: [
       { name: 'composeHandoff', description: 'Aggregate state from all agents into a structured handoff document' },
       { name: 'emitHandoff', description: 'Deliver the handoff communication to connected clients' },
@@ -113,7 +117,7 @@ const APRON_AGENTS: AgentDefinition[] = [
   {
     name: 'CUSTOMS',
     description: 'Handles cross-border logistics. Dormant for domestic shows.',
-    systemPrompt: `CUSTOMS manages cross-border crew logistics — gear carnets, visa requirements, customs declarations. It activates for international shows (Toronto, London, Mexico City) and any cross-border next call. Dormant and not provisioned for domestic shows.`,
+    systemPrompt: `CUSTOMS manages cross-border crew logistics — gear carnets, visa requirements, customs declarations. It activates for international shows (Toronto, London, Mexico City) and any cross-border next call.`,
     tools: [],
   },
 ];
@@ -124,22 +128,20 @@ const APRON_AGENTS: AgentDefinition[] = [
 
 export interface AgentO11yHealth {
   enabled: boolean;
-  url: string | null;
-  status: 'not_configured' | 'pending' | 'registered' | 'partial' | 'failed';
-  registered: number;
-  total: number;
+  endpoint: string | null;
+  status: 'not_configured' | 'ready' | 'error';
+  generationsExported: number;
   lastError: string | null;
-  attemptedAt: string | null;
+  startedAt: string | null;
 }
 
 const _health: AgentO11yHealth = {
-  enabled: !!(process.env['GRAFANA_URL'] && process.env['GRAFANA_CLOUD_API_KEY']),
-  url: process.env['GRAFANA_URL'] ?? null,
-  status: (process.env['GRAFANA_URL'] && process.env['GRAFANA_CLOUD_API_KEY']) ? 'pending' : 'not_configured',
-  registered: 0,
-  total: APRON_AGENTS.length,
+  enabled: false,
+  endpoint: null,
+  status: 'not_configured',
+  generationsExported: 0,
   lastError: null,
-  attemptedAt: null,
+  startedAt: null,
 };
 
 /** Return the current Agent O11y health state. */
@@ -147,100 +149,109 @@ export function getAgentO11yHealth(): AgentO11yHealth {
   return { ..._health };
 }
 
+// ---------------------------------------------------------------------------
+// Singleton client
+// ---------------------------------------------------------------------------
+
+let _client: Agento11yClient | null = null;
+
 /**
- * Register all Apron agents with Grafana Agent Observability.
+ * Initialize the Agent O11y SDK client.
  *
- * Uses the agento11y API to create/update agent definitions so Grafana
- * can track agent behavior and enable eval rules.
+ * The SDK reads AGENTO11Y_* env vars automatically. We configure
+ * explicitly from env for clarity and to support the health endpoint.
  *
- * Returns the number of agents successfully registered.
+ * Call once at server startup. Returns the client (or null if not configured).
  */
-export async function registerAgents(): Promise<number> {
-  const grafanaUrl = process.env['GRAFANA_URL'];
-  const apiKey = process.env['GRAFANA_CLOUD_API_KEY'];
+export function initAgentO11y(): Agento11yClient | null {
+  const endpoint = process.env['AGENTO11Y_ENDPOINT'];
+  const protocol = (process.env['AGENTO11Y_PROTOCOL'] ?? 'http') as 'http' | 'grpc';
+  const authMode = (process.env['AGENTO11Y_AUTH_MODE'] ?? 'basic') as 'basic' | 'bearer' | 'none';
+  const tenantId = process.env['AGENTO11Y_AUTH_TENANT_ID'];
+  const token = process.env['AGENTO11Y_AUTH_TOKEN'];
 
-  if (!grafanaUrl || !apiKey) {
-    console.log('[grafana-agento11y] Disabled — missing GRAFANA_URL or GRAFANA_CLOUD_API_KEY');
+  if (!endpoint || !token) {
+    console.log('[agento11y] Disabled — missing AGENTO11Y_ENDPOINT or AGENTO11Y_AUTH_TOKEN');
     _health.status = 'not_configured';
-    return 0;
+    return null;
   }
 
-  _health.attemptedAt = new Date().toISOString();
-  const config: AgentO11yConfig = { grafanaUrl, apiKey };
-  let registered = 0;
-  let lastErr: string | null = null;
+  try {
+    _client = new Agento11yClient({
+      generationExport: {
+        protocol,
+        endpoint,
+        auth: {
+          mode: authMode,
+          tenantId,
+          basicPassword: token,
+        },
+      },
+      // Tags applied to every generation
+      tags: {
+        project: 'apron',
+        hackathon: 'agentic-cinema-2026',
+      },
+    });
 
-  for (const agent of APRON_AGENTS) {
-    try {
-      await registerAgent(config, agent);
-      registered++;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error(`[grafana-agento11y] Failed to register ${agent.name}: ${msg}`);
-      lastErr = `${agent.name}: ${msg}`;
-    }
+    _health.enabled = true;
+    _health.endpoint = endpoint;
+    _health.status = 'ready';
+    _health.startedAt = new Date().toISOString();
+
+    console.log(`[agento11y] Client initialized — endpoint: ${endpoint}, protocol: ${protocol}`);
+    return _client;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[agento11y] Failed to initialize client: ${msg}`);
+    _health.status = 'error';
+    _health.lastError = msg;
+    return null;
   }
-
-  _health.registered = registered;
-  _health.lastError = lastErr;
-  if (registered === APRON_AGENTS.length) {
-    _health.status = 'registered';
-  } else if (registered > 0) {
-    _health.status = 'partial';
-  } else {
-    _health.status = 'failed';
-  }
-
-  console.log(`[grafana-agento11y] Registered ${registered}/${APRON_AGENTS.length} agents`);
-  return registered;
 }
 
-async function registerAgent(config: AgentO11yConfig, agent: AgentDefinition): Promise<void> {
-  const payload = {
-    name: `apron-${agent.name.toLowerCase()}`,
-    display_name: `Apron ${agent.name}`,
-    description: agent.description,
-    system_prompt: agent.systemPrompt,
-    tools: agent.tools.map(t => ({
-      name: t.name,
-      description: t.description,
-      parameters: t.parameters ?? {},
-    })),
-    metadata: {
-      project: 'apron',
-      hackathon: 'agentic-cinema-2026',
-    },
-  };
+/** Get the singleton client (null if not initialized or not configured). */
+export function getAgentO11yClient(): Agento11yClient | null {
+  return _client;
+}
 
-  const res = await fetch(`${config.grafanaUrl}/api/plugins/grafana-agentobservability-app/resources/agents`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${config.apiKey}`,
-    },
-    body: JSON.stringify(payload),
-  });
+/**
+ * Record a successful generation export.
+ * Called by the GeminiClient after a traced generation completes.
+ */
+export function recordGenerationExported(): void {
+  _health.generationsExported++;
+}
 
-  if (res.status === 409) {
-    // Already registered — try PUT to update
-    await fetch(`${config.grafanaUrl}/api/plugins/grafana-agentobservability-app/resources/agents/${payload.name}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${config.apiKey}`,
-      },
-      body: JSON.stringify(payload),
-    });
-    console.log(`[grafana-agento11y] Updated ${agent.name}`);
-  } else if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`${res.status} ${text}`);
-  } else {
-    console.log(`[grafana-agento11y] Registered ${agent.name}`);
-  }
+/**
+ * Record an error during generation tracing.
+ */
+export function recordGenerationError(err: string): void {
+  _health.lastError = err;
 }
 
 /** Expose the agent definitions for external use (e.g. Closeout report). */
 export function getAgentDefinitions(): AgentDefinition[] {
   return [...APRON_AGENTS];
+}
+
+/**
+ * Get the O11y tool definitions for a specific agent.
+ * These are passed to startGeneration() so the Agent O11y dashboard
+ * shows what tools each agent has available.
+ */
+export function getAgentToolDefs(agentName: string): { name: string; description?: string }[] {
+  const agent = APRON_AGENTS.find(a => a.name === agentName);
+  if (!agent) return [];
+  return agent.tools.map(t => ({ name: t.name, description: t.description }));
+}
+
+/**
+ * Graceful shutdown — flush pending generations.
+ */
+export async function shutdownAgentO11y(): Promise<void> {
+  if (_client) {
+    await _client.shutdown();
+    console.log('[agento11y] Client shut down');
+  }
 }

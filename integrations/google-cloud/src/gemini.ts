@@ -3,9 +3,37 @@
  *
  * Uses Vertex AI backend when GOOGLE_CLOUD_PROJECT is set, falls back to
  * a fixture-mode stub otherwise.
+ *
+ * When an Agento11yClient is attached, every generation is traced via
+ * the @grafana/agento11y SDK so telemetry flows to Grafana Cloud.
  */
 
 import { GoogleGenAI } from '@google/genai';
+
+/** Minimal interface for the Agent O11y client — avoids a hard dependency on @grafana/agento11y. */
+interface AgentO11yClientLike {
+  startGeneration<TResult>(
+    start: {
+      agentName?: string;
+      conversationId?: string;
+      model: { provider: string; name: string };
+      systemPrompt?: string;
+      temperature?: number;
+      maxTokens?: number;
+      tools?: { name: string; description?: string }[];
+      tags?: Record<string, string>;
+      metadata?: Record<string, unknown>;
+    },
+    callback: (recorder: {
+      setResult(result: {
+        input?: { role: string; content?: string }[];
+        output?: { role: string; content?: string }[];
+        usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
+      }): void;
+      setCallError(error: unknown): void;
+    }) => TResult | Promise<TResult>,
+  ): Promise<TResult>;
+}
 
 export interface GeminiConfig {
   project: string;
@@ -33,11 +61,20 @@ export interface AgentResponse {
   };
 }
 
+/** Callbacks for Agent O11y generation tracking. */
+interface O11yCallbacks {
+  onExported?: () => void;
+  onError?: (err: string) => void;
+}
+
 export class GeminiClient {
   private client: GoogleGenAI | null;
   private model: string;
   private enabled: boolean;
   private mode: 'vertex' | 'apikey' | 'fixture';
+  private o11yClient: AgentO11yClientLike | null = null;
+  private o11yToolDefs: (agentName: string) => { name: string; description?: string }[] = () => [];
+  private o11yCallbacks: O11yCallbacks = {};
 
   constructor(config?: Partial<GeminiConfig>) {
     const apiKey = process.env['GEMINI_API_KEY'] ?? '';
@@ -66,6 +103,21 @@ export class GeminiClient {
     }
   }
 
+  /**
+   * Attach an Agent O11y client for generation tracing.
+   * Call once after construction, before any prompts.
+   */
+  attachO11y(
+    client: AgentO11yClientLike,
+    toolDefsFn: (agentName: string) => { name: string; description?: string }[],
+    callbacks?: O11yCallbacks,
+  ): void {
+    this.o11yClient = client;
+    this.o11yToolDefs = toolDefsFn;
+    this.o11yCallbacks = callbacks ?? {};
+    console.log('[gemini] Agent O11y tracing attached');
+  }
+
   async prompt(request: AgentPrompt): Promise<AgentResponse> {
     if (!this.enabled || !this.client) {
       return {
@@ -75,10 +127,38 @@ export class GeminiClient {
     }
 
     const start = Date.now();
+    const contents = `Context:\n${JSON.stringify(request.context, null, 2)}\n\n${request.query}`;
 
+    // If Agent O11y is attached, wrap the call in a traced generation
+    if (this.o11yClient) {
+      return this.tracedGeneration(request, contents, async () => {
+        const response = await this.client!.models.generateContent({
+          model: this.model,
+          contents,
+          config: {
+            systemInstruction: request.systemInstruction,
+            temperature: 0.1,
+            maxOutputTokens: 2048,
+          },
+        });
+
+        const text = response.text ?? '';
+        const tokensUsed = response.usageMetadata?.totalTokenCount ?? 0;
+
+        return {
+          text,
+          tokensUsed,
+          inputTokens: response.usageMetadata?.promptTokenCount,
+          outputTokens: response.usageMetadata?.candidatesTokenCount,
+          latencyMs: Date.now() - start,
+        };
+      });
+    }
+
+    // No O11y — direct call
     const response = await this.client.models.generateContent({
       model: this.model,
-      contents: `Context:\n${JSON.stringify(request.context, null, 2)}\n\n${request.query}`,
+      contents,
       config: {
         systemInstruction: request.systemInstruction,
         temperature: 0.1,
@@ -112,27 +192,57 @@ export class GeminiClient {
     }
 
     const start = Date.now();
+    const contents = `Context:\n${JSON.stringify(request.context, null, 2)}\n\n${request.query}`;
 
     const contextKeys = Object.keys(request.context);
     const contextSizes = contextKeys.map(k => `${k}:${JSON.stringify(request.context[k]).length}`).join(', ');
     console.log(`[gemini] ${request.agent} promptJSON — context: {${contextSizes}}, maxTokens: ${request.maxOutputTokens ?? 2048}`);
 
-    try {
-      const config: Record<string, unknown> = {
-        systemInstruction: request.systemInstruction,
-        responseMimeType: 'application/json',
-        temperature: 0.1,
-        maxOutputTokens: request.maxOutputTokens ?? 2048,
-      };
+    const config: Record<string, unknown> = {
+      systemInstruction: request.systemInstruction,
+      responseMimeType: 'application/json',
+      temperature: 0.1,
+      maxOutputTokens: request.maxOutputTokens ?? 2048,
+    };
 
-      // Gemini Structured Outputs — enforces valid JSON matching the schema
-      if (request.responseSchema) {
-        config['responseSchema'] = request.responseSchema;
+    if (request.responseSchema) {
+      config['responseSchema'] = request.responseSchema;
+    }
+
+    // If Agent O11y is attached, wrap the call in a traced generation
+    if (this.o11yClient) {
+      const result = await this.tracedGeneration(request, contents, async () => {
+        const response = await this.client!.models.generateContent({
+          model: this.model,
+          contents,
+          config,
+        });
+
+        const text = response.text ?? '';
+        const tokensUsed = response.usageMetadata?.totalTokenCount ?? 0;
+
+        return {
+          text,
+          tokensUsed,
+          inputTokens: response.usageMetadata?.promptTokenCount,
+          outputTokens: response.usageMetadata?.candidatesTokenCount,
+          latencyMs: Date.now() - start,
+        };
+      });
+
+      try {
+        return JSON.parse(result.text) as T;
+      } catch {
+        console.warn(`[gemini] ${request.agent}: JSON parse failed (${result.text.length} chars)`);
+        return null;
       }
+    }
 
+    // No O11y — direct call
+    try {
       const response = await this.client.models.generateContent({
         model: this.model,
-        contents: `Context:\n${JSON.stringify(request.context, null, 2)}\n\n${request.query}`,
+        contents,
         config,
       });
 
@@ -145,7 +255,6 @@ export class GeminiClient {
       try {
         return JSON.parse(text) as T;
       } catch {
-        // responseMimeType should prevent this, but guard against it
         console.warn(`[gemini] ${request.agent}: JSON parse failed despite responseMimeType (${text.length} chars). Raw head:`, text.replace(/\n/g, '\\n').slice(0, 300));
         return null;
       }
@@ -153,7 +262,7 @@ export class GeminiClient {
       const errMsg = err instanceof Error ? err.message : String(err);
       const shortErr = errMsg.length > 200 ? errMsg.slice(0, 200) + '…' : errMsg;
       console.warn(`[gemini] ${request.agent} API error:`, shortErr);
-      throw err; // let caller handle
+      throw err;
     }
   }
 
@@ -163,5 +272,70 @@ export class GeminiClient {
 
   getMode(): string {
     return this.mode;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Agent O11y tracing
+  // ---------------------------------------------------------------------------
+
+  private async tracedGeneration(
+    request: AgentPrompt,
+    contents: string,
+    execute: () => Promise<{
+      text: string;
+      tokensUsed: number;
+      inputTokens?: number;
+      outputTokens?: number;
+      latencyMs: number;
+    }>,
+  ): Promise<AgentResponse> {
+    const agentName = `apron-${request.agent.toLowerCase()}`;
+    const tools = this.o11yToolDefs(request.agent);
+
+    return this.o11yClient!.startGeneration(
+      {
+        agentName,
+        model: { provider: 'google', name: this.model },
+        systemPrompt: request.systemInstruction,
+        temperature: 0.1,
+        maxTokens: request.maxOutputTokens ?? 2048,
+        tools: tools.length > 0 ? tools : undefined,
+        tags: { agent: request.agent },
+        metadata: {
+          contextKeys: Object.keys(request.context),
+        },
+      },
+      async (recorder) => {
+        try {
+          const result = await execute();
+
+          recorder.setResult({
+            input: [{ role: 'user', content: contents }],
+            output: [{ role: 'assistant', content: result.text }],
+            usage: {
+              inputTokens: result.inputTokens,
+              outputTokens: result.outputTokens,
+              totalTokens: result.tokensUsed,
+            },
+          });
+
+          this.o11yCallbacks.onExported?.();
+
+          return {
+            text: result.text,
+            metadata: {
+              model: this.model,
+              tokensUsed: result.tokensUsed,
+              latencyMs: result.latencyMs,
+            },
+          };
+        } catch (err) {
+          recorder.setCallError(err);
+          const errMsg = err instanceof Error ? err.message : String(err);
+          this.o11yCallbacks.onError?.(errMsg);
+          throw err;
+        }
+      },
+    );
   }
 }

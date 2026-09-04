@@ -6,6 +6,7 @@
   "license": "AGPL-3.0-only",
   "main": "src/index.ts",
   "dependencies": {
-    "@apron/types": "workspace:*"
+    "@apron/types": "workspace:*",
+    "@grafana/agento11y": "^0.13.0"
   }
 }

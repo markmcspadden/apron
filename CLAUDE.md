@@ -103,9 +103,9 @@ pnpm build         # tsc -b (not required for dev)
 - **Stack:** `modestsalmon3417` on Grafana Cloud
 - **Prometheus metrics:** Agent events, crew-at-risk, call-times-exposed, show-state-changes pushed via remote write
 - **Loki structured logs:** Every agent event logged with labels (agent, game_id, event_type). Forms the epistemic history trail — tracks how operational facts evolve over time
-- **Agent Observability:** All 8 agents registered at startup with system prompts and tool schemas
+- **Agent Observability:** `@grafana/agento11y` SDK traces every Gemini generation with normalized input/output, token usage, latency, and per-agent tagging. Telemetry flows to Grafana Cloud Agent Observability endpoint.
 - **Closeout report:** `GET /api/closeout/:gameId` — queries Loki for a game's full agent decision trail, builds a chronological operational report with timeline, decisions, compliance summary, flight summary, and an operational grade
-- **Env vars:** `GRAFANA_PROM_URL`, `GRAFANA_PROM_USER`, `GRAFANA_LOKI_URL`, `GRAFANA_LOKI_USER`, `GRAFANA_URL`, `GRAFANA_CLOUD_API_KEY` (see `.env.example`)
+- **Env vars:** `GRAFANA_PROM_URL`, `GRAFANA_PROM_USER`, `GRAFANA_LOKI_URL`, `GRAFANA_LOKI_USER`, `GRAFANA_URL`, `GRAFANA_CLOUD_API_KEY`, `AGENTO11Y_ENDPOINT`, `AGENTO11Y_PROTOCOL`, `AGENTO11Y_AUTH_MODE`, `AGENTO11Y_AUTH_TENANT_ID`, `AGENTO11Y_AUTH_TOKEN` (see `.env.example`)
 
 ## Hackathon
 
