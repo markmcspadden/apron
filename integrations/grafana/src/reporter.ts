@@ -165,7 +165,10 @@ export class GrafanaReporter {
         headers['X-Scope-OrgID'] = this.config.orgId;
       }
 
-      const res = await fetch(`${this.config.endpoint}/api/v1/push`, {
+      // Grafana Cloud endpoint already includes /api/prom — just append /push.
+      // Strip any trailing slash to avoid double-slash in the URL.
+      const base = this.config.endpoint.replace(/\/+$/, '');
+      const res = await fetch(`${base}/push`, {
         method: 'POST',
         headers,
         body,
