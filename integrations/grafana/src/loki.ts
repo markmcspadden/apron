@@ -23,10 +23,26 @@ interface LokiStream {
   values: [string, string][]; // [nanosecond_ts, line]
 }
 
+export interface LokiHealth {
+  enabled: boolean;
+  url: string | null;
+  bufferSize: number;
+  totalPushed: number;
+  totalErrors: number;
+  lastPushAt: string | null;
+  lastErrorAt: string | null;
+  lastError: string | null;
+}
+
 export class LokiLogger {
   private config: LokiConfig | null;
   private buffer: LokiStream[] = [];
   private flushInterval: ReturnType<typeof setInterval> | null = null;
+  private _totalPushed = 0;
+  private _totalErrors = 0;
+  private _lastPushAt: string | null = null;
+  private _lastErrorAt: string | null = null;
+  private _lastError: string | null = null;
 
   constructor() {
     const url = process.env['GRAFANA_LOKI_URL'];
@@ -150,11 +166,20 @@ export class LokiLogger {
       if (!res.ok) {
         const text = await res.text();
         console.error(`[grafana-loki] Push failed: ${res.status} ${text}`);
+        this._totalErrors++;
+        this._lastErrorAt = new Date().toISOString();
+        this._lastError = `${res.status} ${text.slice(0, 200)}`;
         // Re-queue on failure
         this.buffer.unshift(...batch);
+      } else {
+        this._totalPushed += batch.length;
+        this._lastPushAt = new Date().toISOString();
       }
     } catch (err) {
       console.error('[grafana-loki] Push error:', err);
+      this._totalErrors++;
+      this._lastErrorAt = new Date().toISOString();
+      this._lastError = err instanceof Error ? err.message : String(err);
       this.buffer.unshift(...batch);
     }
   }
@@ -229,6 +254,19 @@ export class LokiLogger {
       console.error('[grafana-loki] Query error:', err);
       return [];
     }
+  }
+
+  getHealth(): LokiHealth {
+    return {
+      enabled: this.config !== null,
+      url: this.config?.url ?? null,
+      bufferSize: this.buffer.length,
+      totalPushed: this._totalPushed,
+      totalErrors: this._totalErrors,
+      lastPushAt: this._lastPushAt,
+      lastErrorAt: this._lastErrorAt,
+      lastError: this._lastError,
+    };
   }
 
   stop(): void {

@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>APRON — Integration Health</title>
+<style>
+:root{
+  --bg:#0B0B0C; --panel:#141416; --panel-2:#1B1B1E; --line:#2A2A2E; --line-2:#3A3A40;
+  --ink:#F2F1EE; --ink-2:#A9A69E; --ink-3:#6E6B65;
+  --ok:#25B04B; --ok-bg:#0E2A16;
+  --warn:#E8A81C; --warn-bg:#2E2308;
+  --err:#E84040; --err-bg:#2E0E0E;
+  --off:#6E6B65; --off-bg:#1B1B1E;
+  --live:#5DA9E9;
+  --f:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --m:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--f);font-size:14px;
+  line-height:1.45;-webkit-font-smoothing:antialiased}
+
+/* ---- header ---- */
+.header{background:var(--panel);border-bottom:1px solid var(--line);padding:0 28px;
+  height:56px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:90;
+  backdrop-filter:blur(10px)}
+.header-brand{font-size:17px;font-weight:750;letter-spacing:.13em}
+.header-tag{font-family:var(--m);font-size:10px;letter-spacing:.1em;padding:4px 8px;
+  border-radius:4px;text-transform:uppercase;background:#1E1428;border:1px solid #3A2658;color:#B89BDB}
+.header-right{margin-left:auto;display:flex;align-items:center;gap:14px}
+.header-nav{font-size:12px;color:var(--ink-3);text-decoration:none;transition:.15s}
+.header-nav:hover{color:var(--ink)}
+
+/* ---- main ---- */
+.main{max-width:960px;margin:0 auto;padding:32px 28px 80px}
+
+.page-title{font-size:20px;font-weight:700;letter-spacing:-.01em;margin-bottom:4px}
+.page-sub{font-size:13px;color:var(--ink-3);margin-bottom:28px}
+
+/* ---- integration cards ---- */
+.section-label{font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--ink-3);
+  font-weight:640;margin:28px 0 12px;display:flex;align-items:center;gap:10px}
+.section-label::after{content:'';flex:1;height:1px;background:var(--line)}
+
+.card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px}
+
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px;
+  transition:.15s}
+.card:hover{border-color:var(--line-2)}
+.card-head{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.card-icon{font-size:20px;width:36px;height:36px;display:flex;align-items:center;
+  justify-content:center;border-radius:8px}
+.card-name{font-size:15px;font-weight:650;flex:1}
+
+.status-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.status-dot.ok{background:var(--ok);box-shadow:0 0 6px var(--ok)}
+.status-dot.warn{background:var(--warn);box-shadow:0 0 6px var(--warn)}
+.status-dot.err{background:var(--err);box-shadow:0 0 6px var(--err)}
+.status-dot.off{background:var(--off)}
+
+.status-label{font-family:var(--m);font-size:10px;letter-spacing:.08em;text-transform:uppercase;
+  padding:3px 8px;border-radius:4px}
+.status-label.ok{background:var(--ok-bg);color:var(--ok)}
+.status-label.warn{background:var(--warn-bg);color:var(--warn)}
+.status-label.err{background:var(--err-bg);color:var(--err)}
+.status-label.off{background:var(--off-bg);color:var(--off)}
+
+.card-rows{display:flex;flex-direction:column;gap:8px}
+.card-row{display:flex;justify-content:space-between;align-items:baseline;font-size:12px}
+.card-row .label{color:var(--ink-3);font-size:11px}
+.card-row .value{font-family:var(--m);font-size:11px;color:var(--ink-2);text-align:right;
+  max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.card-row .value.num{color:var(--ink);font-weight:600}
+
+.error-box{font-family:var(--m);font-size:10px;background:var(--err-bg);border:1px solid #4A1818;
+  color:#E88080;padding:8px 10px;border-radius:6px;margin-top:8px;word-break:break-all;
+  line-height:1.4;max-height:60px;overflow:hidden}
+
+/* ---- refresh ---- */
+.toolbar{display:flex;align-items:center;gap:12px;margin-bottom:24px}
+.btn-refresh{font:inherit;font-size:11px;font-weight:600;padding:6px 14px;border-radius:6px;
+  cursor:pointer;border:1px solid var(--line-2);background:var(--panel-2);color:var(--ink-2);
+  transition:.12s;display:flex;align-items:center;gap:6px}
+.btn-refresh:hover{border-color:var(--ink-3);color:var(--ink)}
+.btn-refresh:active{transform:scale(.97)}
+.last-refresh{font-family:var(--m);font-size:11px;color:var(--ink-3)}
+.auto-label{font-family:var(--m);font-size:10px;color:var(--ink-3);letter-spacing:.06em}
+
+/* ---- skeleton ---- */
+.skeleton .card-rows .value{background:var(--panel-2);border-radius:3px;
+  color:transparent;min-width:60px}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <span class="header-brand">APRON</span>
+  <span class="header-tag">INTEGRATIONS</span>
+  <div class="header-right">
+    <a href="/board" class="header-nav">Board</a>
+    <a href="/admin" class="header-nav">Admin</a>
+    <a href="/dashboard" class="header-nav">Dashboard</a>
+    <a href="/traffic" class="header-nav">Traffic</a>
+    <a href="/wrangler" class="header-nav">Wrangler</a>
+  </div>
+</div>
+
+<div class="main">
+  <h1 class="page-title">Integration Health</h1>
+  <p class="page-sub">Real-time status of all external service connections</p>
+
+  <div class="toolbar">
+    <button class="btn-refresh" onclick="refresh()">↻ Refresh</button>
+    <span class="last-refresh" id="lastRefresh">Loading…</span>
+    <span class="auto-label">auto-refresh 30s</span>
+  </div>
+
+  <div class="section-label">Grafana Cloud</div>
+  <div class="card-grid" id="grafana-cards">
+    <!-- Prometheus -->
+    <div class="card skeleton" id="card-prom">
+      <div class="card-head">
+        <div class="card-icon" style="background:#1E1428">📊</div>
+        <span class="card-name">Prometheus</span>
+        <span class="status-label off" id="prom-status">—</span>
+      </div>
+      <div class="card-rows" id="prom-rows">
+        <div class="card-row"><span class="label">Endpoint</span><span class="value" id="prom-endpoint">—</span></div>
+        <div class="card-row"><span class="label">Auth</span><span class="value" id="prom-auth">—</span></div>
+        <div class="card-row"><span class="label">Pushed</span><span class="value num" id="prom-pushed">—</span></div>
+        <div class="card-row"><span class="label">Errors</span><span class="value num" id="prom-errors">—</span></div>
+        <div class="card-row"><span class="label">Buffer</span><span class="value num" id="prom-buffer">—</span></div>
+        <div class="card-row"><span class="label">Last push</span><span class="value" id="prom-last">—</span></div>
+      </div>
+      <div class="error-box" id="prom-error" style="display:none"></div>
+    </div>
+    <!-- Loki -->
+    <div class="card skeleton" id="card-loki">
+      <div class="card-head">
+        <div class="card-icon" style="background:#0E2A16">📝</div>
+        <span class="card-name">Loki</span>
+        <span class="status-label off" id="loki-status">—</span>
+      </div>
+      <div class="card-rows" id="loki-rows">
+        <div class="card-row"><span class="label">URL</span><span class="value" id="loki-url">—</span></div>
+        <div class="card-row"><span class="label">Pushed</span><span class="value num" id="loki-pushed">—</span></div>
+        <div class="card-row"><span class="label">Errors</span><span class="value num" id="loki-errors">—</span></div>
+        <div class="card-row"><span class="label">Buffer</span><span class="value num" id="loki-buffer">—</span></div>
+        <div class="card-row"><span class="label">Last push</span><span class="value" id="loki-last">—</span></div>
+      </div>
+      <div class="error-box" id="loki-error" style="display:none"></div>
+    </div>
+    <!-- Agent O11y -->
+    <div class="card skeleton" id="card-o11y">
+      <div class="card-head">
+        <div class="card-icon" style="background:#2E2308">🤖</div>
+        <span class="card-name">Agent O11y</span>
+        <span class="status-label off" id="o11y-status">—</span>
+      </div>
+      <div class="card-rows" id="o11y-rows">
+        <div class="card-row"><span class="label">Grafana URL</span><span class="value" id="o11y-url">—</span></div>
+        <div class="card-row"><span class="label">Agents</span><span class="value num">8 defined</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="section-label">Infrastructure</div>
+  <div class="card-grid" id="infra-cards">
+    <!-- Firebase -->
+    <div class="card skeleton" id="card-firebase">
+      <div class="card-head">
+        <div class="card-icon" style="background:#31190A">🔥</div>
+        <span class="card-name">Firebase</span>
+        <span class="status-label off" id="fb-status">—</span>
+      </div>
+      <div class="card-rows">
+        <div class="card-row"><span class="label">Auth</span><span class="value" id="fb-auth">—</span></div>
+        <div class="card-row"><span class="label">Firestore</span><span class="value" id="fb-firestore">—</span></div>
+      </div>
+    </div>
+    <!-- Gemini -->
+    <div class="card skeleton" id="card-gemini">
+      <div class="card-head">
+        <div class="card-icon" style="background:#12212E">✨</div>
+        <span class="card-name">Gemini</span>
+        <span class="status-label off" id="gemini-status">—</span>
+      </div>
+      <div class="card-rows">
+        <div class="card-row"><span class="label">Model</span><span class="value">Vertex AI</span></div>
+      </div>
+    </div>
+    <!-- Clickhouse -->
+    <div class="card skeleton" id="card-ch">
+      <div class="card-head">
+        <div class="card-icon" style="background:#1B1B1E">🏗️</div>
+        <span class="card-name">ClickHouse</span>
+        <span class="status-label off" id="ch-status">—</span>
+      </div>
+      <div class="card-rows">
+        <div class="card-row"><span class="label">Audit log</span><span class="value" id="ch-audit">—</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function $(id){ return document.getElementById(id); }
+
+function ago(iso){
+  if(!iso) return '—';
+  var s = Math.round((Date.now() - new Date(iso).getTime())/1000);
+  if(s < 5) return 'just now';
+  if(s < 60) return s + 's ago';
+  if(s < 3600) return Math.floor(s/60) + 'm ago';
+  return Math.floor(s/3600) + 'h ago';
+}
+
+function statusClass(enabled, errors){
+  if(!enabled) return 'off';
+  if(errors > 0) return 'warn';
+  return 'ok';
+}
+
+function statusText(enabled, errors, pushed){
+  if(!enabled) return 'disabled';
+  if(errors > 0 && pushed === 0) return 'error';
+  if(errors > 0) return 'degraded';
+  if(pushed > 0) return 'healthy';
+  return 'connected';
+}
+
+function truncUrl(url){
+  if(!url) return '—';
+  try{
+    var u = new URL(url);
+    return u.hostname;
+  }catch{ return url.slice(0,30); }
+}
+
+function render(d){
+  // Remove skeleton class
+  document.querySelectorAll('.skeleton').forEach(function(el){ el.classList.remove('skeleton'); });
+
+  // Prometheus
+  var p = d.grafana.prometheus;
+  var pc = statusClass(p.enabled, p.totalErrors);
+  $('prom-status').className = 'status-label ' + pc;
+  $('prom-status').textContent = statusText(p.enabled, p.totalErrors, p.totalPushed);
+  $('prom-endpoint').textContent = truncUrl(p.endpoint);
+  $('prom-endpoint').title = p.endpoint;
+  $('prom-auth').textContent = p.authMode;
+  $('prom-pushed').textContent = p.totalPushed.toLocaleString();
+  $('prom-errors').textContent = p.totalErrors.toLocaleString();
+  $('prom-errors').style.color = p.totalErrors > 0 ? 'var(--err)' : '';
+  $('prom-buffer').textContent = p.bufferSize;
+  $('prom-last').textContent = ago(p.lastPushAt);
+  if(p.lastError){
+    $('prom-error').style.display = 'block';
+    $('prom-error').textContent = p.lastError;
+  } else {
+    $('prom-error').style.display = 'none';
+  }
+
+  // Loki
+  var l = d.grafana.loki;
+  var lc = statusClass(l.enabled, l.totalErrors);
+  $('loki-status').className = 'status-label ' + lc;
+  $('loki-status').textContent = statusText(l.enabled, l.totalErrors, l.totalPushed);
+  $('loki-url').textContent = truncUrl(l.url);
+  $('loki-url').title = l.url || '';
+  $('loki-pushed').textContent = l.totalPushed.toLocaleString();
+  $('loki-errors').textContent = l.totalErrors.toLocaleString();
+  $('loki-errors').style.color = l.totalErrors > 0 ? 'var(--err)' : '';
+  $('loki-buffer').textContent = l.bufferSize;
+  $('loki-last').textContent = ago(l.lastPushAt);
+  if(l.lastError){
+    $('loki-error').style.display = 'block';
+    $('loki-error').textContent = l.lastError;
+  } else {
+    $('loki-error').style.display = 'none';
+  }
+
+  // Agent O11y
+  var o = d.grafana.agentO11y;
+  $('o11y-status').className = 'status-label ' + (o.enabled ? 'ok' : 'off');
+  $('o11y-status').textContent = o.enabled ? 'registered' : 'disabled';
+  $('o11y-url').textContent = truncUrl(o.url);
+  $('o11y-url').title = o.url || '';
+
+  // Firebase
+  var fb = d.firebase;
+  var fbOn = fb.auth || fb.firestore;
+  $('fb-status').className = 'status-label ' + (fbOn ? 'ok' : 'off');
+  $('fb-status').textContent = fbOn ? 'connected' : 'disabled';
+  $('fb-auth').textContent = fb.auth ? '✓ enabled' : '✗ disabled';
+  $('fb-auth').style.color = fb.auth ? 'var(--ok)' : '';
+  $('fb-firestore').textContent = fb.firestore ? '✓ connected' : '✗ not connected';
+  $('fb-firestore').style.color = fb.firestore ? 'var(--ok)' : '';
+
+  // Gemini
+  var g = d.gemini;
+  $('gemini-status').className = 'status-label ' + (g.enabled ? 'ok' : 'off');
+  $('gemini-status').textContent = g.enabled ? 'enabled' : 'disabled';
+
+  // Clickhouse
+  var ch = d.clickhouse;
+  $('ch-status').className = 'status-label ' + (ch.enabled ? 'ok' : 'off');
+  $('ch-status').textContent = ch.enabled ? 'connected' : 'disabled';
+  $('ch-audit').textContent = ch.enabled ? '✓ recording' : '✗ not configured';
+  $('ch-audit').style.color = ch.enabled ? 'var(--ok)' : '';
+}
+
+function refresh(){
+  $('lastRefresh').textContent = 'Fetching…';
+  fetch('/api/integrations/health')
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      render(d);
+      $('lastRefresh').textContent = 'Updated ' + new Date().toLocaleTimeString();
+    })
+    .catch(function(err){
+      $('lastRefresh').textContent = 'Error: ' + err.message;
+    });
+}
+
+// Initial load + auto-refresh every 30s
+refresh();
+setInterval(refresh, 30000);
+</script>
+</body>
+</html>

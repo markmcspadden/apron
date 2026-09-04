@@ -942,6 +942,33 @@ export async function createServer(opts: ServerOptions = {}) {
       return;
     }
 
+    // Integration health — Grafana, Clickhouse, Firebase, Gemini status
+    if (path === '/api/integrations/health') {
+      const health = {
+        grafana: {
+          prometheus: grafana.getHealth(),
+          loki: loki.getHealth(),
+          agentO11y: {
+            enabled: !!process.env['GRAFANA_URL'] && !!process.env['GRAFANA_CLOUD_API_KEY'],
+            url: process.env['GRAFANA_URL'] ?? null,
+          },
+        },
+        clickhouse: {
+          enabled: !!process.env['CLICKHOUSE_URL'],
+        },
+        firebase: {
+          auth: auth?.isEnabled() ?? false,
+          firestore: !!firestore,
+        },
+        gemini: {
+          enabled: gemini.isEnabled(),
+        },
+      };
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(health));
+      return;
+    }
+
     if (path === '/api/scenario') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(scenario));
@@ -1664,6 +1691,8 @@ export async function createServer(opts: ServerOptions = {}) {
       filePath = join(ROOT, 'packages', 'board', 'login.html');
     } else if (path === '/dashboard' || path === '/dashboard.html') {
       filePath = join(ROOT, 'packages', 'board', 'dashboard.html');
+    } else if (path === '/integrations' || path === '/integrations.html') {
+      filePath = join(ROOT, 'packages', 'board', 'integrations.html');
     } else if (path === '/' || path === '/index.html') {
       filePath = join(ROOT, 'site', 'index.html');
     } else {

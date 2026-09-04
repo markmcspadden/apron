@@ -29,11 +29,28 @@ interface MetricPoint {
   labels: Record<string, string>;
 }
 
+export interface GrafanaReporterHealth {
+  enabled: boolean;
+  endpoint: string;
+  authMode: 'basic' | 'bearer' | 'none';
+  bufferSize: number;
+  totalPushed: number;
+  totalErrors: number;
+  lastPushAt: string | null;
+  lastErrorAt: string | null;
+  lastError: string | null;
+}
+
 export class GrafanaReporter {
   private config: GrafanaConfig;
   private buffer: MetricPoint[] = [];
   private flushInterval: ReturnType<typeof setInterval> | null = null;
   private enabled: boolean;
+  private _totalPushed = 0;
+  private _totalErrors = 0;
+  private _lastPushAt: string | null = null;
+  private _lastErrorAt: string | null = null;
+  private _lastError: string | null = null;
 
   constructor(config?: Partial<GrafanaConfig>) {
     this.config = {
@@ -157,16 +174,39 @@ export class GrafanaReporter {
       if (!res.ok) {
         const text = await res.text();
         console.error(`[grafana-prom] Push failed: ${res.status} ${text}`);
+        this._totalErrors++;
+        this._lastErrorAt = new Date().toISOString();
+        this._lastError = `${res.status} ${text.slice(0, 200)}`;
         this.buffer.unshift(...batch);
+      } else {
+        this._totalPushed += batch.length;
+        this._lastPushAt = new Date().toISOString();
       }
     } catch (err) {
       console.error('[grafana-prom] Failed to push metrics:', err);
+      this._totalErrors++;
+      this._lastErrorAt = new Date().toISOString();
+      this._lastError = err instanceof Error ? err.message : String(err);
       this.buffer.unshift(...batch);
     }
   }
 
   getBuffer(): readonly MetricPoint[] {
     return this.buffer;
+  }
+
+  getHealth(): GrafanaReporterHealth {
+    return {
+      enabled: this.enabled,
+      endpoint: this.config.endpoint,
+      authMode: this.config.user && this.config.apiKey ? 'basic' : this.config.apiKey ? 'bearer' : 'none',
+      bufferSize: this.buffer.length,
+      totalPushed: this._totalPushed,
+      totalErrors: this._totalErrors,
+      lastPushAt: this._lastPushAt,
+      lastErrorAt: this._lastErrorAt,
+      lastError: this._lastError,
+    };
   }
 
   stop(): void {
