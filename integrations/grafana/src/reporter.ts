@@ -171,9 +171,10 @@ export class GrafanaReporter {
       }
 
       // Grafana Cloud: use Influx write endpoint which accepts text line protocol.
-      // The GRAFANA_PROM_URL secret includes /api/prom already.
-      const base = this.config.endpoint.replace(/\/+$/, '');
-      const res = await fetch(`${base}/push/influx/write`, {
+      // The GRAFANA_PROM_URL secret may include /api/prom — strip it to get the host,
+      // then use the absolute path /api/v1/push/influx/write.
+      const host = this.config.endpoint.replace(/\/+$/, '').replace(/\/api\/prom$/, '');
+      const res = await fetch(`${host}/api/v1/push/influx/write`, {
         method: 'POST',
         headers,
         body,
