@@ -69,7 +69,8 @@ export class GrafanaReporter {
     this.enabled = !!this.config.apiKey;
 
     if (this.enabled) {
-      this.flushInterval = setInterval(() => void this.flush(), 10_000);
+      // 30s flush interval — Grafana Cloud rate-limits at shorter intervals (429)
+      this.flushInterval = setInterval(() => void this.flush(), 30_000);
       console.log('[grafana-prom] Enabled — pushing to', this.config.endpoint);
     } else {
       console.log('[grafana-prom] Disabled — no GRAFANA_CLOUD_API_KEY or GRAFANA_API_KEY');
