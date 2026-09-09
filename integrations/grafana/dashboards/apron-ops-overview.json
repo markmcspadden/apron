@@ -1,0 +1,388 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Prometheus",
+      "description": "Grafana Cloud Prometheus (metrics)",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    },
+    {
+      "name": "DS_LOKI",
+      "label": "Loki",
+      "description": "Grafana Cloud Loki (logs)",
+      "type": "datasource",
+      "pluginId": "loki",
+      "pluginName": "Loki"
+    }
+  ],
+  "__requires": [
+    { "type": "grafana", "id": "grafana", "name": "Grafana", "version": "11.0.0" },
+    { "type": "datasource", "id": "prometheus", "name": "Prometheus" },
+    { "type": "datasource", "id": "loki", "name": "Loki" },
+    { "type": "panel", "id": "timeseries", "name": "Time series" },
+    { "type": "panel", "id": "stat", "name": "Stat" },
+    { "type": "panel", "id": "bargauge", "name": "Bar gauge" },
+    { "type": "panel", "id": "table", "name": "Table" },
+    { "type": "panel", "id": "logs", "name": "Logs" }
+  ],
+  "id": null,
+  "uid": "apron-ops-overview",
+  "title": "Apron — Ops Overview",
+  "description": "Operational overview of the Apron agentic crew operations platform — agent activity, crew risk, show state, and LLM latency.",
+  "tags": ["apron", "hackathon", "agents"],
+  "timezone": "browser",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "agent",
+        "type": "custom",
+        "label": "Agent",
+        "current": { "text": "All", "value": "$__all" },
+        "options": [
+          { "text": "All", "value": "$__all", "selected": true },
+          { "text": "SPOTTER", "value": "SPOTTER" },
+          { "text": "TRAFFIC", "value": "TRAFFIC" },
+          { "text": "ADVANCE", "value": "ADVANCE" },
+          { "text": "WRANGLER", "value": "WRANGLER" },
+          { "text": "STEWARD", "value": "STEWARD" },
+          { "text": "FIXER", "value": "FIXER" },
+          { "text": "RUNNER", "value": "RUNNER" },
+          { "text": "CUSTOMS", "value": "CUSTOMS" }
+        ],
+        "includeAll": true,
+        "multi": true,
+        "query": "SPOTTER,TRAFFIC,ADVANCE,WRANGLER,STEWARD,FIXER,RUNNER,CUSTOMS"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 100,
+      "type": "row",
+      "title": "🎯 Show Status",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+    {
+      "id": 1,
+      "title": "Crew at Risk",
+      "type": "stat",
+      "gridPos": { "x": 0, "y": 1, "w": 6, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 3 }
+            ]
+          },
+          "color": { "mode": "thresholds" },
+          "unit": "none"
+        }
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "expr": "apron_crew_at_risk",
+          "legendFormat": "{{show_id}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Call Times Exposed",
+      "type": "stat",
+      "gridPos": { "x": 6, "y": 1, "w": 6, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 }
+            ]
+          },
+          "color": { "mode": "thresholds" },
+          "unit": "none"
+        }
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "background",
+        "graphMode": "area",
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "expr": "apron_call_times_exposed",
+          "legendFormat": "{{show_id}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Show State Changes",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 1, "w": 12, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "barAlignment": 0,
+            "fillOpacity": 80,
+            "stacking": { "mode": "normal" },
+            "pointSize": 5
+          },
+          "color": { "mode": "palette-classic" }
+        }
+      },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "list", "placement": "bottom" }
+      },
+      "targets": [
+        {
+          "expr": "increase(apron_show_state_change[5m])",
+          "legendFormat": "{{show_id}} → {{state}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 101,
+      "type": "row",
+      "title": "🤖 Agent Activity",
+      "gridPos": { "x": 0, "y": 6, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+    {
+      "id": 4,
+      "title": "Agent Events / min",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 7, "w": 16, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "spanNulls": true,
+            "pointSize": 5,
+            "showPoints": "auto"
+          },
+          "color": { "mode": "palette-classic" },
+          "unit": "cpm"
+        }
+      },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["sum", "lastNotNull"] }
+      },
+      "targets": [
+        {
+          "expr": "increase(apron_agent_event{agent=~\"$agent\"}[1m])",
+          "legendFormat": "{{agent}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Events by Type",
+      "type": "bargauge",
+      "gridPos": { "x": 16, "y": 7, "w": 8, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "blue", "value": null }]
+          }
+        }
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["sum"] },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true
+      },
+      "targets": [
+        {
+          "expr": "increase(apron_agent_event{agent=~\"$agent\"}[$__range])",
+          "legendFormat": "{{agent}} · {{event_type}}",
+          "refId": "A",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 102,
+      "type": "row",
+      "title": "⚡ Gemini LLM Performance",
+      "gridPos": { "x": 0, "y": 15, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+    {
+      "id": 6,
+      "title": "Agent Processing Latency",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 16, "w": 16, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 10,
+            "spanNulls": true
+          },
+          "color": { "mode": "palette-classic" },
+          "unit": "ms",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 3000 },
+              { "color": "red", "value": 10000 }
+            ]
+          }
+        }
+      },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] }
+      },
+      "targets": [
+        {
+          "expr": "apron_agent_process_duration_ms{agent=~\"$agent\"}",
+          "legendFormat": "{{agent}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "P95 Latency by Agent",
+      "type": "stat",
+      "gridPos": { "x": 16, "y": 16, "w": 8, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 5000 },
+              { "color": "red", "value": 15000 }
+            ]
+          },
+          "color": { "mode": "thresholds" }
+        }
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["max"] },
+        "colorMode": "background",
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "expr": "apron_agent_process_duration_ms{agent=~\"$agent\"}",
+          "legendFormat": "{{agent}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Total Events (range)",
+      "type": "stat",
+      "gridPos": { "x": 16, "y": 20, "w": 8, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "blue" },
+          "unit": "short"
+        }
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["sum"] },
+        "colorMode": "background",
+        "textMode": "value_and_name"
+      },
+      "targets": [
+        {
+          "expr": "increase(apron_agent_event{agent=~\"$agent\"}[$__range])",
+          "legendFormat": "{{agent}}",
+          "refId": "A",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 103,
+      "type": "row",
+      "title": "📋 Recent Agent Decisions (Loki)",
+      "gridPos": { "x": 0, "y": 24, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+    {
+      "id": 9,
+      "title": "Agent Event Log",
+      "type": "logs",
+      "gridPos": { "x": 0, "y": 25, "w": 24, "h": 10 },
+      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+      "options": {
+        "showTime": true,
+        "showLabels": true,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": true,
+        "enableLogDetails": true,
+        "sortOrder": "Descending",
+        "dedupStrategy": "none"
+      },
+      "targets": [
+        {
+          "expr": "{app=\"apron\", agent=~\"$agent\"} | json",
+          "refId": "A"
+        }
+      ]
+    }
+  ],
+  "annotations": {
+    "list": [
+      {
+        "name": "Show State Changes",
+        "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+        "enable": true,
+        "iconColor": "orange",
+        "expr": "{app=\"apron\", event_type=\"show-state\"} | json",
+        "titleFormat": "{{agent}}: Show → {{state}}",
+        "textFormat": "{{_line}}"
+      }
+    ]
+  }
+}

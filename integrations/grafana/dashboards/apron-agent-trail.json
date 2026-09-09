@@ -1,0 +1,357 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_LOKI",
+      "label": "Loki",
+      "description": "Grafana Cloud Loki (logs)",
+      "type": "datasource",
+      "pluginId": "loki",
+      "pluginName": "Loki"
+    }
+  ],
+  "__requires": [
+    { "type": "grafana", "id": "grafana", "name": "Grafana", "version": "11.0.0" },
+    { "type": "datasource", "id": "loki", "name": "Loki" },
+    { "type": "panel", "id": "timeseries", "name": "Time series" },
+    { "type": "panel", "id": "stat", "name": "Stat" },
+    { "type": "panel", "id": "piechart", "name": "Pie chart" },
+    { "type": "panel", "id": "table", "name": "Table" },
+    { "type": "panel", "id": "logs", "name": "Logs" }
+  ],
+  "id": null,
+  "uid": "apron-agent-trail",
+  "title": "Apron — Agent Decision Trail",
+  "description": "Loki-powered decision trail showing every agent event, prediction, compliance evaluation, and provenance change across games.",
+  "tags": ["apron", "hackathon", "agents", "loki"],
+  "timezone": "browser",
+  "editable": true,
+  "graphTooltip": 1,
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "time": { "from": "now-3h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "agent",
+        "type": "custom",
+        "label": "Agent",
+        "current": { "text": "All", "value": "$__all" },
+        "options": [
+          { "text": "All", "value": "$__all", "selected": true },
+          { "text": "SPOTTER", "value": "SPOTTER" },
+          { "text": "TRAFFIC", "value": "TRAFFIC" },
+          { "text": "ADVANCE", "value": "ADVANCE" },
+          { "text": "WRANGLER", "value": "WRANGLER" },
+          { "text": "STEWARD", "value": "STEWARD" },
+          { "text": "FIXER", "value": "FIXER" },
+          { "text": "RUNNER", "value": "RUNNER" },
+          { "text": "CUSTOMS", "value": "CUSTOMS" }
+        ],
+        "includeAll": true,
+        "multi": true,
+        "query": "SPOTTER,TRAFFIC,ADVANCE,WRANGLER,STEWARD,FIXER,RUNNER,CUSTOMS"
+      },
+      {
+        "name": "event_type",
+        "type": "custom",
+        "label": "Event Type",
+        "current": { "text": "All", "value": "$__all" },
+        "options": [
+          { "text": "All", "value": "$__all", "selected": true },
+          { "text": "prediction", "value": "prediction" },
+          { "text": "chain-update", "value": "chain-update" },
+          { "text": "show-state", "value": "show-state" },
+          { "text": "flight-status", "value": "flight-status" },
+          { "text": "compliance", "value": "compliance" },
+          { "text": "provenance_change", "value": "provenance_change" },
+          { "text": "outreach", "value": "outreach" },
+          { "text": "rebook-options", "value": "rebook-options" },
+          { "text": "handoff", "value": "handoff" },
+          { "text": "metrics", "value": "metrics" }
+        ],
+        "includeAll": true,
+        "multi": true,
+        "query": "prediction,chain-update,show-state,flight-status,compliance,provenance_change,outreach,rebook-options,handoff,metrics"
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 100,
+      "type": "row",
+      "title": "📊 Event Volume",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+    {
+      "id": 1,
+      "title": "Events over Time by Agent",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 1, "w": 16, "h": 7 },
+      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "barAlignment": 0,
+            "fillOpacity": 80,
+            "stacking": { "mode": "normal" },
+            "lineWidth": 0
+          },
+          "color": { "mode": "palette-classic" }
+        }
+      },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "table", "placement": "right", "calcs": ["sum"] }
+      },
+      "targets": [
+        {
+          "expr": "sum by (agent) (count_over_time({app=\"apron\", agent=~\"$agent\", event_type=~\"$event_type\"}[1m]))",
+          "legendFormat": "{{agent}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Events by Agent",
+      "type": "piechart",
+      "gridPos": { "x": 16, "y": 1, "w": 8, "h": 7 },
+      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" }
+        }
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["sum"] },
+        "pieType": "donut",
+        "legend": { "displayMode": "table", "placement": "right", "values": ["value", "percent"] },
+        "tooltip": { "mode": "single" }
+      },
+      "targets": [
+        {
+          "expr": "sum by (agent) (count_over_time({app=\"apron\", agent=~\"$agent\", event_type=~\"$event_type\"}[$__range]))",
+          "legendFormat": "{{agent}}",
+          "refId": "A",
+          "instant": true
+        }
+      ]
+    },
+    {
+      "id": 101,
+      "type": "row",
+      "title": "🔮 SPOTTER — Predictions & Game State",
+      "gridPos": { "x": 0, "y": 8, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+    {
+      "id": 3,
+      "title": "SPOTTER Predictions",
+      "description": "End-time predictions from SPOTTER using Gemini. Shows how the predicted end time evolves over the game.",
+      "type": "table",
+      "gridPos": { "x": 0, "y": 9, "w": 24, "h": 7 },
+      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [{ "displayName": "Time", "desc": true }]
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Time" },
+            "properties": [{ "id": "custom.width", "value": 180 }]
+          }
+        ]
+      },
+      "transformations": [
+        {
+          "id": "extractFields",
+          "options": { "source": "Line", "format": "json" }
+        }
+      ],
+      "targets": [
+        {
+          "expr": "{app=\"apron\", agent=\"SPOTTER\", event_type=\"prediction\"} | json | line_format \"{{.predictedEndTime}} | conf={{.confidence}} | remaining={{.remainingMinutes}}min\"",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Show State Timeline",
+      "description": "Show state escalation: clear → watch → risk → down",
+      "type": "logs",
+      "gridPos": { "x": 0, "y": 16, "w": 24, "h": 6 },
+      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+      "options": {
+        "showTime": true,
+        "showLabels": true,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": true,
+        "enableLogDetails": true,
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        {
+          "expr": "{app=\"apron\", event_type=\"show-state\"} | json",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 102,
+      "type": "row",
+      "title": "✈️ TRAFFIC — Flight Status",
+      "gridPos": { "x": 0, "y": 22, "w": 24, "h": 1 },
+      "collapsed": true,
+      "panels": [
+        {
+          "id": 5,
+          "title": "Flight Status Events",
+          "type": "logs",
+          "gridPos": { "x": 0, "y": 23, "w": 24, "h": 8 },
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "options": {
+            "showTime": true,
+            "showLabels": true,
+            "wrapLogMessage": true,
+            "prettifyLogMessage": true,
+            "enableLogDetails": true,
+            "sortOrder": "Descending"
+          },
+          "targets": [
+            {
+              "expr": "{app=\"apron\", agent=\"TRAFFIC\"} | json",
+              "refId": "A"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 103,
+      "type": "row",
+      "title": "⚖️ STEWARD — Compliance",
+      "gridPos": { "x": 0, "y": 23, "w": 24, "h": 1 },
+      "collapsed": true,
+      "panels": [
+        {
+          "id": 6,
+          "title": "Compliance Evaluations",
+          "type": "logs",
+          "gridPos": { "x": 0, "y": 24, "w": 24, "h": 8 },
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "options": {
+            "showTime": true,
+            "showLabels": true,
+            "wrapLogMessage": true,
+            "prettifyLogMessage": true,
+            "enableLogDetails": true,
+            "sortOrder": "Descending"
+          },
+          "targets": [
+            {
+              "expr": "{app=\"apron\", agent=\"STEWARD\"} | json",
+              "refId": "A"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 104,
+      "type": "row",
+      "title": "📞 WRANGLER — Crew Outreach",
+      "gridPos": { "x": 0, "y": 24, "w": 24, "h": 1 },
+      "collapsed": true,
+      "panels": [
+        {
+          "id": 7,
+          "title": "Outreach & Constraint Gathering",
+          "type": "logs",
+          "gridPos": { "x": 0, "y": 25, "w": 24, "h": 8 },
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "options": {
+            "showTime": true,
+            "showLabels": true,
+            "wrapLogMessage": true,
+            "prettifyLogMessage": true,
+            "enableLogDetails": true,
+            "sortOrder": "Descending"
+          },
+          "targets": [
+            {
+              "expr": "{app=\"apron\", agent=\"WRANGLER\"} | json",
+              "refId": "A"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 105,
+      "type": "row",
+      "title": "🔄 Provenance Changes",
+      "gridPos": { "x": 0, "y": 25, "w": 24, "h": 1 },
+      "collapsed": true,
+      "panels": [
+        {
+          "id": 8,
+          "title": "Epistemic Trail — How Facts Evolved",
+          "description": "Provenance changes: unknown → inferred → confirmed. This is the core of the Closeout report.",
+          "type": "logs",
+          "gridPos": { "x": 0, "y": 26, "w": 24, "h": 8 },
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "options": {
+            "showTime": true,
+            "showLabels": true,
+            "wrapLogMessage": true,
+            "prettifyLogMessage": true,
+            "enableLogDetails": true,
+            "sortOrder": "Descending"
+          },
+          "targets": [
+            {
+              "expr": "{app=\"apron\", event_type=\"provenance_change\"} | json",
+              "refId": "A"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": 106,
+      "type": "row",
+      "title": "📜 Full Event Stream",
+      "gridPos": { "x": 0, "y": 26, "w": 24, "h": 1 },
+      "collapsed": false
+    },
+    {
+      "id": 9,
+      "title": "All Agent Events",
+      "type": "logs",
+      "gridPos": { "x": 0, "y": 27, "w": 24, "h": 12 },
+      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+      "options": {
+        "showTime": true,
+        "showLabels": true,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": true,
+        "enableLogDetails": true,
+        "sortOrder": "Descending",
+        "dedupStrategy": "none"
+      },
+      "targets": [
+        {
+          "expr": "{app=\"apron\", agent=~\"$agent\", event_type=~\"$event_type\"} | json",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}
