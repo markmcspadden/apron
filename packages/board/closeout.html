@@ -201,14 +201,14 @@ a:hover{text-decoration:underline}
 
   <div id="mcp-badge"></div>
 
+  <div id="report" class="report"></div>
+
   <div class="sec-h">
     <h2>Completed Games</h2>
     <span class="n" id="game-count"></span>
   </div>
 
   <div id="game-list" class="game-list"></div>
-
-  <div id="report" class="report"></div>
 
 </div>
 
@@ -305,6 +305,7 @@ window.loadReport = function(gameId) {
   el.innerHTML = '<div class="loading-msg">Generating closeout report via ' +
     (document.querySelector('.mcp-status.on') ? 'Grafana MCP server' : 'direct Loki HTTP') +
     '…</div>';
+  el.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
   fetch('/api/closeout/' + encodeURIComponent(gameId))
     .then(function(r) { return r.json(); })
@@ -315,6 +316,7 @@ window.loadReport = function(gameId) {
       }
       currentReport = report;
       renderReport(report);
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
     })
     .catch(function(err) {
       el.innerHTML = '<div class="loading-msg" style="color:var(--down)">Failed to generate report.</div>';
