@@ -989,12 +989,12 @@ async function routeSeed(
 
   // 4. Crew
   const crewData = [
-    { id: 'crew-callahan', name: 'Mike Callahan', position: 'TD', department: 'Truck', homeMarket: 'New York, NY', tier: 'A-list', phone: '+14698930779' },
-    { id: 'crew-vasquez', name: 'Sarah Vasquez', position: 'DIR', department: 'Truck', homeMarket: 'Los Angeles, CA', tier: 'A-list', phone: '+14698930779' },
-    { id: 'crew-kessler', name: 'Dave Kessler', position: 'A1', department: 'Audio booth', homeMarket: 'Chicago, IL', tier: 'A-list', phone: '+14698930779' },
-    { id: 'crew-rinaldi', name: 'Tony Rinaldi', position: 'EIC', department: 'Engineering', homeMarket: 'New York, NY', tier: 'A-list', phone: '+14698930779' },
-    { id: 'crew-nguyen', name: 'Beth Nguyen', position: 'GFX', department: 'Graphics', homeMarket: 'Atlanta, GA', tier: 'B-list', phone: '+14698930779' },
-    { id: 'crew-wright', name: 'James Wright', position: 'LEAD EVS', department: 'Tape room', homeMarket: 'Dallas, TX', tier: 'A-list', phone: '+14698930779' },
+    { id: 'crew-callahan', name: 'Mike Callahan', position: 'TD', department: 'Truck', homeMarket: 'New York, NY', tier: 'A-list', phone: '+15551000001' },
+    { id: 'crew-vasquez', name: 'Sarah Vasquez', position: 'DIR', department: 'Truck', homeMarket: 'Los Angeles, CA', tier: 'A-list', phone: '+15551000002' },
+    { id: 'crew-kessler', name: 'Dave Kessler', position: 'A1', department: 'Audio booth', homeMarket: 'Chicago, IL', tier: 'A-list', phone: '+15551000003' },
+    { id: 'crew-rinaldi', name: 'Tony Rinaldi', position: 'EIC', department: 'Engineering', homeMarket: 'New York, NY', tier: 'A-list', phone: '+15551000004' },
+    { id: 'crew-nguyen', name: 'Beth Nguyen', position: 'GFX', department: 'Graphics', homeMarket: 'Atlanta, GA', tier: 'B-list', phone: '+15551000005' },
+    { id: 'crew-wright', name: 'James Wright', position: 'LEAD EVS', department: 'Tape room', homeMarket: 'Dallas, TX', tier: 'A-list', phone: '+15551000006' },
   ] as const;
 
   const crew = [];
