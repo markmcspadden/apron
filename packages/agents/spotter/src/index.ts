@@ -554,10 +554,13 @@ export class SpotterAgent extends BaseAgent {
 
     let predictedEnd: string;
     let predictedDurationMinutes: number;
+    let latencyMs: number | undefined;
 
+    const t0 = Date.now();
     if (gemini?.isEnabled()) {
       // Use Gemini for intelligent prediction
       const prediction = await this.geminiPredict(gemini, game, config);
+      latencyMs = Date.now() - t0;
       if (prediction) {
         predictedEnd = prediction.predictedEndTime;
         predictedDurationMinutes = prediction.predictedDurationMinutes;
@@ -586,6 +589,7 @@ export class SpotterAgent extends BaseAgent {
         message: `Predicted end: ${predictedEnd} (${predictedDurationMinutes}m)`,
         level: this.computeChainLevel(game, config),
         nodes: updatedChain,
+        ...(latencyMs != null ? { latencyMs } : {}),
       });
 
       this.log('prediction', `Predicted end: ${predictedEnd} (${predictedDurationMinutes}m)`, {

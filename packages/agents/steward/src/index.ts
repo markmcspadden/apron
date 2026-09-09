@@ -177,6 +177,7 @@ export class StewardAgent extends BaseAgent {
         totals: snapshot.totals,
         restCompression: snapshot.restCompression,
         summary: snapshot.summary,
+        latencyMs: snapshot.latencyMs,
       });
 
       // Escalate show state if needed
