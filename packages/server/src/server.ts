@@ -1860,8 +1860,9 @@ function buildGameChain(
 }
 
 async function loadScenario(): Promise<FixtureScenario> {
+  const name = process.env['SCENARIO'] ?? 'alcs-gm4';
   const { scenario } = await import(
-    join(ROOT, 'fixtures', 'alcs-gm4', 'scenario.ts')
+    join(ROOT, 'fixtures', name, 'scenario.ts')
   );
   return scenario as FixtureScenario;
 }

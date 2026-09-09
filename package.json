@@ -7,6 +7,7 @@
   "scripts": {
     "build": "tsc -b",
     "demo": "tsx packages/server/src/demo.ts",
+    "tape": "SCENARIO=tape PORT=3002 tsx packages/server/src/demo.ts",
     "dev": "set -a && . ./.env 2>/dev/null; set +a && tsx watch packages/server/src/index.ts",
     "lint": "eslint . --ext .ts",
     "slate": "tsx scripts/slate.ts",

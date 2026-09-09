@@ -191,17 +191,6 @@ body{background:var(--bg);color:var(--ink);font-family:var(--f);font-size:14px;
         <div class="card-row"><span class="label">Model</span><span class="value">Vertex AI</span></div>
       </div>
     </div>
-    <!-- Clickhouse -->
-    <div class="card skeleton" id="card-ch">
-      <div class="card-head">
-        <div class="card-icon" style="background:#1B1B1E">🏗️</div>
-        <span class="card-name">ClickHouse</span>
-        <span class="status-label off" id="ch-status">—</span>
-      </div>
-      <div class="card-rows">
-        <div class="card-row"><span class="label">Audit log</span><span class="value" id="ch-audit">—</span></div>
-      </div>
-    </div>
   </div>
 </div>
 
@@ -316,12 +305,6 @@ function render(d){
   $('gemini-status').className = 'status-label ' + (g.enabled ? 'ok' : 'off');
   $('gemini-status').textContent = g.enabled ? 'enabled' : 'disabled';
 
-  // Clickhouse
-  var ch = d.clickhouse;
-  $('ch-status').className = 'status-label ' + (ch.enabled ? 'ok' : 'off');
-  $('ch-status').textContent = ch.enabled ? 'connected' : 'disabled';
-  $('ch-audit').textContent = ch.enabled ? '✓ recording' : '✗ not configured';
-  $('ch-audit').style.color = ch.enabled ? 'var(--ok)' : '';
 }
 
 function refresh(){

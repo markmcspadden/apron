@@ -12,6 +12,12 @@
       "runtimeExecutable": "bash",
       "runtimeArgs": ["-c", "cd /Users/mark/Development/personal/apron/apron-starter && PORT=3001 npx tsx packages/server/src/demo.ts"],
       "port": 3001
+    },
+    {
+      "name": "tape",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-c", "cd /Users/mark/Development/personal/apron/apron-starter && SCENARIO=tape PORT=3002 npx tsx packages/server/src/demo.ts"],
+      "port": 3002
     }
   ]
 }

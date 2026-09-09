@@ -8,6 +8,7 @@ Crew integrity for live sports and entertainment production. Irregular operation
 pnpm install
 pnpm dev           # full server on :3000 — Firestore-backed, + /demo fixture route
 pnpm demo          # standalone fixture demo (no Firebase needed)
+pnpm tape          # demo tape — 22-crew ALCS scenario for the 3-minute video
 ```
 
 ### Dev mode (`pnpm dev`)
@@ -27,6 +28,12 @@ Local auth: `gcloud auth application-default login` (ADC).
 
 Standalone fixture playback. No Firebase, no admin console, no real data.
 The board auto-plays the ALCS Gm 4 twelve-inning night scenario when a client connects.
+
+### Tape mode (`pnpm tape`)
+
+Demo video fixture — same ALCS Gm 4 game, but starts at Bot 10th with all 22 traveling crew in the roster. Designed for the 3-minute demo tape: cold open → Act 1 WATCH → Act 2 DECIDE → seat switch → CLEAR. All 4 external calls remain NOT BROKERABLE so the production seat shows 4 "External call · withheld" rows.
+
+The `SCENARIO` env var selects which fixture directory to load (default: `alcs-gm4`).
 
 ### Seed data
 
@@ -60,7 +67,8 @@ integrations/clickhouse/   - Append-only audit log (optional, needs CLICKHOUSE_U
 integrations/google-cloud/ - Gemini client (stubs in fixture mode)
 integrations/aviationstack/- AviationStack flight status API client (TRAFFIC agent)
 integrations/twilio/       - Twilio SMS client for WRANGLER outreach
-fixtures/alcs-gm4/         - ALCS Game 4 twelve-inning night scenario
+fixtures/alcs-gm4/         - ALCS Game 4 twelve-inning night scenario (14 crew)
+fixtures/tape/             - Demo tape variant: 22 crew, starts Bot 10th, all external calls redacted
 site/                      - Marketing site (static HTML)
 ```
 
