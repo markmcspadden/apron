@@ -18,7 +18,7 @@ reaches past the curtain.*
 [![Commercial license available](https://img.shields.io/badge/commercial-available-green.svg)](COMMERCIAL.md)
 
 > Built for [Agentic Cinema: The Blockbuster Hackathon](https://agentic-cinema.devpost.com/).
-> Partner tracks: **Grafana** + **Clickhouse** — *see [Partner &amp; Google Cloud usage](#partner--google-cloud-usage).*
+> Partner track: **Grafana** — *see [Partner &amp; Google Cloud usage](#partner--google-cloud-usage).*
 
 ---
 
@@ -227,7 +227,6 @@ All three are imported and called at runtime, not just named here.
 |---|---|---|
 | **Google Cloud** — Gemini&nbsp;2.5&nbsp;Flash | [`integrations/google-cloud/`](integrations/google-cloud) | Reasoning for every agent: end-time prediction in `SPOTTER`, agreement interpretation in `STEWARD`, natural-language constraint parsing in `WRANGLER`, option generation and ranking in `FIXER`. Stubs responses in fixture mode so the demo runs without credentials. |
 | **Grafana** | [`integrations/grafana/`](integrations/grafana) | Three telemetry pipelines: **Prometheus** metrics (agent events, crew risk, call exposure, show state, LLM latency), **Loki** structured logs (the epistemic trail — how every operational fact evolved), and **Agent Observability** SDK (per-generation token usage, latency, input/output tracing via `@grafana/agento11y`). Plus a game **closeout report** that queries Loki to build a chronological operational narrative. Importable dashboard JSON in [`dashboards/`](integrations/grafana/dashboards). |
-| **Clickhouse** | [`integrations/clickhouse/`](integrations/clickhouse) | Append-only audit log. Every agent event is written to an `audit_log` table with MergeTree engine and 90-day TTL. Schema auto-creates on startup. |
 
 Entry points:
 
@@ -237,7 +236,6 @@ Entry points:
 - [`integrations/grafana/src/loki.ts`](integrations/grafana/src/loki.ts) — structured log push to Loki
 - [`integrations/grafana/src/agento11y.ts`](integrations/grafana/src/agento11y.ts) — `@grafana/agento11y` SDK initialization
 - [`integrations/grafana/src/closeout.ts`](integrations/grafana/src/closeout.ts) — game closeout report builder
-- [`integrations/clickhouse/src/store.ts`](integrations/clickhouse/src/store.ts) — audit log buffer, flush, and query
 
 ---
 
@@ -336,7 +334,6 @@ integrations/
   google-cloud/       Gemini via Vertex AI (stubs in fixture mode)
   grafana/            Prometheus + Loki + Agent O11y + closeout report
     dashboards/         importable Grafana dashboard JSON
-  clickhouse/         append-only audit log with MergeTree schema
   firebase/           Firestore persistence (accounts, crew, games, assignments)
   aviationstack/      AviationStack flight status API (TRAFFIC agent)
   twilio/             Twilio SMS (WRANGLER crew outreach)
