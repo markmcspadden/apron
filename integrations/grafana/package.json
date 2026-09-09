@@ -7,6 +7,7 @@
   "main": "src/index.ts",
   "dependencies": {
     "@apron/types": "workspace:*",
-    "@grafana/agento11y": "^0.13.0"
+    "@grafana/agento11y": "^0.13.0",
+    "@modelcontextprotocol/sdk": "^1.30.0"
   }
 }

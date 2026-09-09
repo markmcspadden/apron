@@ -1,15 +1,20 @@
 /**
  * Closeout report — post-game operational chronology.
  *
- * After a game ends, the Closeout queries Loki for the full agent decision
- * trail and builds a structured summary: what happened, when the system
- * knew it, and how it responded.
+ * After a game ends, the Closeout queries the agent decision trail via
+ * the Grafana Cloud MCP server (LogQL + PromQL tools) and builds a
+ * structured summary: what happened, when the system knew it, and how
+ * it responded.
  *
- * The report is served at /api/closeout/:gameId and can also be pushed
- * back to Grafana as an annotation on the game's timeline.
+ * Primary path:  Grafana MCP server → query_loki_logs / query_prometheus
+ * Fallback:      Direct Loki HTTP API (when MCP is unavailable)
+ *
+ * The report is served at /api/closeout/:gameId and rendered in the
+ * Closeout Reports admin view.
  */
 
 import type { LokiLogger } from './loki.js';
+import type { GrafanaMcpClient, PromQueryResult } from './mcp-client.js';
 
 // ---------------------------------------------------------------------------
 // Report types
@@ -32,6 +37,23 @@ export interface CloseoutReport {
   flights: FlightSummary | null;
   /** Overall operational grade */
   grade: OperationalGrade;
+  /** Prometheus metrics snapshot from game window (via MCP) */
+  metrics: MetricsSnapshot | null;
+  /** Link to Grafana dashboard (via MCP dashboard search) */
+  dashboardUrl: string | null;
+  /** Data source — 'mcp' if Grafana MCP was used, 'direct' if HTTP fallback */
+  source: 'mcp' | 'direct';
+}
+
+export interface MetricsSnapshot {
+  /** Peak crew-at-risk count during game */
+  peakCrewAtRisk: number;
+  /** Total show state changes */
+  stateChanges: number;
+  /** Mean agent processing latency (ms) */
+  meanAgentLatencyMs: number;
+  /** Total agent events recorded */
+  totalAgentEvents: number;
 }
 
 export interface TimelineEntry {
@@ -75,23 +97,61 @@ export interface OperationalGrade {
 // ---------------------------------------------------------------------------
 
 export class CloseoutBuilder {
+  private mcp: GrafanaMcpClient | null = null;
+
   constructor(private loki: LokiLogger) {}
+
+  /** Attach the Grafana MCP client for primary data access. */
+  setMcpClient(mcp: GrafanaMcpClient): void {
+    this.mcp = mcp;
+  }
 
   /**
    * Generate a Closeout report for a completed game.
    *
-   * Queries Loki for all events related to the game and synthesizes
-   * a chronological operational report.
+   * Primary path:  Grafana MCP server (query_loki_logs + query_prometheus)
+   * Fallback:      Direct Loki HTTP API
+   *
+   * When MCP is available the report is enriched with Prometheus metrics
+   * (crew-at-risk peak, state changes, agent latency) and a link to the
+   * Grafana ops dashboard.
    */
   async generate(
     gameId: string,
     opts?: { from?: Date; to?: Date },
   ): Promise<CloseoutReport> {
-    const entries = await this.loki.queryGameLogs(gameId, {
-      from: opts?.from,
-      to: opts?.to,
-      limit: 2000,
-    });
+    let usedMcp = false;
+    let entries: Array<{ timestamp: string; labels: Record<string, string>; body: Record<string, unknown> }>;
+
+    // ---- Primary path: Grafana MCP server ----
+    if (this.mcp?.isEnabled()) {
+      console.log(`[closeout] Querying via Grafana MCP server for game ${gameId}`);
+      const mcpEntries = await this.mcp.queryLokiLogs(gameId, {
+        from: opts?.from,
+        to: opts?.to,
+        limit: 2000,
+      });
+      if (mcpEntries.length > 0) {
+        entries = mcpEntries;
+        usedMcp = true;
+        console.log(`[closeout] MCP returned ${entries.length} log entries`);
+      } else {
+        // MCP returned empty — fall through to direct HTTP
+        console.log('[closeout] MCP returned no entries — falling back to direct Loki HTTP');
+        entries = await this.loki.queryGameLogs(gameId, {
+          from: opts?.from,
+          to: opts?.to,
+          limit: 2000,
+        });
+      }
+    } else {
+      // ---- Fallback: direct Loki HTTP ----
+      entries = await this.loki.queryGameLogs(gameId, {
+        from: opts?.from,
+        to: opts?.to,
+        limit: 2000,
+      });
+    }
 
     const timeline: TimelineEntry[] = [];
     const agentActivity: Record<string, number> = {};
@@ -183,6 +243,15 @@ export class CloseoutBuilder {
     // Grade the operation
     const grade = computeGrade(compliance, flights, decisions);
 
+    // ---- Enrich with Prometheus metrics via MCP ----
+    let metrics: MetricsSnapshot | null = null;
+    let dashboardUrl: string | null = null;
+
+    if (usedMcp && this.mcp?.isEnabled()) {
+      metrics = await this.queryMetricsSnapshot(gameId, opts);
+      dashboardUrl = await this.findDashboardUrl();
+    }
+
     return {
       gameId,
       generatedAt: new Date().toISOString(),
@@ -193,7 +262,77 @@ export class CloseoutBuilder {
       compliance,
       flights,
       grade,
+      metrics,
+      dashboardUrl,
+      source: usedMcp ? 'mcp' : 'direct',
     };
+  }
+
+  // ---- MCP-powered Prometheus metric queries ----
+
+  private async queryMetricsSnapshot(
+    gameId: string,
+    opts?: { from?: Date; to?: Date },
+  ): Promise<MetricsSnapshot | null> {
+    if (!this.mcp?.isEnabled()) return null;
+
+    try {
+      // Query crew-at-risk peak
+      const crewAtRisk = await this.mcp.queryPrometheus(
+        'max_over_time(apron_crew_at_risk[24h])',
+        { from: opts?.from, to: opts?.to, step: '300s' },
+      );
+      const peakCrewAtRisk = extractPeakValue(crewAtRisk);
+
+      // Query total show state changes
+      const stateChanges = await this.mcp.queryPrometheus(
+        'count_over_time(apron_show_state_change[24h])',
+        { from: opts?.from, to: opts?.to, step: '300s' },
+      );
+      const totalStateChanges = extractPeakValue(stateChanges);
+
+      // Query mean agent latency
+      const latency = await this.mcp.queryPrometheus(
+        'avg_over_time(apron_agent_process_duration_ms[24h])',
+        { from: opts?.from, to: opts?.to, step: '300s' },
+      );
+      const meanLatency = extractMeanValue(latency);
+
+      // Query total agent events
+      const events = await this.mcp.queryPrometheus(
+        'count_over_time(apron_agent_event[24h])',
+        { from: opts?.from, to: opts?.to, step: '300s' },
+      );
+      const totalEvents = extractPeakValue(events);
+
+      console.log(`[closeout] Prometheus metrics: peak crew-at-risk=${peakCrewAtRisk}, state-changes=${totalStateChanges}, mean-latency=${meanLatency}ms, events=${totalEvents}`);
+
+      return {
+        peakCrewAtRisk,
+        stateChanges: totalStateChanges,
+        meanAgentLatencyMs: Math.round(meanLatency),
+        totalAgentEvents: totalEvents,
+      };
+    } catch (err) {
+      console.error('[closeout] Prometheus enrichment failed:', err);
+      return null;
+    }
+  }
+
+  private async findDashboardUrl(): Promise<string | null> {
+    if (!this.mcp?.isEnabled()) return null;
+
+    try {
+      const dashboards = await this.mcp.searchDashboards('apron');
+      if (dashboards.length > 0) {
+        const grafanaUrl = process.env['GRAFANA_URL'] ?? '';
+        const d = dashboards[0]!;
+        return d.url ? `${grafanaUrl}${d.url}` : null;
+      }
+    } catch {
+      // Dashboard search is best-effort
+    }
+    return null;
   }
 }
 
@@ -280,6 +419,30 @@ function buildDecisionDescription(eventType: string, body: Record<string, unknow
 function buildDecisionOutcome(eventType: string, body: Record<string, unknown>): string {
   const msg = body['message'] as string | undefined;
   return msg ?? 'completed';
+}
+
+function extractPeakValue(results: PromQueryResult[]): number {
+  let peak = 0;
+  for (const series of results) {
+    for (const v of series.values) {
+      if (v.value > peak) peak = v.value;
+    }
+  }
+  return Math.round(peak);
+}
+
+function extractMeanValue(results: PromQueryResult[]): number {
+  let sum = 0;
+  let count = 0;
+  for (const series of results) {
+    for (const v of series.values) {
+      if (v.value > 0) {
+        sum += v.value;
+        count++;
+      }
+    }
+  }
+  return count > 0 ? sum / count : 0;
 }
 
 function computeGrade(

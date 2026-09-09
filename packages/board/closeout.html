@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>APRON — closeout reports</title>
+<style>
+:root{
+  --bg:#0B0B0C; --panel:#141416; --panel-2:#1B1B1E; --line:#2A2A2E; --line-2:#3A3A40;
+  --ink:#F2F1EE; --ink-2:#A9A69E; --ink-3:#6E6B65;
+  --clear:#25B04B; --clear-bg:#0E2A16;
+  --watch:#E8A81C; --watch-bg:#2E2308;
+  --risk:#EE7A3C; --risk-bg:#31190A;
+  --down:#E0403C; --down-bg:#33100F;
+  --live:#5DA9E9;
+  --f:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --m:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f);font-size:14px;
+  line-height:1.45;-webkit-font-smoothing:antialiased}
+.mono{font-family:var(--m);font-variant-numeric:tabular-nums}
+a{color:var(--live);text-decoration:none}
+a:hover{text-decoration:underline}
+
+/* ---------- top bar ---------- */
+.top{position:sticky;top:0;z-index:80;background:#0B0B0Cf2;backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--line)}
+.top-in{max-width:1200px;margin:0 auto;padding:11px 20px;display:flex;align-items:center;gap:20px}
+.logo{display:flex;align-items:baseline;gap:9px;white-space:nowrap}
+.logo b{font-size:16px;font-weight:750;letter-spacing:.13em}
+.logo span{font-size:10.5px;letter-spacing:.16em;color:var(--ink-3);text-transform:uppercase}
+.top-right{margin-left:auto;display:flex;align-items:center;gap:14px}
+.nav-link{font-size:12px;color:var(--ink-2);text-decoration:none;padding:5px 10px;
+  border:1px solid var(--line);border-radius:6px}
+.nav-link:hover{color:var(--ink);border-color:var(--line-2);text-decoration:none}
+
+/* ---------- shell ---------- */
+.shell{max-width:1200px;margin:0 auto;padding:22px 20px 80px}
+
+/* ---------- section headings ---------- */
+.sec-h{display:flex;align-items:baseline;gap:12px;margin:0 0 16px}
+.sec-h h2{margin:0;font-size:12px;letter-spacing:.15em;text-transform:uppercase;
+  color:var(--ink-2);font-weight:640}
+.sec-h .n{font-family:var(--m);font-size:11px;color:var(--ink-3)}
+
+/* ---------- MCP status badge ---------- */
+.mcp-status{display:inline-flex;align-items:center;gap:6px;font-family:var(--m);font-size:10px;
+  letter-spacing:.08em;padding:4px 10px;border-radius:5px;margin-bottom:20px}
+.mcp-status.on{background:#0E2040;color:var(--live);border:1px solid #1A3A60}
+.mcp-status.off{background:var(--panel);color:var(--ink-3);border:1px solid var(--line)}
+.mcp-status .dot{width:5px;height:5px;border-radius:99px}
+.mcp-status.on .dot{background:var(--clear);box-shadow:0 0 4px rgba(37,176,75,.5)}
+.mcp-status.off .dot{background:var(--ink-3)}
+
+/* ---------- game list ---------- */
+.game-list{display:grid;gap:10px;margin-bottom:32px}
+.game-card{background:var(--panel);border:1px solid var(--line);border-radius:10px;
+  padding:16px 20px;display:flex;align-items:center;gap:16px;cursor:pointer;
+  transition:border-color .15s}
+.game-card:hover{border-color:var(--line-2)}
+.game-card.sel{border-color:var(--live)}
+.game-info{flex:1;min-width:0}
+.game-title{font-size:15px;font-weight:650;margin-bottom:3px}
+.game-meta{font-size:12px;color:var(--ink-2);display:flex;gap:14px;flex-wrap:wrap}
+.game-meta .k{color:var(--ink-3);font-family:var(--m);font-size:9.5px;letter-spacing:.08em;
+  text-transform:uppercase;margin-right:4px}
+.game-date{font-family:var(--m);font-size:12px;color:var(--ink-3);white-space:nowrap}
+.btn{font:inherit;font-size:12px;font-weight:600;padding:8px 15px;border-radius:7px;cursor:pointer;
+  border:1px solid var(--line-2);background:var(--panel-2);color:var(--ink);transition:.14s;
+  white-space:nowrap}
+.btn:hover{border-color:var(--ink-3)}
+.btn.pri{background:#2A6FB5;border-color:#2A6FB5;color:#fff}
+.btn.pri:hover{background:#3480CC}
+.btn:disabled{opacity:.4;cursor:default}
+
+/* ---------- report view ---------- */
+.report{display:none;background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  overflow:hidden}
+.report.open{display:block}
+.report-head{padding:20px 24px;border-bottom:1px solid var(--line);
+  background:linear-gradient(180deg,#1C1C20,#141416)}
+.report-head h3{margin:0 0 4px;font-size:20px;font-weight:700;letter-spacing:-.015em}
+.report-head .sub{font-size:13px;color:var(--ink-2)}
+.report-head .source-tag{display:inline-flex;align-items:center;gap:5px;font-family:var(--m);
+  font-size:9.5px;letter-spacing:.08em;padding:3px 8px;border-radius:4px;margin-left:10px}
+.report-head .source-tag.mcp{background:#0E2040;color:var(--live);border:1px solid #1A3A60}
+.report-head .source-tag.direct{background:var(--panel-2);color:var(--ink-3);border:1px solid var(--line-2)}
+
+/* grade badge */
+.grade{display:flex;align-items:center;gap:12px;margin-top:14px}
+.grade-letter{font-family:var(--m);font-size:36px;font-weight:800;line-height:1}
+.grade-letter.A{color:var(--clear)} .grade-letter.B{color:#6FCB89}
+.grade-letter.C{color:var(--watch)} .grade-letter.D{color:var(--risk)}
+.grade-letter.F{color:var(--down)}
+.grade-detail .score{font-family:var(--m);font-size:13px;font-weight:600;margin-bottom:2px}
+.grade-detail .rationale{font-size:12px;color:var(--ink-2)}
+
+/* stats strip */
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:1px;
+  background:var(--line);border-bottom:1px solid var(--line)}
+.stat{background:var(--panel);padding:14px 18px}
+.stat .k{font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);
+  margin-bottom:5px}
+.stat .v{font-family:var(--m);font-size:22px;font-weight:700;line-height:1}
+
+/* agent activity bar */
+.agents{padding:20px 24px;border-bottom:1px solid var(--line)}
+.agents h4{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-2);
+  font-weight:640;margin:0 0 12px}
+.agent-bars{display:grid;gap:8px}
+.agent-row{display:flex;align-items:center;gap:10px}
+.agent-name{font-family:var(--m);font-size:10px;letter-spacing:.07em;font-weight:700;
+  min-width:72px;text-align:right}
+.agent-name.SPOTTER{color:#5DA9E9} .agent-name.TRAFFIC{color:#E8A81C}
+.agent-name.STEWARD{color:#C58BE8} .agent-name.FIXER{color:#EE7A3C}
+.agent-name.RUNNER{color:#25B04B} .agent-name.ADVANCE{color:#46C2A8}
+.agent-name.WRANGLER{color:#E58AA6} .agent-name.CUSTOMS{color:#8A94A6}
+.agent-bar-track{flex:1;height:6px;background:var(--line);border-radius:3px;overflow:hidden}
+.agent-bar-fill{height:100%;border-radius:3px;transition:width .4s ease}
+.agent-count{font-family:var(--m);font-size:10px;color:var(--ink-3);min-width:28px}
+
+/* metrics (from MCP Prometheus) */
+.metrics{padding:20px 24px;border-bottom:1px solid var(--line)}
+.metrics h4{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-2);
+  font-weight:640;margin:0 0 12px;display:flex;align-items:center;gap:8px}
+.metrics h4 .tag{font-family:var(--m);font-size:8.5px;letter-spacing:.08em;padding:2px 6px;
+  border-radius:3px;background:#0E2040;color:var(--live);border:1px solid #1A3A60}
+.metrics-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
+.metric-card{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;
+  padding:12px 14px}
+.metric-card .k{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--ink-3);margin-bottom:4px}
+.metric-card .v{font-family:var(--m);font-size:20px;font-weight:700;line-height:1}
+
+/* timeline */
+.timeline{padding:20px 24px;border-bottom:1px solid var(--line)}
+.timeline h4{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-2);
+  font-weight:640;margin:0 0 12px}
+.tl-list{display:flex;flex-direction:column;gap:0;max-height:400px;overflow-y:auto}
+.tl-entry{display:grid;grid-template-columns:56px 80px 1fr;gap:10px;padding:8px 0;
+  border-bottom:1px solid var(--line);font-size:12.5px}
+.tl-entry .ts{font-family:var(--m);font-size:10px;color:var(--ink-3)}
+.tl-entry .who{font-family:var(--m);font-size:10px;letter-spacing:.07em;font-weight:700}
+.tl-entry .msg{color:var(--ink-2)}
+.tl-entry.critical{background:var(--down-bg);border-radius:4px;padding:8px 6px;
+  margin:2px -6px}
+.tl-entry.critical .msg{color:#F0A79F}
+.tl-entry.notable .msg{color:var(--ink)}
+
+/* decisions */
+.decisions{padding:20px 24px;border-bottom:1px solid var(--line)}
+.decisions h4{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-2);
+  font-weight:640;margin:0 0 12px}
+.dec-list{display:flex;flex-direction:column;gap:8px}
+.dec{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:12px 14px}
+.dec .desc{font-size:13px;font-weight:600;margin-bottom:3px}
+.dec .out{font-size:12px;color:var(--ink-2)}
+.dec .meta{font-family:var(--m);font-size:10px;color:var(--ink-3);margin-top:4px}
+
+/* compliance */
+.compliance{padding:20px 24px;border-bottom:1px solid var(--line)}
+.compliance h4{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-2);
+  font-weight:640;margin:0 0 12px}
+.comp-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px}
+.comp-card{background:var(--panel-2);border:1px solid var(--line);border-radius:8px;
+  padding:12px 14px;text-align:center}
+.comp-card .v{font-family:var(--m);font-size:24px;font-weight:700;line-height:1;margin-bottom:4px}
+.comp-card .k{font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3)}
+.comp-card.ok .v{color:var(--clear)} .comp-card.warn .v{color:var(--watch)}
+.comp-card.bad .v{color:var(--down)}
+
+/* dashboard link */
+.dash-link{padding:16px 24px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+.dash-link a{font-size:13px}
+
+/* loading */
+.loading-msg{padding:60px 24px;text-align:center;font-size:13px;color:var(--ink-3)}
+
+/* empty state */
+.empty{text-align:center;padding:80px 20px;color:var(--ink-3)}
+.empty .icon{font-size:36px;margin-bottom:16px;color:var(--ink-3)}
+.empty h3{font-size:18px;font-weight:600;color:var(--ink-2);margin:0 0 8px}
+.empty p{font-size:13px;max-width:400px;margin:0 auto}
+</style>
+</head>
+<body>
+
+<div class="top">
+  <div class="top-in">
+    <div class="logo"><b>APRON</b> <span>Closeout Reports</span></div>
+    <div class="top-right">
+      <a href="/board" class="nav-link">Board</a>
+      <a href="/admin" class="nav-link">Admin</a>
+      <a href="/featured" class="nav-link">Featured</a>
+    </div>
+  </div>
+</div>
+
+<div class="shell">
+
+  <div id="mcp-badge"></div>
+
+  <div class="sec-h">
+    <h2>Completed Games</h2>
+    <span class="n" id="game-count"></span>
+  </div>
+
+  <div id="game-list" class="game-list"></div>
+
+  <div id="report" class="report"></div>
+
+</div>
+
+<script>
+(function(){
+"use strict";
+
+var games = [];
+var currentReport = null;
+
+function $(id) { return document.getElementById(id); }
+
+function escHtml(s) {
+  var d = document.createElement('div');
+  d.textContent = s || '';
+  return d.innerHTML;
+}
+
+function formatTime(iso) {
+  if (!iso) return '';
+  var d = new Date(iso);
+  var h = d.getHours(), m = d.getMinutes();
+  return (h > 12 ? h - 12 : h || 12) + ':' + String(m).padStart(2, '0') + (h >= 12 ? 'p' : 'a');
+}
+
+function formatDate(dateStr) {
+  if (!dateStr) return '';
+  var parts = dateStr.split('-');
+  var d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+  var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return months[d.getMonth()] + ' ' + d.getDate() + ', ' + parts[0];
+}
+
+// Load game list
+function loadGames() {
+  fetch('/api/closeout/list')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      games = data.games || [];
+      renderMcpBadge(data.mcp);
+      renderGameList();
+    })
+    .catch(function() {
+      $('game-list').innerHTML = '<div class="empty"><div class="icon">◇</div><h3>Connection Error</h3><p>Could not reach the server.</p></div>';
+    });
+}
+
+function renderMcpBadge(mcp) {
+  if (!mcp) return;
+  var cls = mcp.enabled ? 'on' : 'off';
+  var label = mcp.enabled
+    ? 'GRAFANA MCP · ' + mcp.toolCount + ' tools · ' + (mcp.transport || 'http')
+    : 'GRAFANA MCP · not connected — reports use direct Loki HTTP';
+  $('mcp-badge').innerHTML = '<div class="mcp-status ' + cls + '"><span class="dot"></span>' + label + '</div>';
+}
+
+function renderGameList() {
+  var el = $('game-list');
+  $('game-count').textContent = games.length;
+
+  if (games.length === 0) {
+    el.innerHTML = '<div class="empty"><div class="icon">◇</div><h3>No Completed Games</h3><p>Closeout reports are generated for games where SPOTTER has finished monitoring. Watch a game from the admin console to get started.</p></div>';
+    return;
+  }
+
+  var html = '';
+  for (var i = 0; i < games.length; i++) {
+    var g = games[i];
+    html += '<div class="game-card" data-id="' + escHtml(g.id) + '" onclick="loadReport(\'' + escHtml(g.id) + '\')">' +
+      '<div class="game-info">' +
+        '<div class="game-title">' + escHtml(g.title) + '</div>' +
+        '<div class="game-meta">' +
+          (g.venue ? '<span><span class="k">Venue</span>' + escHtml(g.venue) + '</span>' : '') +
+          (g.network ? '<span><span class="k">Net</span>' + escHtml(g.network) + '</span>' : '') +
+        '</div>' +
+      '</div>' +
+      '<div class="game-date">' + escHtml(formatDate(g.date)) + '</div>' +
+      '<button class="btn pri" onclick="event.stopPropagation();loadReport(\'' + escHtml(g.id) + '\')">Generate Report</button>' +
+    '</div>';
+  }
+  el.innerHTML = html;
+}
+
+// Load and render a closeout report
+window.loadReport = function(gameId) {
+  // Highlight selected card
+  var cards = document.querySelectorAll('.game-card');
+  for (var i = 0; i < cards.length; i++) {
+    cards[i].classList.toggle('sel', cards[i].getAttribute('data-id') === gameId);
+  }
+
+  var el = $('report');
+  el.className = 'report open';
+  el.innerHTML = '<div class="loading-msg">Generating closeout report via ' +
+    (document.querySelector('.mcp-status.on') ? 'Grafana MCP server' : 'direct Loki HTTP') +
+    '…</div>';
+
+  fetch('/api/closeout/' + encodeURIComponent(gameId))
+    .then(function(r) { return r.json(); })
+    .then(function(report) {
+      if (report.error) {
+        el.innerHTML = '<div class="loading-msg" style="color:var(--down)">Error: ' + escHtml(report.error) + '</div>';
+        return;
+      }
+      currentReport = report;
+      renderReport(report);
+    })
+    .catch(function(err) {
+      el.innerHTML = '<div class="loading-msg" style="color:var(--down)">Failed to generate report.</div>';
+    });
+};
+
+function renderReport(r) {
+  var el = $('report');
+  var html = '';
+
+  // Header
+  var sourceTag = r.source === 'mcp'
+    ? '<span class="source-tag mcp">via Grafana MCP</span>'
+    : '<span class="source-tag direct">via Loki HTTP</span>';
+  html += '<div class="report-head">' +
+    '<h3>' + escHtml(r.gameSummary) + sourceTag + '</h3>' +
+    '<div class="sub">Game ' + escHtml(r.gameId) + ' · Generated ' + escHtml(new Date(r.generatedAt).toLocaleString()) + '</div>' +
+    '<div class="grade">' +
+      '<div class="grade-letter ' + r.grade.letter + '">' + r.grade.letter + '</div>' +
+      '<div class="grade-detail">' +
+        '<div class="score">' + r.grade.score + ' / 100</div>' +
+        '<div class="rationale">' + escHtml(r.grade.rationale) + '</div>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+
+  // Stats strip
+  var totalEvents = 0;
+  var agentNames = Object.keys(r.agentActivity || {});
+  for (var i = 0; i < agentNames.length; i++) totalEvents += r.agentActivity[agentNames[i]];
+
+  html += '<div class="stats">';
+  html += '<div class="stat"><div class="k">Timeline Events</div><div class="v">' + (r.timeline || []).length + '</div></div>';
+  html += '<div class="stat"><div class="k">Agent Events</div><div class="v">' + totalEvents + '</div></div>';
+  html += '<div class="stat"><div class="k">Decisions</div><div class="v">' + (r.decisions || []).length + '</div></div>';
+  if (r.compliance) {
+    html += '<div class="stat"><div class="k">Crew Monitored</div><div class="v">' + r.compliance.totalCrew + '</div></div>';
+  }
+  if (r.flights) {
+    html += '<div class="stat"><div class="k">Flights</div><div class="v">' + r.flights.total + '</div></div>';
+  }
+  html += '</div>';
+
+  // Prometheus metrics (via MCP)
+  if (r.metrics) {
+    html += '<div class="metrics">' +
+      '<h4>Operational Metrics <span class="tag">via MCP · PromQL</span></h4>' +
+      '<div class="metrics-grid">' +
+        '<div class="metric-card"><div class="k">Peak Crew at Risk</div><div class="v">' + r.metrics.peakCrewAtRisk + '</div></div>' +
+        '<div class="metric-card"><div class="k">State Changes</div><div class="v">' + r.metrics.stateChanges + '</div></div>' +
+        '<div class="metric-card"><div class="k">Mean Agent Latency</div><div class="v">' + r.metrics.meanAgentLatencyMs + '<span style="font-size:10px;color:var(--ink-3)"> ms</span></div></div>' +
+        '<div class="metric-card"><div class="k">Total Agent Events</div><div class="v">' + r.metrics.totalAgentEvents + '</div></div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  // Agent activity
+  if (agentNames.length > 0) {
+    var maxEvents = Math.max.apply(null, agentNames.map(function(n) { return r.agentActivity[n]; }));
+    html += '<div class="agents"><h4>Agent Activity</h4><div class="agent-bars">';
+    // Sort by count descending
+    agentNames.sort(function(a, b) { return r.agentActivity[b] - r.agentActivity[a]; });
+    for (var i = 0; i < agentNames.length; i++) {
+      var name = agentNames[i];
+      var count = r.agentActivity[name];
+      var pct = maxEvents > 0 ? Math.round((count / maxEvents) * 100) : 0;
+      var colors = { SPOTTER:'#5DA9E9', TRAFFIC:'#E8A81C', STEWARD:'#C58BE8', FIXER:'#EE7A3C',
+        RUNNER:'#25B04B', ADVANCE:'#46C2A8', WRANGLER:'#E58AA6', CUSTOMS:'#8A94A6' };
+      var c = colors[name] || 'var(--ink-3)';
+      html += '<div class="agent-row">' +
+        '<div class="agent-name ' + escHtml(name) + '">' + escHtml(name) + '</div>' +
+        '<div class="agent-bar-track"><div class="agent-bar-fill" style="width:' + pct + '%;background:' + c + '"></div></div>' +
+        '<div class="agent-count">' + count + '</div>' +
+      '</div>';
+    }
+    html += '</div></div>';
+  }
+
+  // Compliance
+  if (r.compliance) {
+    var c = r.compliance;
+    html += '<div class="compliance"><h4>Compliance Summary</h4><div class="comp-grid">' +
+      '<div class="comp-card ok"><div class="v">' + c.compliant + '</div><div class="k">Compliant</div></div>' +
+      '<div class="comp-card ' + (c.atRisk > 0 ? 'warn' : 'ok') + '"><div class="v">' + c.atRisk + '</div><div class="k">At Risk</div></div>' +
+      '<div class="comp-card ' + (c.violations > 0 ? 'bad' : 'ok') + '"><div class="v">' + c.violations + '</div><div class="k">Violations</div></div>' +
+      '<div class="comp-card"><div class="v" style="font-size:16px">' + escHtml(c.totalExposure) + '</div><div class="k">Exposure</div></div>' +
+    '</div></div>';
+  }
+
+  // Dashboard link (via MCP)
+  if (r.dashboardUrl) {
+    html += '<div class="dash-link">📊 <a href="' + escHtml(r.dashboardUrl) + '" target="_blank" rel="noopener">Open Grafana Dashboard</a> <span style="font-size:10px;color:var(--ink-3)">(found via MCP dashboard search)</span></div>';
+  }
+
+  // Decisions
+  if (r.decisions && r.decisions.length > 0) {
+    html += '<div class="decisions"><h4>Key Decisions (' + r.decisions.length + ')</h4><div class="dec-list">';
+    for (var i = 0; i < Math.min(r.decisions.length, 20); i++) {
+      var d = r.decisions[i];
+      html += '<div class="dec">' +
+        '<div class="desc">' + escHtml(d.description) + '</div>' +
+        '<div class="out">' + escHtml(d.outcome) + '</div>' +
+        '<div class="meta">' + escHtml(d.agent) + ' · ' + escHtml(formatTime(d.timestamp)) + '</div>' +
+      '</div>';
+    }
+    html += '</div></div>';
+  }
+
+  // Timeline
+  if (r.timeline && r.timeline.length > 0) {
+    html += '<div class="timeline"><h4>Timeline (' + r.timeline.length + ' events)</h4><div class="tl-list">';
+    for (var i = 0; i < r.timeline.length; i++) {
+      var t = r.timeline[i];
+      html += '<div class="tl-entry ' + t.significance + '">' +
+        '<div class="ts">' + escHtml(formatTime(t.timestamp)) + '</div>' +
+        '<div class="who agent-name ' + escHtml(t.agent) + '">' + escHtml(t.agent) + '</div>' +
+        '<div class="msg">' + escHtml(t.summary) + '</div>' +
+      '</div>';
+    }
+    html += '</div></div>';
+  }
+
+  el.innerHTML = html;
+}
+
+loadGames();
+
+})();
+</script>
+</body>
+</html>

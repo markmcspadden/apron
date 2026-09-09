@@ -111,6 +111,7 @@ find each credential. The services, grouped:
 | **Grafana — Prometheus** | `GRAFANA_PROM_URL`, `GRAFANA_PROM_USER`, `GRAFANA_PROM_API_KEY` (metrics:write) | Agent event metrics, crew risk gauges, LLM latency |
 | **Grafana — Loki** | `GRAFANA_LOKI_URL`, `GRAFANA_LOKI_USER`, `GRAFANA_CLOUD_API_KEY` | Structured agent logs, closeout reports |
 | **Grafana — Agent O11y** | `AGENTO11Y_ENDPOINT`, `AGENTO11Y_AUTH_TENANT_ID`, `AGENTO11Y_AUTH_TOKEN` | Per-generation LLM tracing (token usage, latency) |
+| **Grafana — MCP** | `GRAFANA_MCP_API_KEY` (or `GRAFANA_CLOUD_API_KEY`), `GRAFANA_URL` | Closeout reports via MCP server (Loki + Prometheus + dashboards) |
 | **Firebase** | `FIREBASE_PROJECT_ID`, `FIREBASE_API_KEY` | Auth (Google sign-in), Firestore data store |
 | **AviationStack** | `FLIGHT_STATUS_API_KEY` | Live flight status for TRAFFIC agent |
 | **Twilio** | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER` | SMS outreach for WRANGLER agent |
@@ -226,16 +227,17 @@ All three are imported and called at runtime, not just named here.
 | | Where | What it does |
 |---|---|---|
 | **Google Cloud** — Gemini&nbsp;2.5&nbsp;Flash | [`integrations/google-cloud/`](integrations/google-cloud) | Reasoning for every agent: end-time prediction in `SPOTTER`, agreement interpretation in `STEWARD`, natural-language constraint parsing in `WRANGLER`, option generation and ranking in `FIXER`. Stubs responses in fixture mode so the demo runs without credentials. |
-| **Grafana** | [`integrations/grafana/`](integrations/grafana) | Three telemetry pipelines: **Prometheus** metrics (agent events, crew risk, call exposure, show state, LLM latency), **Loki** structured logs (the epistemic trail — how every operational fact evolved), and **Agent Observability** SDK (per-generation token usage, latency, input/output tracing via `@grafana/agento11y`). Plus a game **closeout report** that queries Loki to build a chronological operational narrative. Importable dashboard JSON in [`dashboards/`](integrations/grafana/dashboards). |
+| **Grafana** — MCP&nbsp;+&nbsp;Telemetry | [`integrations/grafana/`](integrations/grafana) | **Grafana Cloud MCP server** connection (`@modelcontextprotocol/sdk`) for closeout report generation — `query_loki_logs` (LogQL), `query_prometheus` (PromQL), and `search_dashboards` tools are called at runtime to query the agent decision trail and operational metrics. Three telemetry write pipelines run in parallel: **Prometheus** metrics, **Loki** structured logs, and **Agent Observability** SDK. See [Grafana MCP integration](#grafana-mcp-integration) for details. |
 
 Entry points:
 
 - [`packages/server/src/server.ts`](packages/server/src/server.ts) — where agents are registered and integrations are bound
 - [`packages/orchestrator/src/runtime.ts`](packages/orchestrator/src/runtime.ts) — agent runtime, credential broker, dispatch with latency tracking
+- [`integrations/grafana/src/mcp-client.ts`](integrations/grafana/src/mcp-client.ts) — **Grafana Cloud MCP client** (Streamable HTTP, `@modelcontextprotocol/sdk`)
+- [`integrations/grafana/src/closeout.ts`](integrations/grafana/src/closeout.ts) — closeout report builder (MCP primary, direct HTTP fallback)
 - [`integrations/grafana/src/reporter.ts`](integrations/grafana/src/reporter.ts) — Prometheus remote write (Influx line protocol)
 - [`integrations/grafana/src/loki.ts`](integrations/grafana/src/loki.ts) — structured log push to Loki
 - [`integrations/grafana/src/agento11y.ts`](integrations/grafana/src/agento11y.ts) — `@grafana/agento11y` SDK initialization
-- [`integrations/grafana/src/closeout.ts`](integrations/grafana/src/closeout.ts) — game closeout report builder
 
 ---
 
@@ -287,6 +289,58 @@ performance (latency time series, P95 per agent), and a Loki log panel.
 
 ---
 
+## Grafana MCP integration
+
+The **Grafana Cloud MCP server** is the primary data interface for closeout
+report generation. After a game ends, the closeout builder connects via
+Streamable HTTP (`@modelcontextprotocol/sdk`) and calls three MCP tools:
+
+| MCP tool | Query | What it provides |
+|---|---|---|
+| `query_loki_logs` | `{app="apron",game_id="..."}` | The full agent decision trail — every event from SPOTTER, TRAFFIC, STEWARD, ADVANCE, WRANGLER, FIXER, and RUNNER |
+| `query_prometheus` | `max_over_time(apron_crew_at_risk[24h])`, `count_over_time(apron_show_state_change[24h])`, `avg_over_time(apron_agent_process_duration_ms[24h])`, `count_over_time(apron_agent_event[24h])` | Operational metrics snapshot: peak crew at risk, state transitions, agent latency, total events |
+| `search_dashboards` | `apron` | Link to the Grafana ops dashboard, included in the report |
+
+The closeout report synthesizes these into a structured operational
+narrative: timeline, key decisions, compliance summary, flight disruptions,
+and an operational grade (A–F). The `/closeout` admin view renders the
+report with the MCP data source tagged on each section.
+
+**Fallback:** When the MCP server is unavailable (missing credentials or
+connection error), the builder falls back to direct Loki HTTP queries. The
+report's `source` field (`"mcp"` or `"direct"`) records which path was
+used.
+
+### Configuration
+
+```
+GRAFANA_MCP_API_KEY=glc_...     # Grafana Cloud API key (or reuses GRAFANA_CLOUD_API_KEY)
+GRAFANA_URL=https://<stack>.grafana.net
+GRAFANA_MCP_URL=https://mcp.grafana.com/mcp   # default; override for self-hosted
+```
+
+For unattended deployments (Cloud Run), use the [open-source Grafana MCP
+server](https://github.com/grafana/mcp-grafana) with a service-account
+token. Set `GRAFANA_MCP_URL` to the local server's endpoint.
+
+### Implementation
+
+- [`integrations/grafana/src/mcp-client.ts`](integrations/grafana/src/mcp-client.ts) —
+  `GrafanaMcpClient` class: connects via `StreamableHTTPClientTransport`,
+  wraps `query_loki_logs`, `query_prometheus`, and `search_dashboards`
+  with typed return values and error tracking.
+- [`integrations/grafana/src/closeout.ts`](integrations/grafana/src/closeout.ts) —
+  `CloseoutBuilder.generate()`: MCP primary path queries Loki via MCP for the
+  agent event trail, then Prometheus via MCP for operational metrics, then
+  searches dashboards for a direct link. Falls back to direct Loki HTTP.
+- [`packages/server/src/server.ts`](packages/server/src/server.ts) —
+  initializes `GrafanaMcpClient` at startup, attaches to the closeout builder.
+  Health exposed at `GET /api/integrations/health` (`.grafana.mcp`).
+- [`packages/board/closeout.html`](packages/board/closeout.html) —
+  admin view at `/closeout` listing completed games with report generation.
+
+---
+
 ## What's here, and what isn't
 
 This repository is **complete and runnable**. Nothing is stubbed to hide it. What
@@ -327,13 +381,17 @@ packages/
     wrangler.html       WRANGLER constraint gathering
     spotter.html        SPOTTER game prediction
     steward.html        STEWARD compliance view
+    closeout.html       closeout reports admin view (Grafana MCP)
+    featured.html       public featured-game board
 fixtures/
   alcs-gm4/           twelve-inning night (16 steps, 14 crew, 6 shows)
   tape/               demo tape variant (16 steps, 22 crew, full seat-switch)
 integrations/
   google-cloud/       Gemini via Vertex AI (stubs in fixture mode)
-  grafana/            Prometheus + Loki + Agent O11y + closeout report
-    dashboards/         importable Grafana dashboard JSON
+  grafana/            Prometheus + Loki + Agent O11y + MCP client + closeout
+    src/mcp-client.ts     Grafana Cloud MCP server client
+    src/closeout.ts       post-game closeout report builder
+    dashboards/           importable Grafana dashboard JSON
   firebase/           Firestore persistence (accounts, crew, games, assignments)
   aviationstack/      AviationStack flight status API (TRAFFIC agent)
   twilio/             Twilio SMS (WRANGLER crew outreach)

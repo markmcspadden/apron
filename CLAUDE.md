@@ -117,4 +117,4 @@ pnpm build         # tsc -b (not required for dev)
 
 ## Hackathon
 
-Agentic Cinema: The Blockbuster Hackathon (deadline Sep 7, 2026). Partner tracks: Grafana + Clickhouse. GCP/Gemini stubbed for fixture mode.
+Agentic Cinema: The Blockbuster Hackathon (deadline Sep 7, 2026). Partner track: Grafana. GCP/Gemini stubbed for fixture mode.

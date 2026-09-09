@@ -16,7 +16,7 @@ import { FixerAgent } from '@apron/agent-fixer';
 import { RunnerAgent } from '@apron/agent-runner';
 import { CustomsAgent } from '@apron/agent-customs';
 import { AuditLog } from './audit.js';
-import { GrafanaReporter, LokiLogger, initAgentO11y, getAgentO11yHealth, getAgentToolDefs, recordGenerationExported, recordGenerationError, CloseoutBuilder } from '@apron/integration-grafana';
+import { GrafanaReporter, LokiLogger, initAgentO11y, getAgentO11yHealth, getAgentToolDefs, recordGenerationExported, recordGenerationError, CloseoutBuilder, GrafanaMcpClient } from '@apron/integration-grafana';
 import { ClickhouseAuditStore } from '@apron/integration-clickhouse';
 import { GeminiClient } from '@apron/integration-google-cloud';
 import { TwilioClient } from '@apron/integration-twilio';
@@ -99,6 +99,19 @@ export async function createServer(opts: ServerOptions = {}) {
   const loki = new LokiLogger();
   const closeout = new CloseoutBuilder(loki);
   const clickhouse = new ClickhouseAuditStore();
+
+  // Initialize Grafana Cloud MCP server connection for closeout reports
+  const grafanaMcp = new GrafanaMcpClient();
+  if (!opts.demoMode) {
+    grafanaMcp.connect().then(ok => {
+      if (ok) {
+        closeout.setMcpClient(grafanaMcp);
+        console.log('[grafana-mcp] Closeout reports will use MCP as primary data source');
+      }
+    }).catch(() => {
+      console.log('[grafana-mcp] Connection failed — closeout will use direct Loki HTTP');
+    });
+  }
 
   // Initialize Grafana Agent Observability SDK
   const o11yClient = initAgentO11y();
@@ -967,6 +980,7 @@ export async function createServer(opts: ServerOptions = {}) {
           prometheus: grafana.getHealth(),
           loki: loki.getHealth(),
           agentO11y: getAgentO11yHealth(),
+          mcp: grafanaMcp.getHealth(),
         },
         clickhouse: {
           enabled: !!process.env['CLICKHOUSE_URL'],
@@ -1650,7 +1664,35 @@ export async function createServer(opts: ServerOptions = {}) {
       }
     }
 
-    // Closeout report — post-game operational chronology from Loki
+    // Closeout report — post-game operational chronology via Grafana MCP / Loki
+    // GET /api/closeout/list — games eligible for closeout (SPOTTER done)
+    if (path === '/api/closeout/list' && req.method === 'GET') {
+      try {
+        const doneGames = await adminStore.listGamesByAgentStatus('SPOTTER', ['done']);
+        const games = doneGames.map(g => ({
+          id: g.id,
+          accountId: g.accountId,
+          title: g.title,
+          venue: g.venue,
+          date: g.date,
+          network: g.network,
+          spotter: g.agents?.SPOTTER ?? null,
+        }));
+        // Sort newest first
+        games.sort((a, b) => (b.date ?? '').localeCompare(a.date ?? ''));
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          games,
+          mcp: grafanaMcp.getHealth(),
+        }));
+      } catch {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ games: [], mcp: grafanaMcp.getHealth() }));
+      }
+      return;
+    }
+
+    // GET /api/closeout/:gameId — generate report for a specific game
     if (path.startsWith('/api/closeout/') && req.method === 'GET') {
       const gameId = path.replace('/api/closeout/', '');
       if (!gameId) {
@@ -1675,7 +1717,7 @@ export async function createServer(opts: ServerOptions = {}) {
       // Check for an active game (has a running SPOTTER)
       if (spotters.size > 0) {
         // Pick the first active game (usually only one at a time)
-        const [gameId, spotter] = spotters.entries().next().value;
+        const [gameId, spotter] = spotters.entries().next().value!;
         const snap = spotter.getStatus();
         const score = snap.game
           ? `${snap.game.awayTeam} ${snap.game.awayScore}, ${snap.game.homeTeam} ${snap.game.homeScore}`
@@ -1781,6 +1823,8 @@ export async function createServer(opts: ServerOptions = {}) {
       filePath = join(ROOT, 'packages', 'board', 'integrations.html');
     } else if (path === '/featured' || path === '/featured.html') {
       filePath = join(ROOT, 'packages', 'board', 'featured.html');
+    } else if (path === '/closeout' || path === '/closeout.html') {
+      filePath = join(ROOT, 'packages', 'board', 'closeout.html');
     } else if (path === '/' || path === '/index.html') {
       filePath = join(ROOT, 'site', 'index.html');
     } else {

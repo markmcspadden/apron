@@ -15,4 +15,6 @@ export {
 } from './agento11y.js';
 export type { AgentO11yHealth } from './agento11y.js';
 export { CloseoutBuilder } from './closeout.js';
-export type { CloseoutReport, TimelineEntry, OperationalGrade } from './closeout.js';
+export type { CloseoutReport, TimelineEntry, OperationalGrade, MetricsSnapshot } from './closeout.js';
+export { GrafanaMcpClient } from './mcp-client.js';
+export type { GrafanaMcpHealth } from './mcp-client.js';
