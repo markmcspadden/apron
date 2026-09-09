@@ -346,9 +346,15 @@ export async function createServer(opts: ServerOptions = {}) {
       ...event,
       _showId: event.showId,
     }).catch(() => { /* best-effort */ });
+
+    // Record agent latency if the event carries it (e.g. STEWARD compliance, SPOTTER prediction)
+    const latency = (event as unknown as Record<string, unknown>)['latencyMs'];
+    if (typeof latency === 'number' && latency > 0) {
+      grafana.recordAgentLatency(event.agent, latency);
+    }
   });
 
-  // Track agent processing latency → Prometheus
+  // Track agent processing latency for fixture dispatch → Prometheus
   orchestrator.getRuntime().onProcessed((agent, durationMs) => {
     grafana.recordAgentLatency(agent, durationMs);
   });
