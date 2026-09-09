@@ -348,6 +348,11 @@ export async function createServer(opts: ServerOptions = {}) {
     }).catch(() => { /* best-effort */ });
   });
 
+  // Track agent processing latency → Prometheus
+  orchestrator.getRuntime().onProcessed((agent, durationMs) => {
+    grafana.recordAgentLatency(agent, durationMs);
+  });
+
   orchestrator.onStepComplete((step, index) => {
     const msg = JSON.stringify({ type: 'step', step, index });
     for (const ws of clients) {

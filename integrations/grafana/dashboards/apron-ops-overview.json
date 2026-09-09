@@ -162,7 +162,7 @@
       },
       "targets": [
         {
-          "expr": "increase(apron_show_state_change[5m])",
+          "expr": "count_over_time(apron_show_state_change[5m])",
           "legendFormat": "{{show_id}} → {{state}}",
           "refId": "A"
         }
@@ -201,7 +201,7 @@
       },
       "targets": [
         {
-          "expr": "increase(apron_agent_event{agent=~\"$agent\"}[1m])",
+          "expr": "count_over_time(apron_agent_event{agent=~\"$agent\"}[1m])",
           "legendFormat": "{{agent}}",
           "refId": "A"
         }
@@ -230,7 +230,7 @@
       },
       "targets": [
         {
-          "expr": "increase(apron_agent_event{agent=~\"$agent\"}[$__range])",
+          "expr": "count_over_time(apron_agent_event{agent=~\"$agent\"}[$__range])",
           "legendFormat": "{{agent}} · {{event_type}}",
           "refId": "A",
           "instant": true
@@ -334,7 +334,7 @@
       },
       "targets": [
         {
-          "expr": "increase(apron_agent_event{agent=~\"$agent\"}[$__range])",
+          "expr": "count_over_time(apron_agent_event{agent=~\"$agent\"}[$__range])",
           "legendFormat": "{{agent}}",
           "refId": "A",
           "instant": true

@@ -8,11 +8,17 @@ export class AgentRuntime {
   private broker: CredentialBroker;
   private bus: MessageBus;
   private showId: string;
+  private _onProcessed: ((agent: AgentName, durationMs: number) => void) | null = null;
 
   constructor(showId: string, bus: MessageBus, broker: CredentialBroker) {
     this.showId = showId;
     this.bus = bus;
     this.broker = broker;
+  }
+
+  /** Register a callback for agent processing latency (called after each dispatch). */
+  onProcessed(cb: (agent: AgentName, durationMs: number) => void): void {
+    this._onProcessed = cb;
   }
 
   register(agent: BaseAgent): void {
@@ -50,6 +56,9 @@ export class AgentRuntime {
     if (!agent) {
       throw new Error(`Agent ${agentName} is not registered`);
     }
+    const t0 = Date.now();
     await agent.process(input);
+    const durationMs = Date.now() - t0;
+    this._onProcessed?.(agentName, durationMs);
   }
 }
