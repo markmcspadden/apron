@@ -177,6 +177,40 @@ a:hover{text-decoration:underline}
 /* loading */
 .loading-msg{padding:60px 24px;text-align:center;font-size:13px;color:var(--ink-3)}
 
+/* query box */
+.query-box{margin-top:20px;border-top:1px solid var(--line);padding:20px 24px}
+.query-box h4{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-2);
+  font-weight:640;margin:0 0 12px;display:flex;align-items:center;gap:8px}
+.query-box h4 .tag{font-family:var(--m);font-size:8.5px;letter-spacing:.08em;padding:2px 6px;
+  border-radius:3px;background:#0E2040;color:var(--live);border:1px solid #1A3A60}
+.query-input-row{display:flex;gap:8px}
+.query-input{flex:1;font:inherit;font-size:13px;padding:10px 14px;border-radius:8px;
+  border:1px solid var(--line-2);background:var(--panel-2);color:var(--ink);outline:none}
+.query-input:focus{border-color:var(--live)}
+.query-input::placeholder{color:var(--ink-3)}
+.query-btn{font:inherit;font-size:12px;font-weight:600;padding:10px 18px;border-radius:8px;
+  cursor:pointer;border:1px solid #2A6FB5;background:#2A6FB5;color:#fff;white-space:nowrap}
+.query-btn:hover{background:#3480CC}
+.query-btn:disabled{opacity:.4;cursor:default}
+.query-suggestions{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.query-sug{font:inherit;font-size:11px;padding:5px 10px;border-radius:5px;cursor:pointer;
+  border:1px solid var(--line);background:var(--panel);color:var(--ink-2);transition:.14s}
+.query-sug:hover{border-color:var(--ink-3);color:var(--ink)}
+.query-result{margin-top:16px;padding:16px;background:var(--panel-2);border:1px solid var(--line);
+  border-radius:8px;display:none}
+.query-result.open{display:block}
+.query-answer{font-size:13px;line-height:1.6;color:var(--ink);white-space:pre-wrap}
+.query-meta{margin-top:10px;display:flex;flex-wrap:wrap;gap:10px;padding-top:10px;
+  border-top:1px solid var(--line)}
+.query-tool{font-family:var(--m);font-size:9.5px;letter-spacing:.06em;padding:3px 8px;
+  border-radius:4px;background:var(--panel);border:1px solid var(--line);color:var(--ink-3)}
+.query-tool.mcp{background:#0E2040;color:var(--live);border-color:#1A3A60}
+.query-tool.direct{border-color:var(--line-2)}
+.query-thinking{font-size:12px;color:var(--ink-3);padding:14px 0;display:flex;align-items:center;gap:8px}
+.query-thinking .spin{display:inline-block;width:12px;height:12px;border:2px solid var(--line-2);
+  border-top-color:var(--live);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
 /* empty state */
 .empty{text-align:center;padding:80px 20px;color:var(--ink-3)}
 .empty .icon{font-size:36px;margin-bottom:16px;color:var(--ink-3)}
@@ -439,8 +473,87 @@ function renderReport(r) {
     html += '</div></div>';
   }
 
+  // Query box
+  html += '<div class="query-box">' +
+    '<h4>Ask about this game <span class="tag">Gemini + Grafana MCP</span></h4>' +
+    '<div class="query-input-row">' +
+      '<input class="query-input" id="query-input" type="text" placeholder="e.g. How many times did the predicted end time change?" />' +
+      '<button class="query-btn" id="query-btn" onclick="submitQuery()">Ask</button>' +
+    '</div>' +
+    '<div class="query-suggestions">' +
+      '<button class="query-sug" onclick="askSuggestion(this)">How many SPOTTER predictions were made?</button>' +
+      '<button class="query-sug" onclick="askSuggestion(this)">Did any crew go at-risk during this game?</button>' +
+      '<button class="query-sug" onclick="askSuggestion(this)">What flight delays were detected?</button>' +
+      '<button class="query-sug" onclick="askSuggestion(this)">How many times did the show state change?</button>' +
+    '</div>' +
+    '<div class="query-result" id="query-result"></div>' +
+  '</div>';
+
   el.innerHTML = html;
+
+  // Re-bind enter key on the input
+  var qi = document.getElementById('query-input');
+  if (qi) qi.addEventListener('keydown', function(e) { if (e.key === 'Enter') submitQuery(); });
 }
+
+// ---- Query box logic ----
+
+window.askSuggestion = function(btn) {
+  var qi = document.getElementById('query-input');
+  if (qi) qi.value = btn.textContent;
+  submitQuery();
+};
+
+window.submitQuery = function() {
+  var qi = document.getElementById('query-input');
+  var qr = document.getElementById('query-result');
+  var qb = document.getElementById('query-btn');
+  if (!qi || !qr || !currentReport) return;
+
+  var question = qi.value.trim();
+  if (!question) return;
+
+  qb.disabled = true;
+  qr.className = 'query-result open';
+  qr.innerHTML = '<div class="query-thinking"><span class="spin"></span>Querying via ' +
+    (document.querySelector('.mcp-status.on') ? 'Grafana MCP' : 'Loki HTTP') +
+    ' + Gemini…</div>';
+
+  fetch('/api/closeout/' + encodeURIComponent(currentReport.gameId) + '/query', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ question: question }),
+  })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      qb.disabled = false;
+      if (data.error) {
+        qr.innerHTML = '<div class="query-answer" style="color:var(--down)">' + escHtml(data.error) + '</div>';
+        return;
+      }
+
+      var html = '<div class="query-answer">' + escHtml(data.answer) + '</div>';
+      if (data.queries && data.queries.length > 0) {
+        html += '<div class="query-meta">';
+        for (var i = 0; i < data.queries.length; i++) {
+          var q = data.queries[i];
+          var cls = q.source === 'mcp' ? 'mcp' : 'direct';
+          var label = q.tool.replace('query_', '').replace('search_', '');
+          html += '<span class="query-tool ' + cls + '">' + escHtml(label) + ': ' + escHtml(q.query || '') +
+            ' (' + (q.resultCount ?? 0) + ' results, ' + q.source + ')</span>';
+        }
+        if (data.model) {
+          html += '<span class="query-tool">' + escHtml(data.model) + '</span>';
+        }
+        html += '</div>';
+      }
+      qr.innerHTML = html;
+    })
+    .catch(function() {
+      qb.disabled = false;
+      qr.innerHTML = '<div class="query-answer" style="color:var(--down)">Query failed — check server logs.</div>';
+    });
+};
 
 loadGames();
 

@@ -1692,6 +1692,175 @@ export async function createServer(opts: ServerOptions = {}) {
       return;
     }
 
+    // POST /api/closeout/:gameId/query — natural-language query against game data via MCP
+    if (path.match(/^\/api\/closeout\/[^/]+\/query$/) && req.method === 'POST') {
+      const gameId = path.replace('/api/closeout/', '').replace('/query', '');
+      let body = '';
+      req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+      req.on('end', async () => {
+        try {
+          const { question } = JSON.parse(body);
+          if (!question || typeof question !== 'string') {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'question is required' }));
+            return;
+          }
+
+          // Step 1: Use Gemini to translate question → MCP tool calls
+          const planResponse = await gemini.promptJSON<{
+            queries: Array<{
+              tool: 'query_loki_logs' | 'query_prometheus' | 'search_dashboards';
+              logql?: string;
+              promql?: string;
+              searchQuery?: string;
+              reason: string;
+            }>;
+          }>({
+            agent: 'CLOSEOUT-QUERY',
+            systemInstruction: `You are an operations data analyst for APRON, a live event crew management system.
+You translate natural-language questions about game operations into Grafana queries.
+
+Available data sources (via Grafana MCP server):
+1. **Loki logs** — every agent event is stored with labels: app="apron", game_id, agent (SPOTTER/TRAFFIC/STEWARD/ADVANCE/WRANGLER/FIXER/RUNNER/CUSTOMS), event_type. Log body is JSON with fields like: message, predictedEndTime, confidence, gameState, crew, turnaround, flights, etc.
+2. **Prometheus metrics** — apron_crew_at_risk, apron_show_state_change, apron_agent_process_duration_ms, apron_agent_event (with labels: agent, event_type, game_id).
+
+Common event_types: prediction (SPOTTER end-time predictions), game-state/GameStateUpdate, compliance-update/ComplianceUpdate, provenance_change, show-state/ShowStateChange, route-update/RouteUpdate, metrics/MetricsUpdate, options/OptionsGenerated, handoff/HandoffComposed.
+
+Respond with JSON: { "queries": [{ "tool": "query_loki_logs"|"query_prometheus"|"search_dashboards", "logql"?: "...", "promql"?: "...", "searchQuery"?: "...", "reason": "..." }] }
+
+Keep queries targeted. Use LogQL label matchers and line filters where possible. For counting events, use Loki. For time-series metrics, use Prometheus.`,
+            context: { gameId },
+            query: question,
+            responseSchema: {
+              type: 'OBJECT',
+              properties: {
+                queries: {
+                  type: 'ARRAY',
+                  items: {
+                    type: 'OBJECT',
+                    properties: {
+                      tool: { type: 'STRING', enum: ['query_loki_logs', 'query_prometheus', 'search_dashboards'] },
+                      logql: { type: 'STRING' },
+                      promql: { type: 'STRING' },
+                      searchQuery: { type: 'STRING' },
+                      reason: { type: 'STRING' },
+                    },
+                    required: ['tool', 'reason'],
+                  },
+                },
+              },
+              required: ['queries'],
+            },
+          });
+
+          if (!planResponse?.queries?.length) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              answer: 'I could not determine which queries to run for that question. Try asking about specific agent events, predictions, compliance, or flight status.',
+              queries: [],
+              results: [],
+              source: 'none',
+            }));
+            return;
+          }
+
+          // Step 2: Execute each query via MCP (or fallback to direct Loki)
+          const queryResults: Array<{ tool: string; query: string; reason: string; data: unknown; source: string }> = [];
+          const useMcp = grafanaMcp.isEnabled();
+
+          for (const q of planResponse.queries) {
+            if (q.tool === 'query_loki_logs' && q.logql) {
+              if (useMcp) {
+                // Use MCP — pass LogQL directly
+                try {
+                  const result = await grafanaMcp.queryLokiLogs(gameId);
+                  // Filter further if the LogQL has line filters
+                  queryResults.push({ tool: q.tool, query: q.logql, reason: q.reason, data: result.slice(0, 100), source: 'mcp' });
+                } catch {
+                  // Fallback to direct Loki
+                  const result = await loki.queryGameLogs(gameId, { limit: 500 });
+                  queryResults.push({ tool: q.tool, query: q.logql, reason: q.reason, data: result.slice(0, 100), source: 'direct' });
+                }
+              } else {
+                // Direct Loki HTTP
+                const result = await loki.queryGameLogs(gameId, { limit: 500 });
+                // Apply basic label filtering from the LogQL
+                let filtered = result;
+                const agentMatch = q.logql.match(/agent="([^"]+)"/);
+                if (agentMatch) {
+                  filtered = filtered.filter(e => e.labels['agent'] === agentMatch[1]);
+                }
+                const eventMatch = q.logql.match(/event_type="([^"]+)"/);
+                if (eventMatch) {
+                  filtered = filtered.filter(e => e.labels['event_type'] === eventMatch[1]);
+                }
+                queryResults.push({ tool: q.tool, query: q.logql, reason: q.reason, data: filtered.slice(0, 100), source: 'direct' });
+              }
+            } else if (q.tool === 'query_prometheus' && q.promql) {
+              if (useMcp) {
+                try {
+                  const result = await grafanaMcp.queryPrometheus(q.promql);
+                  queryResults.push({ tool: q.tool, query: q.promql, reason: q.reason, data: result, source: 'mcp' });
+                } catch {
+                  queryResults.push({ tool: q.tool, query: q.promql, reason: q.reason, data: [], source: 'error' });
+                }
+              } else {
+                queryResults.push({ tool: q.tool, query: q.promql, reason: q.reason, data: '(Prometheus queries require MCP connection)', source: 'unavailable' });
+              }
+            } else if (q.tool === 'search_dashboards') {
+              if (useMcp) {
+                try {
+                  const result = await grafanaMcp.searchDashboards(q.searchQuery);
+                  queryResults.push({ tool: q.tool, query: q.searchQuery ?? 'apron', reason: q.reason, data: result, source: 'mcp' });
+                } catch {
+                  queryResults.push({ tool: q.tool, query: q.searchQuery ?? 'apron', reason: q.reason, data: [], source: 'error' });
+                }
+              } else {
+                queryResults.push({ tool: q.tool, query: q.searchQuery ?? 'apron', reason: q.reason, data: '(Dashboard search requires MCP connection)', source: 'unavailable' });
+              }
+            }
+          }
+
+          // Step 3: Use Gemini to summarize the results
+          const summaryResponse = await gemini.prompt({
+            agent: 'CLOSEOUT-QUERY',
+            systemInstruction: `You are an operations analyst for APRON, a live event crew management system.
+Summarize the query results into a clear, direct answer to the user's question.
+Be specific with numbers and details. If the data is empty, say so honestly.
+Keep the response concise — 2-4 sentences for simple questions, more for complex ones.
+Reference specific agents, events, and timestamps when relevant.`,
+            context: {
+              question,
+              gameId,
+              queryResults: queryResults.map(r => ({
+                tool: r.tool,
+                query: r.query,
+                reason: r.reason,
+                source: r.source,
+                resultCount: Array.isArray(r.data) ? r.data.length : 0,
+                data: r.data,
+              })),
+            },
+            query: `Answer this question based on the query results: "${question}"`,
+            maxOutputTokens: 1024,
+          });
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            answer: summaryResponse.text,
+            queries: queryResults.map(r => ({ tool: r.tool, query: r.query, reason: r.reason, source: r.source, resultCount: Array.isArray(r.data) ? r.data.length : 0 })),
+            source: useMcp ? 'mcp' : 'direct',
+            model: summaryResponse.metadata.model,
+          }));
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: `Query failed: ${msg}` }));
+        }
+      });
+      return;
+    }
+
     // GET /api/closeout/:gameId — generate report for a specific game
     if (path.startsWith('/api/closeout/') && req.method === 'GET') {
       const gameId = path.replace('/api/closeout/', '');
