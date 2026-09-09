@@ -99,7 +99,7 @@
       },
       "targets": [
         {
-          "expr": "apron_crew_at_risk_value",
+          "expr": "apron_crew_at_risk",
           "legendFormat": "{{show_id}}",
           "refId": "A"
         }
@@ -132,7 +132,7 @@
       },
       "targets": [
         {
-          "expr": "apron_call_times_exposed_value",
+          "expr": "apron_call_times_exposed",
           "legendFormat": "{{show_id}}",
           "refId": "A"
         }
@@ -162,7 +162,7 @@
       },
       "targets": [
         {
-          "expr": "increase(apron_show_state_change_value[5m])",
+          "expr": "increase(apron_show_state_change[5m])",
           "legendFormat": "{{show_id}} → {{state}}",
           "refId": "A"
         }
@@ -201,7 +201,7 @@
       },
       "targets": [
         {
-          "expr": "increase(apron_agent_event_value{agent=~\"$agent\"}[1m])",
+          "expr": "increase(apron_agent_event{agent=~\"$agent\"}[1m])",
           "legendFormat": "{{agent}}",
           "refId": "A"
         }
@@ -230,7 +230,7 @@
       },
       "targets": [
         {
-          "expr": "increase(apron_agent_event_value{agent=~\"$agent\"}[$__range])",
+          "expr": "increase(apron_agent_event{agent=~\"$agent\"}[$__range])",
           "legendFormat": "{{agent}} · {{event_type}}",
           "refId": "A",
           "instant": true
@@ -276,7 +276,7 @@
       },
       "targets": [
         {
-          "expr": "apron_agent_process_duration_ms_value{agent=~\"$agent\"}",
+          "expr": "apron_agent_process_duration_ms{agent=~\"$agent\"}",
           "legendFormat": "{{agent}}",
           "refId": "A"
         }
@@ -309,7 +309,7 @@
       },
       "targets": [
         {
-          "expr": "apron_agent_process_duration_ms_value{agent=~\"$agent\"}",
+          "expr": "apron_agent_process_duration_ms{agent=~\"$agent\"}",
           "legendFormat": "{{agent}}",
           "refId": "A"
         }
@@ -334,7 +334,7 @@
       },
       "targets": [
         {
-          "expr": "increase(apron_agent_event_value{agent=~\"$agent\"}[$__range])",
+          "expr": "increase(apron_agent_event{agent=~\"$agent\"}[$__range])",
           "legendFormat": "{{agent}}",
           "refId": "A",
           "instant": true

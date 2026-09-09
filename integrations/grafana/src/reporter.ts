@@ -60,7 +60,10 @@ export class GrafanaReporter {
         ?? process.env['GRAFANA_ENDPOINT']
         ?? 'http://localhost:3100',
       user: process.env['GRAFANA_PROM_USER'] ?? null,
+      // Prefer a dedicated Prometheus API key (metrics:write scope);
+      // fall back to the shared cloud API key, then legacy key.
       apiKey: config?.apiKey
+        ?? process.env['GRAFANA_PROM_API_KEY']
         ?? process.env['GRAFANA_CLOUD_API_KEY']
         ?? process.env['GRAFANA_API_KEY']
         ?? null,
