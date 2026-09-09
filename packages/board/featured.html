@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>APRON — featured game</title>
+<style>
+:root{
+  --bg:#0B0B0C; --panel:#141416; --panel-2:#1B1B1E; --line:#2A2A2E; --line-2:#3A3A40;
+  --ink:#F2F1EE; --ink-2:#A9A69E; --ink-3:#6E6B65;
+  --clear:#25B04B; --clear-bg:#0E2A16;
+  --watch:#E8A81C; --watch-bg:#2E2308;
+  --risk:#EE7A3C; --risk-bg:#31190A;
+  --down:#E0403C; --down-bg:#33100F;
+  --live:#5DA9E9;
+  --f:ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --m:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--f);font-size:14px;
+  line-height:1.45;-webkit-font-smoothing:antialiased}
+
+/* ---------- loading ---------- */
+.loading{display:flex;align-items:center;justify-content:center;min-height:100vh;
+  flex-direction:column;gap:16px}
+.loading .dot{width:8px;height:8px;border-radius:99px;background:var(--ink-3);
+  animation:pulse-load 1.4s infinite}
+@keyframes pulse-load{0%,100%{opacity:.3;transform:scale(.8)}50%{opacity:1;transform:scale(1)}}
+.loading .label{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)}
+
+/* ---------- board iframe ---------- */
+.board-frame{position:fixed;top:0;left:0;width:100%;height:100%;border:none}
+
+/* ---------- idle state ---------- */
+.idle{display:none;min-height:100vh;flex-direction:column}
+.idle.show{display:flex}
+
+.idle-nav{border-bottom:1px solid var(--line);background:rgba(11,11,12,.86);
+  backdrop-filter:blur(14px)}
+.idle-nav-in{max-width:1200px;margin:0 auto;padding:0 26px;height:60px;
+  display:flex;align-items:center;gap:20px}
+.logo{font-family:var(--m);font-size:15px;font-weight:700;letter-spacing:.06em;
+  text-decoration:none;white-space:nowrap;color:var(--ink)}
+.logo span{color:var(--ink-3);font-weight:500;font-size:9.5px;letter-spacing:.16em;margin-left:8px}
+.nav-tag{font-family:var(--m);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--ink-3);border-left:1px solid var(--line-2);padding-left:18px}
+
+.idle-body{flex:1;display:flex;align-items:center;justify-content:center}
+.idle-card{text-align:center;max-width:560px;padding:40px 30px}
+
+.idle-icon{width:72px;height:72px;border-radius:18px;background:var(--panel);
+  border:1px solid var(--line);display:flex;align-items:center;justify-content:center;
+  margin:0 auto 28px;font-size:32px;color:var(--ink-3)}
+
+.idle-title{font-size:22px;font-weight:700;letter-spacing:-.015em;margin-bottom:8px}
+
+.idle-sub{font-size:14px;color:var(--ink-2);margin-bottom:36px;line-height:1.5}
+
+/* next game card */
+.next-game{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  padding:20px 24px;text-align:left}
+.next-game .label{font-family:var(--m);font-size:9.5px;letter-spacing:.12em;
+  text-transform:uppercase;color:var(--ink-3);margin-bottom:12px;font-weight:640}
+.next-game .title{font-size:17px;font-weight:650;letter-spacing:-.01em;margin-bottom:6px}
+.next-game .meta{font-size:13px;color:var(--ink-2);display:flex;flex-wrap:wrap;gap:6px 16px}
+.next-game .meta-item{display:flex;align-items:center;gap:5px}
+.next-game .meta-item .k{color:var(--ink-3);font-family:var(--m);font-size:10px;
+  letter-spacing:.08em;text-transform:uppercase}
+
+.next-game .countdown{margin-top:16px;padding-top:14px;border-top:1px solid var(--line);
+  display:flex;align-items:baseline;gap:8px}
+.next-game .countdown .when{font-family:var(--m);font-size:15px;font-weight:600;color:var(--watch)}
+.next-game .countdown .relative{font-size:12px;color:var(--ink-3)}
+
+/* no games at all */
+.no-upcoming{color:var(--ink-3);font-size:13px;margin-top:8px}
+
+.idle-footer{padding:20px 26px;text-align:center;font-size:11px;color:var(--ink-3);
+  border-top:1px solid var(--line)}
+.idle-footer a{color:var(--ink-2);text-decoration:none}
+.idle-footer a:hover{color:var(--ink)}
+</style>
+</head>
+<body>
+
+<div class="loading" id="loading">
+  <div class="dot"></div>
+  <div class="label">checking schedule</div>
+</div>
+
+<iframe class="board-frame" id="board-frame" style="display:none"></iframe>
+
+<div class="idle" id="idle">
+  <nav class="idle-nav">
+    <div class="idle-nav-in">
+      <a href="/" class="logo">APRON<span>FEATURED</span></a>
+      <div class="nav-tag">live board</div>
+    </div>
+  </nav>
+  <div class="idle-body">
+    <div class="idle-card">
+      <div class="idle-icon">◇</div>
+      <div class="idle-title">No Active Games</div>
+      <div class="idle-sub">The crew integrity board activates automatically when a monitored game goes live.</div>
+      <div id="next-game-slot"></div>
+    </div>
+  </div>
+  <div class="idle-footer">
+    <a href="/">apron</a> · crew integrity for live sports
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+function formatDate(dateStr) {
+  // dateStr is YYYY-MM-DD
+  var parts = dateStr.split('-');
+  var d = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+  var days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  return days[d.getDay()] + ', ' + months[d.getMonth()] + ' ' + d.getDate();
+}
+
+function formatTime12(timeStr) {
+  if (!timeStr) return '';
+  var parts = timeStr.split(':');
+  var h = parseInt(parts[0]);
+  var m = parts[1] || '00';
+  var ampm = h >= 12 ? 'PM' : 'AM';
+  if (h === 0) h = 12;
+  else if (h > 12) h -= 12;
+  return h + ':' + m + ' ' + ampm;
+}
+
+function relativeTime(dateStr, timeStr, tz) {
+  // Compute approximate relative time
+  var now = new Date();
+  var parts = dateStr.split('-');
+  var timeParts = (timeStr || '19:00').split(':');
+  var gameDate = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]),
+    parseInt(timeParts[0]), parseInt(timeParts[1]) || 0);
+  var diffMs = gameDate.getTime() - now.getTime();
+  if (diffMs < 0) return 'started';
+  var diffMins = Math.floor(diffMs / 60000);
+  if (diffMins < 60) return 'in ' + diffMins + ' min';
+  var diffHrs = Math.floor(diffMins / 60);
+  if (diffHrs < 24) return 'in ' + diffHrs + 'h ' + (diffMins % 60) + 'm';
+  var diffDays = Math.floor(diffHrs / 24);
+  if (diffDays === 1) return 'tomorrow';
+  return 'in ' + diffDays + ' days';
+}
+
+function renderNextGame(game) {
+  var slot = document.getElementById('next-game-slot');
+  var tz = game.timezone || '';
+  var tzAbbrev = '';
+  if (tz) {
+    try {
+      tzAbbrev = new Intl.DateTimeFormat('en-US', {timeZone: tz, timeZoneName: 'short'})
+        .formatToParts(new Date())
+        .find(function(p) { return p.type === 'timeZoneName'; })?.value || '';
+    } catch(e) {}
+  }
+
+  var html = '<div class="next-game">' +
+    '<div class="label">Next Active Game</div>' +
+    '<div class="title">' + escHtml(game.title) + '</div>' +
+    '<div class="meta">';
+
+  if (game.venue) {
+    html += '<div class="meta-item"><span class="k">Venue</span> ' + escHtml(game.venue) + '</div>';
+  }
+  if (game.network) {
+    html += '<div class="meta-item"><span class="k">Net</span> ' + escHtml(game.network) + '</div>';
+  }
+
+  html += '</div>';
+
+  var dateDisplay = formatDate(game.date);
+  var timeDisplay = formatTime12(game.startTime);
+  var rel = relativeTime(game.date, game.startTime, tz);
+
+  html += '<div class="countdown">' +
+    '<span class="when">' + escHtml(dateDisplay) + (timeDisplay ? ' · ' + timeDisplay : '') +
+    (tzAbbrev ? ' ' + tzAbbrev : '') + '</span>' +
+    '<span class="relative">' + escHtml(rel) + '</span>' +
+    '</div>';
+
+  html += '</div>';
+  slot.innerHTML = html;
+}
+
+function escHtml(s) {
+  var d = document.createElement('div');
+  d.textContent = s;
+  return d.innerHTML;
+}
+
+function showIdle(nextGame) {
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('idle').classList.add('show');
+
+  if (nextGame) {
+    renderNextGame(nextGame);
+  } else {
+    document.getElementById('next-game-slot').innerHTML =
+      '<div class="no-upcoming">No upcoming games scheduled.</div>';
+  }
+}
+
+function showBoard(gameId) {
+  document.getElementById('loading').style.display = 'none';
+  var frame = document.getElementById('board-frame');
+  frame.style.display = 'block';
+  // Load the board page — it will connect via WebSocket and get the live scenario
+  frame.src = '/board';
+}
+
+// Poll featured endpoint
+function checkFeatured() {
+  fetch('/api/featured')
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      if (data.active) {
+        showBoard(data.gameId);
+      } else {
+        showIdle(data.nextGame || null);
+        // Re-check every 60s
+        setTimeout(checkFeatured, 60000);
+      }
+    })
+    .catch(function() {
+      // Fetch failed — show idle with no next game
+      showIdle(null);
+      setTimeout(checkFeatured, 60000);
+    });
+}
+
+checkFeatured();
+
+})();
+</script>
+</body>
+</html>

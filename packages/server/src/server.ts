@@ -1670,6 +1670,77 @@ export async function createServer(opts: ServerOptions = {}) {
       return;
     }
 
+    // ---- Featured game API ----
+    if (path === '/api/featured') {
+      // Check for an active game (has a running SPOTTER)
+      if (spotters.size > 0) {
+        // Pick the first active game (usually only one at a time)
+        const [gameId, spotter] = spotters.entries().next().value;
+        const snap = spotter.getStatus();
+        const score = snap.game
+          ? `${snap.game.awayTeam} ${snap.game.awayScore}, ${snap.game.homeTeam} ${snap.game.homeScore}`
+          : null;
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          active: true,
+          gameId,
+          score,
+          detail: snap.game?.detail ?? null,
+          showState: snap.prediction?.showState ?? null,
+        }));
+        return;
+      }
+
+      // No active game — find the next upcoming one from Firestore
+      try {
+        const accounts = await adminStore.listAccounts();
+        const now = new Date();
+        const todayStr = now.toISOString().slice(0, 10);
+        let closest: { game: import('./admin-store.js').Game; diffMs: number } | null = null;
+
+        for (const acct of accounts) {
+          const games = await adminStore.listGames(acct.id);
+          for (const game of games) {
+            // Skip games that already finished
+            if (game.agents?.SPOTTER?.status === 'done') continue;
+            // Only consider games today or in the future
+            if (game.date < todayStr) continue;
+            const startTimeStr = game.startTime ?? '19:00';
+            const gameStartMs = localTimeToUtcMs(game.date, startTimeStr, resolveGameTimezone(game));
+            const diffMs = gameStartMs - now.getTime();
+            // Include games that haven't ended (allow up to 6h past start)
+            if (diffMs < -(360 * 60_000)) continue;
+            if (!closest || diffMs < closest.diffMs) {
+              closest = { game, diffMs };
+            }
+          }
+        }
+
+        if (closest) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            active: false,
+            nextGame: {
+              id: closest.game.id,
+              title: closest.game.title,
+              venue: closest.game.venue,
+              network: closest.game.network,
+              date: closest.game.date,
+              startTime: closest.game.startTime ?? null,
+              timezone: resolveGameTimezone(closest.game),
+            },
+          }));
+        } else {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ active: false, nextGame: null }));
+        }
+      } catch {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ active: false, nextGame: null }));
+      }
+      return;
+    }
+
     // Admin API routes
     if (path.startsWith('/api/admin/')) {
       try {
@@ -1708,6 +1779,8 @@ export async function createServer(opts: ServerOptions = {}) {
       filePath = join(ROOT, 'packages', 'board', 'dashboard.html');
     } else if (path === '/integrations' || path === '/integrations.html') {
       filePath = join(ROOT, 'packages', 'board', 'integrations.html');
+    } else if (path === '/featured' || path === '/featured.html') {
+      filePath = join(ROOT, 'packages', 'board', 'featured.html');
     } else if (path === '/' || path === '/index.html') {
       filePath = join(ROOT, 'site', 'index.html');
     } else {
